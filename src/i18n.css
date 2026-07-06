@@ -1,0 +1,50 @@
+/* i18n.css — Language toggle and localization UI */
+
+.header-tools { display: flex; align-items: center; gap: .75rem; }
+.language-toggle {
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--paper);
+}
+.language-toggle button {
+  border: 0; border-radius: 0;
+  padding: .55rem .75rem;
+  font-size: .78rem;
+  background: transparent;
+  transition: background .15s, color .15s;
+}
+.language-toggle button:hover:not(.active) { background: #e8ece6; }
+.language-toggle button.active { background: var(--green); color: #fff; }
+.dark-mode .language-toggle { border-color: var(--line); background: #252528; }
+.dark-mode .language-toggle button { color: #c8c8cc; }
+.dark-mode .language-toggle button:hover:not(.active) { background: #2e2e33; }
+.dark-mode .language-toggle button.active { background: var(--green); color: #121214; }
+
+.localized-content {
+  margin-top: .6rem;
+  border: 1px solid #dce3dc;
+  border-radius: 7px;
+  padding: .65rem;
+  background: #fff;
+}
+.localized-content summary { cursor: pointer; color: var(--green); font-size: .72rem; font-weight: 700; }
+.localized-content > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; margin-top: .6rem; }
+.localized-content label { display: grid; gap: .25rem; font-size: .7rem; font-weight: 700; }
+.localized-content textarea {
+  min-height: 70px; border: 1px solid var(--line);
+  border-radius: 6px; padding: .5rem;
+  resize: vertical; font: inherit;
+}
+.dark-mode .localized-content { background: #1e1e22; border-color: var(--line); }
+.dark-mode .localized-content textarea { background: #1a1a1c; border-color: var(--line); color: var(--ink); }
+
+.narrow select { border: 1px solid var(--line); border-radius: 8px; padding: .8rem; background: white; }
+.dark-mode .narrow select { background: #1a1a1c; border-color: var(--line); color: var(--ink); }
+
+@media (max-width: 700px) {
+  .local { display: none; }
+  .localized-content > div { grid-template-columns: 1fr; }
+  .language-toggle button { padding: .3rem .4rem; }
+}

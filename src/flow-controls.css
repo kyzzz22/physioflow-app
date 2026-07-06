@@ -1,0 +1,36 @@
+/* flow-controls.css — Inspector controls and advanced settings */
+
+.inspector-section { padding: 13px 0; border-bottom: 1px solid var(--line); }
+.inspector-section h4 {
+  margin: 0 0 8px; font-size: 10px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--green-strong);
+}
+.studio-inspector textarea {
+  min-height: 64px; border: 1px solid var(--line);
+  border-radius: 7px; padding: 8px; resize: vertical;
+  font: inherit; font-size: 12px;
+}
+.check-row { display: flex !important; align-items: center; gap: 6px !important; }
+.check-row input { width: 18px; height: 18px; accent-color: var(--green); }
+.studio-inspector output { float: right; color: var(--muted); font-weight: 400; }
+.inspector-upload {
+  padding: 12px; border: 1px dashed var(--green); border-radius: 8px;
+  background: var(--paper-soft); cursor: pointer;
+}
+.inspector-upload input { padding: 0; border: 0; max-width: 100%; }
+.inspector-upload span, .inspector-upload small { display: block; overflow: hidden; text-overflow: ellipsis; }
+.inspector-upload span { margin-top: 6px; color: var(--green-strong); }
+.inspector-upload small { font-weight: 400; color: var(--muted); }
+.questionnaire-in-inspector .questionnaire-designer { border: 0; padding: 0; background: transparent; }
+.questionnaire-in-inspector .questionnaire-designer > summary { display: none; }
+.questionnaire-in-inspector .prompt-grid, .questionnaire-in-inspector .option-languages { grid-template-columns: 1fr; }
+.questionnaire-in-inspector .question-head { flex-wrap: wrap; }
+.questionnaire-in-inspector .question-head select { flex: 1; }
+.questionnaire-in-inspector .questionnaire-designer article { padding: 8px; }
+.native-image { display: block; max-width: 100%; max-height: 70vh; object-fit: contain; margin: auto; border-radius: 8px; }
+
+/* Dark mode */
+.dark-mode .inspector-section { border-color: var(--line); }
+.dark-mode .inspector-section h4 { color: var(--green); }
+.dark-mode .inspector-upload { background: #1c2a23; border-color: var(--green-strong); }
+.dark-mode .inspector-upload span { color: var(--green); }

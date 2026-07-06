@@ -1,0 +1,383 @@
+/* analytics.css — post-session review and analysis workspace */
+
+.analytics-dashboard {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.analytics-head {
+  height: 64px;
+  margin: 0;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+  backdrop-filter: none;
+}
+
+.analytics-head > div {
+  display: grid;
+  gap: 1px;
+}
+
+.analytics-head span {
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+
+.analytics-head h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.analytics-head-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.analytics-head small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.analytics-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.analytics-sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  overflow: auto;
+  border-right: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.analytics-sidebar-inner {
+  padding: 14px;
+}
+
+.analytics-sidebar h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+
+.analytics-sidebar p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.analytics-session-row {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 5px;
+  padding: 10px 11px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+
+.analytics-session-row:hover {
+  background: var(--paper-soft);
+  border-color: var(--line);
+}
+
+.analytics-session-row.selected {
+  background: var(--mint);
+  border-color: #b9d4c5;
+}
+
+.analytics-session-row > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.analytics-session-row b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.analytics-session-row small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.analytics-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.analytics-main {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 18px;
+}
+
+.analytics-card,
+.analytics-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  box-shadow: var(--shadow-sm);
+}
+
+.analytics-session-card {
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.analytics-session-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.analytics-session-top h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.analytics-session-meta {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.analytics-session-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.analytics-validity {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.analytics-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 14px;
+}
+
+.analytics-metric {
+  min-width: 82px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper-soft);
+  text-align: center;
+}
+
+.analytics-metric b,
+.analytics-metric span {
+  display: block;
+}
+
+.analytics-metric b {
+  color: var(--ink);
+  font-size: 17px;
+}
+
+.analytics-metric span {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.analytics-issues {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+}
+
+.analytics-issues h4 {
+  margin: 0 0 3px;
+  font-size: 13px;
+}
+
+.analytics-issues div {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.analytics-issues .invalid {
+  color: var(--danger);
+}
+
+.analytics-issues .attention {
+  color: var(--warning);
+}
+
+.analytics-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.analytics-tabs button {
+  margin-bottom: -1px;
+  padding: 9px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.analytics-tabs button:hover,
+.analytics-tabs button.active {
+  color: var(--green-strong);
+  border-bottom-color: var(--green);
+  box-shadow: none;
+}
+
+.analytics-tabs button.active {
+  font-weight: 800;
+}
+
+.analytics-panel {
+  padding: 16px;
+  min-height: 300px;
+}
+
+.analytics-loading,
+.analytics-empty {
+  margin: 12vh auto;
+  max-width: 460px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.analytics-empty h3 {
+  margin: 0 0 8px;
+  color: var(--ink);
+  font-size: 17px;
+}
+
+.analytics-empty p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.analysis-chart-scroll {
+  position: relative;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.analysis-timeline-canvas {
+  min-height: 220px;
+  min-width: 760px;
+}
+
+.analysis-tooltip {
+  position: fixed;
+  z-index: 9999;
+  max-width: 300px;
+  pointer-events: none;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: #17231d;
+  color: white;
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow: var(--shadow-md);
+}
+
+.dark-mode .analytics-head,
+.dark-mode .analytics-sidebar,
+.dark-mode .analytics-card,
+.dark-mode .analytics-panel {
+  background: var(--paper);
+  border-color: var(--line);
+  box-shadow: none;
+}
+
+.dark-mode .analytics-session-row.selected {
+  background: #1a3328;
+  border-color: #315743;
+}
+
+.dark-mode .analytics-metric {
+  background: #111a16;
+  border-color: var(--line);
+}
+
+.dark-mode .analysis-tooltip {
+  background: #050806;
+}
+
+@media (max-width: 760px) {
+  .analytics-head {
+    height: auto;
+    min-height: 64px;
+    align-items: flex-start;
+    padding: 12px;
+    flex-wrap: wrap;
+  }
+
+  .analytics-head small {
+    margin-left: 0;
+  }
+
+  .analytics-head-actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: space-between;
+  }
+
+  .analytics-body {
+    display: block;
+    overflow: auto;
+  }
+
+  .analytics-sidebar {
+    width: auto;
+    max-height: 220px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .analytics-main {
+    overflow: visible;
+    padding: 12px;
+  }
+}
