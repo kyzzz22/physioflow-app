@@ -1,7 +1,7 @@
 import { stepContentIssues } from './domain';
 import QuestionnaireDesigner, { createQuestionnaire } from './QuestionnaireDesigner';
 import StepPreview from './StepPreview';
-import { CONTROL_NODE_GUIDE, MEDIA_TYPES, PALETTE, STEP_DEFAULTS, STEP_GUIDE } from './constants.js';
+import { MEDIA_TYPES, PALETTE, STEP_DEFAULTS } from './constants.js';
 import MediaSettings from './MediaSettings.jsx';
 
 const stepDefaultExtras = defaults => Object.fromEntries(Object.entries(defaults).filter(([key]) => !['name', 'duration_mode', 'planned_duration_ms', 'recovery_behavior'].includes(key)));
@@ -21,17 +21,9 @@ export function Inspector({ node, edge, trial, stimuli, questionnaires, updateNo
   ];
 
   const _stepIssues = resolvedItem && !disabled ? stepContentIssues(resolvedItem, stimuli, questionnaires) : [];
-  const guide = node.type === 'event' ? STEP_GUIDE[resolvedItem?.type] : CONTROL_NODE_GUIDE[node.type];
-
   return <aside className="studio-inspector">
     <div className="inspector-title"><span>{node.type.toUpperCase()} NODE</span><h3>{node.label}</h3></div>
-    {guide && <div className="node-guide">
-      <b>{node.type === 'event' ? 'Event guide' : 'Flow control guide'}</b>
-      <p>{guide.summary}</p>
-      <small>{guide.setup}</small>
-      {guide.output && <small>{guide.output}</small>}
-    </div>}
-    <label>Display label<input value={node.label || ''} disabled={disabled} onChange={e => updateNode({ label: e.target.value })} aria-label="Node display label" /></label>
+    <label>Label<input value={node.label || ''} disabled={disabled} onChange={e => updateNode({ label: e.target.value })} /></label>
     {_stepIssues.length > 0 && (
       <div className={`inspector-issues ${_stepIssues.some(i => i.kind === 'error') ? 'error' : 'warning'}`}>
         <b>{_stepIssues.some(i => i.kind === 'error') ? 'Missing required content' : 'Needs attention'}</b>
@@ -82,21 +74,16 @@ export function Inspector({ node, edge, trial, stimuli, questionnaires, updateNo
 
 function MultiSelectInspector({ count, hasClipboard: _hasClipboard, onPasteNode: _onPasteNode }) {
   return <aside className="studio-inspector empty-inspector">
-    <div className="inspector-empty-icon">⊞</div>
     <h3>{count} nodes selected</h3>
-    <p>Multiple nodes are selected. Drag to move them together, or press Delete to remove all non-start/end nodes.</p>
-    <p className="inspector-footnote">Click a single node to configure its individual settings. Shift+click to toggle selection. Ctrl+D to duplicate all selected.</p>
+    <p>Drag to move together · Delete to remove · Ctrl+D to duplicate</p>
   </aside>;
 }
 
 function EmptyInspector({ hasClipboard, onPasteNode }) {
   return <aside className="studio-inspector empty-inspector">
-    <div className="inspector-empty-icon">↖</div>
-    <h3>Select a node</h3>
-    <p>Choose a node to edit its behavior. Use the labeled output ports to create branches.</p>
-    <ol><li>Add an event from the palette</li><li>Connect its output to the next node</li><li>Click a node to configure all settings here</li></ol>
-    <p className="inspector-footnote">Click a connection line to select it, then press Delete or use the edge delete control.</p>
-    {hasClipboard && <button className="paste-ghost" onClick={onPasteNode}>Paste copied node (Ctrl+V)</button>}
+    <h3>No node selected</h3>
+    <p>Click a node to edit · Click an edge to delete</p>
+    {hasClipboard && <button className="paste-ghost" onClick={onPasteNode}>Paste (Ctrl+V)</button>}
   </aside>;
 }
 
@@ -109,14 +96,10 @@ function EdgeInspector({ edge, flow: flowProp, onDelete, disabled, updateFlow, f
     }
   };
   return <aside className="studio-inspector">
-    <div className="inspector-title"><span>CONNECTION</span><h3>{edge.branch} path</h3></div>
-    <p className="inspector-help">From <b>{source?.label || edge.source}</b> → <b>{target?.label || edge.target}</b></p>
-    <p className="inspector-help">This connection is followed when the source chooses <b>{edge.branch}</b>.</p>
-    <label>Display label (override)
-      <input value={edge.label || ''} disabled={disabled} placeholder="Optional label for this connection" onChange={e => handleUpdateEdge({ label: e.target.value })} />
-    </label>
-    <button className="delete-action" disabled={disabled} onClick={onDelete}>Delete connection</button>
-    <p className="inspector-footnote">Tip: use the selected-edge delete control, or press Delete.</p>
+    <div className="inspector-title"><span>EDGE</span><h3>{edge.branch}</h3></div>
+    <p className="inspector-help">{source?.label || edge.source} → {target?.label || edge.target}</p>
+    <label>Label<input value={edge.label || ''} disabled={disabled} placeholder="Optional" onChange={e => handleUpdateEdge({ label: e.target.value })} /></label>
+    <button className="delete-action" disabled={disabled} onClick={onDelete}>Delete</button>
   </aside>;
 }
 

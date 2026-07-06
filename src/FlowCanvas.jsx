@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { step as createStep, stepContentIssues } from './domain';
 import { normalizeFlow, validateFlow } from './flowEngine';
 import { Inspector } from './Inspector';
-import { CONTROL_NODE_GUIDE, PALETTE, STEP_GUIDE } from './constants.js';
+import { PALETTE } from './constants.js';
 
 const nodeIcons = { start: 'START', end: 'END', condition: 'IF', loop: 'LOOP', event: 'STEP', note: '✎', junction: '●' };
 const branchesFor = node => node.type === 'note' ? [] : node.type === 'condition' ? ['true', 'false'] : node.type === 'loop' ? ['body', 'exit'] : ['next'];
@@ -194,11 +194,25 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     setDragConnection(null);
   };
   const removeNode = useCallback(id => {
-    if (!flow.nodes.find(n => n.id === id)) return;
-    updateFlow({ nodes: flow.nodes.filter(n => n.id !== id), edges: flow.edges.filter(e => e.source !== id && e.target !== id) });
+    const node = flow.nodes.find(n => n.id === id);
+    if (!node) return;
+    const isEventNode = node.type === 'event' && node.step_id;
+    if (isEventNode) {
+      onChange({
+        ...trialRef.current,
+        steps: trialRef.current.steps.filter(s => s.step_id !== node.step_id),
+        flow: {
+          nodes: flow.nodes.filter(n => n.id !== id),
+          edges: flow.edges.filter(e => e.source !== id && e.target !== id),
+        },
+      });
+    } else {
+      updateFlow({ nodes: flow.nodes.filter(n => n.id !== id), edges: flow.edges.filter(e => e.source !== id && e.target !== id) });
+    }
     setSelectedNodeIds(prev => { const next = new Set(prev); next.delete(id); return next; });
+    setSelectedEdgeId(null);
     setContextMenu(null);
-  }, [flow, updateFlow]);
+  }, [flow, updateFlow, onChange]);
 
   const deleteEdge = useCallback((edgeId) => {
     if (!edgeId) return;
@@ -251,6 +265,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
               });
             }
             setSelectedNodeIds(new Set());
+            setSelectedEdgeId(null);
             setContextMenu(null);
           }
         }
@@ -478,16 +493,15 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   return <div className="studio">
     <aside className="studio-palette">
       <div className="studio-brand"><span>＋</span><div><b>Add to flow</b><small>Drag nodes to arrange</small></div></div>
-      <p className="palette-tip">Use event nodes for participant-facing steps. Use flow control nodes only when the path must branch or repeat.</p>
-      {PALETTE.map(group => <section key={group.title}><h4>{group.title}</h4>{group.items.map(([type, icon, label]) => <button key={type} disabled={disabled} onClick={() => addEvent(type)} title={STEP_GUIDE[type]?.setup || `Add ${label}`}><i>{icon}</i><span>{label}</span><small>{STEP_GUIDE[type]?.summary}</small></button>)}</section>)}
-      <section><h4>Flow control</h4><button disabled={disabled} onClick={() => addLogic('condition')} title={CONTROL_NODE_GUIDE.condition.setup}><i>◇</i><span>Condition</span><small>{CONTROL_NODE_GUIDE.condition.summary}</small></button><button disabled={disabled} onClick={() => addLogic('loop')} title={CONTROL_NODE_GUIDE.loop.setup}><i>↻</i><span>Loop</span><small>{CONTROL_NODE_GUIDE.loop.summary}</small></button></section>
-      <section><h4>Helpers</h4><button disabled={disabled} onClick={addNote}><i>✎</i><span>Sticky note</span><small>Free-text annotation, ignored at runtime</small></button><button disabled={disabled} onClick={addJunction}><i>●</i><span>Junction</span><small>Edge router for cleaner wiring</small></button></section>
+      {PALETTE.map(group => <section key={group.title}><h4>{group.title}</h4>{group.items.map(([type, icon, label]) => <button key={type} disabled={disabled} onClick={() => addEvent(type)}><i>{icon}</i><span>{label}</span></button>)}</section>)}
+      <section><h4>Flow</h4><button disabled={disabled} onClick={() => addLogic('condition')}><i>◇</i><span>Condition</span></button><button disabled={disabled} onClick={() => addLogic('loop')}><i>↻</i><span>Loop</span></button></section>
+      <section><h4>Utils</h4><button disabled={disabled} onClick={addNote}><i>✎</i><span>Note</span></button><button disabled={disabled} onClick={addJunction}><i>●</i><span>Junction</span></button></section>
     </aside>
 
     <section className="studio-center">
       <div className="canvas-bar">
         <div><b>{trial.name}</b><span>{flow.nodes.length} nodes · {flow.edges.length} connections</span></div>
-        <div className={`connection-hint ${focusMessage ? 'focus-warning' : ''}`}>{focusMessage ? <span>{focusMessage}</span> : dragConnection ? <>Dragging <strong>{dragConnection.branch}</strong> to target <button onClick={() => setDragConnection(null)}>Cancel</button></> : <span>Drag from output port to target, or click to connect.</span>}</div>
+        <div className={`connection-hint ${focusMessage ? 'focus-warning' : ''}`}>{focusMessage ? <span>{focusMessage}</span> : dragConnection ? <>Connect <strong>{dragConnection.branch}</strong> → <button onClick={() => setDragConnection(null)}>Cancel</button></> : null}</div>
         <label className="check-row" style={{ fontSize: '12px', whiteSpace: 'nowrap', gap: '4px', display: 'flex', alignItems: 'center', margin: 0 }}>
           <input type="checkbox" checked={snapEnabled} onChange={e => { setSnapEnabled(e.target.checked); try { localStorage.setItem('physioflow.snap', e.target.checked ? '1' : '0'); } catch {} }} /> Snap
         </label>
@@ -706,20 +720,18 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
       {/* Keyboard shortcuts panel */}
       {shortcutsOpen && <>
         <div className="guide-backdrop" style={{ zIndex: 150 }} onClick={() => setShortcutsOpen(false)} />
-        <div className="guide-panel" style={{ zIndex: 151, position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', maxWidth: '600px', maxHeight: '80vh' }}>
-          <div className="guide-head"><div><span>KEYBOARD</span><h2>Shortcuts</h2></div><button onClick={() => setShortcutsOpen(false)} style={{ width: 34, height: 34, fontSize: 22 }}>×</button></div>
-          <div className="guide-content">
+        <div className="guide-panel" style={{ zIndex: 151, position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', maxWidth: '440px', maxHeight: '80vh' }}>
+          <div className="guide-head"><div><span>SHORTCUTS</span></div><button onClick={() => setShortcutsOpen(false)} style={{ width: 34, height: 34, fontSize: 22 }}>×</button></div>
+          <div className="guide-content" style={{ padding: '12px 16px' }}>
             <div className="guide-table">
               {[
-                ['Ctrl+C', 'Copy selected node'], ['Ctrl+V', 'Paste copied node'], ['Ctrl+D', 'Duplicate selected node'],
-                ['Ctrl+A', 'Select all nodes'], ['Ctrl+F', 'Search nodes'], ['Ctrl+Z', 'Undo'], ['Ctrl+Shift+Z', 'Redo'],
-                ['Ctrl+S', 'Save protocol'], ['Ctrl+/ or ?', 'Toggle this panel'],
-                ['Delete / Backspace', 'Delete selected nodes/edge'], ['Shift+Click', 'Toggle node selection'],
-                ['Space+Drag', 'Pan canvas'], ['Middle Mouse Drag', 'Pan canvas'], ['Right Mouse Drag', 'Pan canvas'],
-                ['Scroll Wheel', 'Zoom in/out'], ['Alt+Drag', 'Disable snap temporarily'], ['Escape', 'Cancel / close menu'],
+                ['Ctrl+C/V/D', 'Copy / Paste / Duplicate'], ['Ctrl+A', 'Select all'],
+                ['Ctrl+Z / Ctrl+Shift+Z', 'Undo / Redo'], ['Ctrl+F', 'Search nodes'],
+                ['Del', 'Delete selected'], ['Shift+Click', 'Toggle selection'],
+                ['Drag output port', 'Connect nodes'], ['Space/Middle+Drag', 'Pan canvas'],
+                ['Scroll', 'Zoom in/out'], ['Alt+Drag', 'Disable snap'], ['Escape', 'Cancel'],
               ].map(([key, desc], i) => <div key={i}><code>{key}</code><span>{desc}</span></div>)}
             </div>
-            <button onClick={() => setShortcutsOpen(false)} style={{ marginTop: '14px' }}>Close</button>
           </div>
         </div>
       </>}
