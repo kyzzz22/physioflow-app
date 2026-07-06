@@ -1,4 +1,4 @@
-export const CONTROL_NODE_TYPES = ['start', 'condition', 'loop', 'end'];
+export const CONTROL_NODE_TYPES = ['start', 'condition', 'loop', 'end', 'note', 'junction'];
 
 export function createLinearFlow(steps = []) {
   const start = { id: 'start', type: 'start', x: 60, y: 160, label: 'Start' };
@@ -49,6 +49,20 @@ export function compileTrialFlow(trial, runtimeValues = {}) {
   let guard = 0;
   const MAX_TRANSITIONS = 5000;
   while (current && guard++ < MAX_TRANSITIONS) {
+    // Skip disabled nodes
+    if (current.enabled === false) {
+      const edges = outgoing(current.id);
+      const edge = edges.find(item => item.branch === 'next') || edges[0];
+      current = edge ? nodes.get(edge.target) : null;
+      continue;
+    }
+    // Skip note nodes (purely visual)
+    if (current.type === 'note') {
+      const edges = outgoing(current.id);
+      const edge = edges[0];
+      current = edge ? nodes.get(edge.target) : null;
+      continue;
+    }
     if (current.type === 'event' && steps.has(current.step_id)) result.push(steps.get(current.step_id));
     if (current.type === 'end') break;
     const edges = outgoing(current.id);
@@ -61,7 +75,8 @@ export function compileTrialFlow(trial, runtimeValues = {}) {
       const repeat = count < limit && ruleAllows;
       loopVisits.set(current.id, count + 1);
       edge = edges.find(item => item.branch === (repeat ? 'body' : 'exit'));
-    } else edge = edges.find(item => item.branch === 'next') || edges[0];
+    } else if (current.type === 'junction') edge = edges.find(item => item.branch === 'next') || edges[0];
+    else edge = edges.find(item => item.branch === 'next') || edges[0];
     current = edge ? nodes.get(edge.target) : null;
   }
   return result;
@@ -82,6 +97,19 @@ export function validateFlow(flow, steps = []) {
   steps.forEach(step => { if (!referencedSteps.has(step.step_id)) warnings.push(`Step ${step.name} is not placed in the flow`); });
   nodes.forEach(node => {
     const outgoing = edges.filter(edge => edge.source === node.id);
+    // Note nodes: no edge requirements (purely visual annotations)
+    if (node.type === 'note') {
+      if (outgoing.length) warnings.push(`Note ${node.label || node.id} has outgoing connections that will be ignored`);
+      return;
+    }
+    // Junction nodes: need at least one input and one output
+    if (node.type === 'junction') {
+      const incoming = edges.filter(edge => edge.target === node.id);
+      if (!incoming.length) errors.push(`Junction ${node.label || node.id} needs at least one incoming connection`);
+      if (!outgoing.some(edge => edge.branch === 'next')) errors.push(`Junction ${node.label || node.id} needs a next connection`);
+      if (outgoing.filter(edge => edge.branch === 'next').length > 1) errors.push(`Junction ${node.label || node.id} has more than one next connection`);
+      return;
+    }
     if (node.type === 'condition' && (!outgoing.some(edge => edge.branch === 'true') || !outgoing.some(edge => edge.branch === 'false'))) errors.push(`Condition ${node.label || node.id} needs true and false connections`);
     if (node.type === 'loop' && (!outgoing.some(edge => edge.branch === 'body') || !outgoing.some(edge => edge.branch === 'exit'))) errors.push(`Loop ${node.label || node.id} needs body and exit connections`);
     if (['start','event'].includes(node.type) && !outgoing.some(edge => edge.branch === 'next')) errors.push(`${node.label || node.id} needs a next connection`);

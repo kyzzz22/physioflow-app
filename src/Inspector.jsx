@@ -6,9 +6,12 @@ import MediaSettings from './MediaSettings.jsx';
 
 const stepDefaultExtras = defaults => Object.fromEntries(Object.entries(defaults).filter(([key]) => !['name', 'duration_mode', 'planned_duration_ms', 'recovery_behavior'].includes(key)));
 
-export function Inspector({ node, edge, trial, stimuli, questionnaires, updateNode, updateStep, removeNode, deleteEdgeFromInspector, disabled, onCopyNode, onPasteNode, hasClipboard }) {
-  if (edge) return <EdgeInspector edge={edge} flow={trial.flow} onDelete={deleteEdgeFromInspector} disabled={disabled} />;
-  if (!node) return <EmptyInspector hasClipboard={hasClipboard} onPasteNode={onPasteNode} />;
+export function Inspector({ node, edge, trial, stimuli, questionnaires, updateNode, updateStep, removeNode, deleteEdgeFromInspector, disabled, onCopyNode, onPasteNode, onDuplicateNode, hasClipboard, selectedCount, flow, updateFlow }) {
+  if (edge) return <EdgeInspector edge={edge} flow={trial.flow} onDelete={deleteEdgeFromInspector} disabled={disabled} updateFlow={updateFlow} flowData={flow} />;
+  if (!node) {
+    if (selectedCount > 0) return <MultiSelectInspector count={selectedCount} hasClipboard={hasClipboard} onPasteNode={onPasteNode} />;
+    return <EmptyInspector hasClipboard={hasClipboard} onPasteNode={onPasteNode} />;
+  }
   const item = trial.steps.find(s => s.step_id === node.step_id);
   const sharedQ = questionnaires.find(q => q.questionnaire_id === item?.questionnaire_id);
   const resolvedItem = item?.type === 'questionnaire' && !item.questionnaire && sharedQ ? { ...item, questionnaire: sharedQ } : item;
@@ -35,20 +38,54 @@ export function Inspector({ node, edge, trial, stimuli, questionnaires, updateNo
         {_stepIssues.map((iss, ii) => <div key={ii}>{iss.kind === 'error' ? 'Error' : 'Warning'} · {iss.message}</div>)}
       </div>
     )}
+    {/* Note node settings */}
+    {node.type === 'note' && <>
+      <label>Note content
+        <textarea value={node.content || ''} disabled={disabled} rows={4} onChange={e => updateNode({ content: e.target.value })} style={{ fontFamily: '"Comic Sans MS", cursive', fontSize: '14px' }} />
+      </label>
+      <div style={{ display: 'flex', gap: '.5rem' }}>
+        <label style={{ flex: 1 }}>Width<input type="number" min="120" max="400" value={node.width || 180} disabled={disabled} onChange={e => updateNode({ width: Number(e.target.value) })} /></label>
+        <label style={{ flex: 1 }}>Height<input type="number" min="60" max="400" value={node.height || 100} disabled={disabled} onChange={e => updateNode({ height: Number(e.target.value) })} /></label>
+      </div>
+      <ColorField label="Background color" value={node.color} fallback="#fff9c4" disabled={disabled} onChange={v => updateNode({ color: v })} />
+    </>}
+    {/* Event node settings */}
     {node.type === 'event' && resolvedItem && <EventFullSettings item={resolvedItem} trial={trial} stimuli={stimuli} questionnaires={questionnaires} disabled={disabled} updateStep={updateStep} questionVars={questionVars} />}
+    {/* Condition/loop settings */}
     {['condition', 'loop'].includes(node.type) && (
       <details className="inspector-section" open><summary className="inspector-summary"><h4>Rule settings</h4></summary>
         <RuleFields node={node} questionVariables={questionVars} disabled={disabled} updateNode={updateNode} />
         {node.type === 'loop' && <label>Maximum iterations<input type="number" min="0" value={node.max_iterations ?? 1} disabled={disabled} onChange={e => updateNode({ max_iterations: Number(e.target.value) })} /></label>}
       </details>
     )}
+    {/* Node color (all non-start/end types) */}
+    {!['start', 'end'].includes(node.type) && node.type !== 'note' && (
+      <details className="inspector-section"><summary className="inspector-summary"><h4>Node style</h4></summary>
+        <ColorField label="Node color" value={node.color} fallback="" disabled={disabled} onChange={v => updateNode({ color: v || null })} />
+        <label className="check-row" style={{ marginTop: '.5rem' }}>
+          <input type="checkbox" checked={node.enabled !== false} disabled={disabled} onChange={e => updateNode({ enabled: e.target.checked })} />
+          Enabled (skip node when disabled)
+        </label>
+      </details>
+    )}
+    {/* Action buttons */}
     {!['start', 'end'].includes(node.type) && (
       <div className="inspector-actions">
         <button className="delete-action" disabled={disabled} onClick={removeNode}>Delete node</button>
         <button onClick={onCopyNode} disabled={disabled} title="Ctrl+C">Copy</button>
         {hasClipboard && <button onClick={onPasteNode} disabled={disabled} title="Ctrl+V">Paste</button>}
+        {onDuplicateNode && <button onClick={onDuplicateNode} disabled={disabled} title="Ctrl+D">Duplicate</button>}
       </div>
     )}
+  </aside>;
+}
+
+function MultiSelectInspector({ count, hasClipboard: _hasClipboard, onPasteNode: _onPasteNode }) {
+  return <aside className="studio-inspector empty-inspector">
+    <div className="inspector-empty-icon">⊞</div>
+    <h3>{count} nodes selected</h3>
+    <p>Multiple nodes are selected. Drag to move them together, or press Delete to remove all non-start/end nodes.</p>
+    <p className="inspector-footnote">Click a single node to configure its individual settings. Shift+click to toggle selection. Ctrl+D to duplicate all selected.</p>
   </aside>;
 }
 
@@ -63,13 +100,21 @@ function EmptyInspector({ hasClipboard, onPasteNode }) {
   </aside>;
 }
 
-function EdgeInspector({ edge, flow, onDelete, disabled }) {
-  const source = flow?.nodes.find(n => n.id === edge.source);
-  const target = flow?.nodes.find(n => n.id === edge.target);
+function EdgeInspector({ edge, flow: flowProp, onDelete, disabled, updateFlow, flowData }) {
+  const source = (flowProp || flowData)?.nodes?.find(n => n.id === edge.source);
+  const target = (flowProp || flowData)?.nodes?.find(n => n.id === edge.target);
+  const handleUpdateEdge = (values) => {
+    if (updateFlow && flowData) {
+      updateFlow({ ...flowData, edges: flowData.edges.map(e => e.id === edge.id ? { ...e, ...values } : e) });
+    }
+  };
   return <aside className="studio-inspector">
     <div className="inspector-title"><span>CONNECTION</span><h3>{edge.branch} path</h3></div>
     <p className="inspector-help">From <b>{source?.label || edge.source}</b> → <b>{target?.label || edge.target}</b></p>
     <p className="inspector-help">This connection is followed when the source chooses <b>{edge.branch}</b>.</p>
+    <label>Display label (override)
+      <input value={edge.label || ''} disabled={disabled} placeholder="Optional label for this connection" onChange={e => handleUpdateEdge({ label: e.target.value })} />
+    </label>
     <button className="delete-action" disabled={disabled} onClick={onDelete}>Delete connection</button>
     <p className="inspector-footnote">Tip: use the selected-edge delete control, or press Delete.</p>
   </aside>;
