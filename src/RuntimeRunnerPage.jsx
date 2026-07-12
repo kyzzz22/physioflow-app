@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createLogger } from './engine';
-import { bundle, downloadBundle } from './exporter';
+import { bundle, bundleSimple, downloadBundle } from './exporter';
 import { MARKER_TYPES } from './constants.js';
 import { clearCurrentRun, saveCurrentRun, saveSession } from './storage';
 import { completeRuntimeStep, createRuntime, currentRuntimeItem, restoreRuntime, retryRuntimeStep, runtimeBoundaryEvents, runtimeProgress, skipRuntimeStep } from './runtimeMachine';
@@ -410,7 +410,8 @@ export default function RuntimeRunnerPage({ data, onDone }) {
           <b>{finalSave.status === 'saved' ? 'Session saved' : finalSave.status === 'error' ? 'Save needs attention' : 'Saving session'}</b>
           <span>{finalSave.message}</span>
         </div>
-        <button className="primary wide" onClick={() => downloadBundle(files, session.participant_id)}>Export complete bundle</button>
+        <button className="primary wide" onClick={() => downloadBundle(files, session.participant_id)}>Export complete bundle (advanced)</button>
+        <button className="wide" onClick={() => downloadBundle(bundleSimple(session, protocol, logger.current.snapshot(), responses), session.participant_id)}>Export simplified data</button>
         {finalSave.status === 'error' && <button className="wide" onClick={() => persistFinishedSession(session)}>Retry local save</button>}
         <button className="wide" disabled={!canReturn} title={canReturn ? 'Return to projects' : 'Wait until the completed session is saved locally'} onClick={onDone}>Return to projects</button>
       </div>

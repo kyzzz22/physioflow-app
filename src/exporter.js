@@ -246,6 +246,144 @@ export function downloadBundle(files, prefix) {
   setTimeout(()=>{try{URL.revokeObjectURL(anchor.href)}catch{/* ignore */}},30000);
 }
 
+// ── Simplified export (5 files, clean columns) ──
+
+/** Build a human-readable step path like "Block 1 / Trial 2 / Fixation" */
+function stepPath(protocol, event) {
+  const block = protocol.blocks?.find(b => b.block_id === event.block_id);
+  const trial = block?.trials?.find(t => t.trial_id === event.trial_id);
+  const step = trial?.steps?.find(s => s.step_id === event.step_id);
+  const bi = block ? protocol.blocks.indexOf(block) + 1 : '?';
+  const ti = trial && block ? block.trials.indexOf(trial) + 1 : '?';
+  return `${block?.name || 'Block ' + bi} / ${trial?.name || 'Trial ' + ti} / ${step?.name || step?.type || '?'}`;
+}
+
+export function bundleSimple(session, protocol, events, responses = []) {
+  const report = assessSession({ session, protocol, events, responses, runtime: session.runtime_snapshot });
+
+  // ── events.csv (10 columns) ──
+  const eventHeaders = ['time_sec', 'event', 'step_path', 'condition', 'duration_ms', 'rt_ms', 'note', 'status'];
+  const eventRows = events.map(e => {
+    const path = stepPath(protocol, e);
+    const duration = e.metadata?.duration_ms ?? (e.event_type === 'step_entered' ? '' : '');
+    const rt = e.metadata?.reaction_time_ms ?? '';
+    let note = '';
+    if (e.metadata?.marker_type) note = `marker:${e.metadata.marker_type}` + (e.metadata.note ? ` "${e.metadata.note}"` : '');
+    else if (e.metadata?.confirmation_label) note = e.metadata.confirmation_label;
+    else if (e.metadata?.response_variable) note = `${e.metadata.response_variable}=${e.metadata.response_value || ''}`;
+    return [
+      (e.elapsed_monotonic_ms / 1000).toFixed(3),
+      e.event_type,
+      path,
+      e.condition || '',
+      duration,
+      rt,
+      note,
+      e.event_status || 'ok',
+    ];
+  });
+
+  // ── responses.csv (7 columns) ──
+  const respHeaders = ['time_sec', 'step_path', 'question', 'answer', 'rt_ms', 'question_type', 'response_key'];
+  const respRows = responses.map(r => ({
+    ...r,
+    _path: (() => {
+      const block = protocol.blocks?.find(b => b.block_id === r.block_id);
+      const trial = block?.trials?.find(t => t.trial_id === r.trial_id);
+      const step = trial?.steps?.find(s => s.step_id === r.step_id);
+      return `${block?.name || ''} / ${trial?.name || ''} / ${step?.name || ''}`;
+    })(),
+  })).map(r => [
+    (r.submitted_epoch_ms ? (r.submitted_epoch_ms - (session.started_at ? new Date(session.started_at).getTime() : 0)) / 1000 : ''),
+    r._path,
+    r.question_id || '',
+    String(r.value ?? ''),
+    r.reaction_time_ms || '',
+    r.question_type || '',
+    r.response_key || '',
+  ]);
+
+  // ── analysis_windows.csv (9 columns) ──
+  const aws = windows(events, protocol);
+  const awHeaders = ['time_sec', 'step_path', 'condition', 'label', 'duration_ms', 'pauses', 'validity', 'issue', 'markers'];
+  const awRows = aws.map(w => ({
+    ...w,
+    _path: stepPath(protocol, { block_id: w.block_id, trial_id: w.trial_id, step_id: w.step_id }),
+  })).map(w => [
+    w.start_epoch_ms ? ((w.start_epoch_ms - (session.started_at ? new Date(session.started_at).getTime() : 0)) / 1000).toFixed(3) : '',
+    w._path,
+    w.condition || '',
+    w.analysis_label || '',
+    w.duration_ms || '',
+    w.pause_count || 0,
+    w.validity_status || '',
+    w.invalid_reason || '',
+    w.overlapping_markers || '',
+  ]);
+
+  // ── Session summary ──
+  const summary = {
+    participant_id: session.participant_id,
+    protocol_name: protocol.name,
+    protocol_version: protocol.version,
+    status: session.status,
+    started_at: session.started_at,
+    ended_at: session.ended_at,
+    run_mode: session.run_mode,
+    total_events: events.length,
+    total_responses: responses.length,
+    total_analysis_windows: aws.length,
+    integrity: { validity: report.validity_status, issues: report.issues?.length || 0, warnings: report.warnings?.length || 0 },
+    export_generated_at: new Date().toISOString(),
+  };
+
+  const readme = [
+    `PhysioFlow Session — ${session.participant_id}`,
+    '',
+    `Protocol: ${protocol.name} (v${protocol.version})`,
+    `Status: ${session.status}  |  Mode: ${session.run_mode || 'formal'}`,
+    `Events: ${events.length}  |  Responses: ${responses.length}  |  Analysis windows: ${aws.length}`,
+    '',
+    'Files:',
+    '  events.csv          — Timeline of every step, marker, and media event',
+    '  responses.csv       — Questionnaire answers and Response-node choices',
+    '  analysis_windows.csv — Derived intervals for physiology analysis',
+    '  session.json        — Session metadata and integrity summary',
+    '  protocol.json       — The protocol configuration used',
+    '',
+    'Column reference (events.csv):',
+    '  time_sec     Seconds from session start',
+    '  event        Event type (step_entered, step_completed, manual_marker, etc.)',
+    '  step_path    Human-readable path through Block / Trial / Step',
+    '  condition    Trial condition label',
+    '  duration_ms  Event duration when available',
+    '  rt_ms        Reaction time for responses',
+    '  note         Marker text, confirmation label, or response value',
+    '  status       ok | warning | error',
+    '',
+    'Column reference (responses.csv):',
+    '  time_sec, step_path, question, answer, rt_ms, question_type, response_key',
+    '',
+    'Column reference (analysis_windows.csv):',
+    '  time_sec, step_path, condition, label, duration_ms, pauses, validity, issue, markers',
+    '',
+  ].join('\n');
+
+  return {
+    'README.txt': readme,
+    'session.json': JSON.stringify(summary, null, 2),
+    'protocol.json': JSON.stringify(protocol, null, 2),
+    'events.csv': csv(eventHeaders, eventRows),
+    'responses.csv': csv(respHeaders, respRows),
+    'analysis_windows.csv': csv(awHeaders, awRows),
+  };
+}
+
+export function downloadSimpleBundle(session, protocol, events, responses = []) {
+  const files = bundleSimple(session, protocol, events, responses);
+  downloadBundle(files, session.participant_id || 'session');
+}
+
 // ── BIDS-compatible export ──
 // BIDS v1.8.0 behavioral events format
 // See: https://bids-specification.readthedocs.io/en/stable/modality-specific-files/behavioral-experiments.html

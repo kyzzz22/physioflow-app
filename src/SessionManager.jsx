@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { bundle, downloadBundle } from './exporter';
+import { bundle, bundleSimple, downloadBundle } from './exporter';
 import { deleteSession, loadSession, loadSessions, saveSession } from './storage';
 import { AlertDialog, PromptDialog } from './Modal.jsx';
 import GuidePanel from './GuidePanel.jsx';
@@ -72,6 +72,7 @@ export default function SessionManager() {
   };
 
   const exportData = () => { if (detail?.protocol_snapshot) downloadBundle(bundle(detail, detail.protocol_snapshot, detail.events || [], detail.responses || []), detail.participant_id); };
+  const exportSimple = () => { if (detail?.protocol_snapshot) downloadBundle(bundleSimple(detail, detail.protocol_snapshot, detail.events || [], detail.responses || []), detail.participant_id); };
 
   const exportAll = async () => {
     setLoading(true);
@@ -157,7 +158,7 @@ export default function SessionManager() {
           {!listLoading && Boolean(summaries.length) && !filteredSummaries.length && <p>No Sessions match the current filter.</p>}
         </aside>
         <section>
-          {loading ? <p>Loading Session…</p> : detail ? <SessionDetail detail={detail} setDetail={setDetail} onSave={saveReview} onExport={exportData} onDelete={remove} /> : <div className="session-placeholder"><b>Select a Session</b><p>The complete event history and answers are stored in the active local storage backend, separate from the lightweight dashboard index.</p></div>}
+          {loading ? <p>Loading Session…</p> : detail ? <SessionDetail detail={detail} setDetail={setDetail} onSave={saveReview} onExport={exportData} onExportSimple={exportSimple} onDelete={remove} /> : <div className="session-placeholder"><b>Select a Session</b><p>The complete event history and answers are stored in the active local storage backend, separate from the lightweight dashboard index.</p></div>}
         </section>
       </div>
       {batchProgress && <div className="batch-progress"><span>Exporting {batchProgress.done}/{batchProgress.total} sessions...</span><i style={{ flex: 1 }}><span style={{ width: `${(batchProgress.done / batchProgress.total) * 100}%`, display: 'block', height: '100%', background: 'var(--lime)', borderRadius: 2 }} /></i></div>}
@@ -168,7 +169,7 @@ export default function SessionManager() {
   </>;
 }
 
-function SessionDetail({ detail, setDetail, onSave, onExport, onDelete }) {
+function SessionDetail({ detail, setDetail, onSave, onExport, onExportSimple, onDelete }) {
   const integrity = detail.integrity || {};
   return <div className="session-detail">
     <div className="session-detail-title">
@@ -177,7 +178,8 @@ function SessionDetail({ detail, setDetail, onSave, onExport, onDelete }) {
         <h2>{detail.participant_id}</h2>
         <p>{detail.protocol_name} · Version {detail.protocol_version}</p>
       </div>
-      <button className="primary" onClick={onExport}>Export complete bundle</button>
+      <button className="primary" onClick={onExportSimple}>Export simplified data</button>
+      <button onClick={onExport}>Export complete (advanced)</button>
     </div>
     <div className="session-metrics">
       <div><b>{detail.events?.length || 0}</b><span>events</span></div>
