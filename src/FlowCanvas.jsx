@@ -391,9 +391,28 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     });
   };
 
-  // Attach wheel listener at document level so it works in fullscreen too
+  // Wheel zoom: only on the canvas / center area, not in sidebars or scrollable panels
+  // In fullscreen mode, zoom works everywhere since the canvas fills the screen
   useEffect(() => {
-    const handler = e => { if (e.target.closest('.clean-canvas') || e.target.closest('.visual-editor-shell') || document.fullscreenElement) handleWheel(e); };
+    const SCROLLABLE_SELECTORS = [
+      '.studio-palette', '.studio-inspector', '.snapshots-dropdown',
+      '.node-preview-overlay', '.overflow-dropdown', '.context-menu',
+      '.unplaced-step-panel', '.canvas-bar', '.guide-panel', '.guide-content',
+      '.modal-panel', '.markers', '.node-search-bar', '.zoom-controls',
+      '.flow-minimap', '[role="complementary"]',
+    ];
+    const handler = e => {
+      // In fullscreen: always zoom
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        handleWheel(e); return;
+      }
+      // Inside a scrollable panel: let native scroll work, don't zoom
+      if (SCROLLABLE_SELECTORS.some(sel => e.target.closest(sel))) return;
+      // Only zoom when scrolling on the canvas itself or the studio center
+      if (e.target.closest('.clean-canvas') || e.target.closest('.studio-center')) {
+        handleWheel(e);
+      }
+    };
     document.addEventListener('wheel', handler, { passive: false });
     return () => document.removeEventListener('wheel', handler);
   }, []);
