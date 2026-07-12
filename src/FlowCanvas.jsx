@@ -44,6 +44,33 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   const canvasRef = useRef(null);
   const panDragRef = useRef(null);
   const spaceHeld = useRef(false);
+  // Undo/redo
+  const undoStack = useRef([]);
+  const redoStack = useRef([]);
+  const undoThrottle = useRef(0);
+  const MAX_UNDO = 40;
+  const pushUndo = useCallback(() => {
+    const now = Date.now();
+    if (now - undoThrottle.current < 400) return; // throttle during drag
+    undoThrottle.current = now;
+    undoStack.current.push({ flow: structuredClone(flowRef.current), steps: structuredClone(trialRef.current.steps) });
+    if (undoStack.current.length > MAX_UNDO) undoStack.current.shift();
+    redoStack.current = []; // clear redo on new action
+  }, []);
+  const performUndo = useCallback(() => {
+    if (undoStack.current.length === 0 || disabled) return;
+    redoStack.current.push({ flow: structuredClone(flowRef.current), steps: structuredClone(trialRef.current.steps) });
+    const prev = undoStack.current.pop();
+    onChange({ ...trialRef.current, flow: prev.flow, steps: prev.steps });
+    setSelectedNodeIds(new Set()); setSelectedEdgeId(null);
+  }, [disabled, onChange]); // eslint-disable-line react-hooks/exhaustive-deps
+  const performRedo = useCallback(() => {
+    if (redoStack.current.length === 0 || disabled) return;
+    undoStack.current.push({ flow: structuredClone(flowRef.current), steps: structuredClone(trialRef.current.steps) });
+    const next = redoStack.current.pop();
+    onChange({ ...trialRef.current, flow: next.flow, steps: next.steps });
+    setSelectedNodeIds(new Set()); setSelectedEdgeId(null);
+  }, [disabled, onChange]); // eslint-disable-line react-hooks/exhaustive-deps
   const check = validateFlow(flow, trial.steps || []);
   const unplacedSteps = useMemo(() => {
     const placed = new Set(flow.nodes.filter(node => node.type === 'event').map(node => node.step_id));
@@ -80,8 +107,8 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   }, [focusTarget, flow.nodes, trial.steps, trial.trial_id, trial.name]);
 
   const updateFlow = useCallback(next => onChange({ ...trialRef.current, flow: next }), [onChange]);
-  const updateNode = (id, values) => updateFlow({ ...flowRef.current, nodes: flowRef.current.nodes.map(n => n.id === id ? { ...n, ...values } : n) });
-  const updateStep = (stepId, values) => onChange({ ...trialRef.current, steps: trialRef.current.steps.map(s => s.step_id === stepId ? { ...s, ...values } : s), flow: flowRef.current });
+  const updateNode = (id, values) => { pushUndo(); updateFlow({ ...flowRef.current, nodes: flowRef.current.nodes.map(n => n.id === id ? { ...n, ...values } : n) }); };
+  const updateStep = (stepId, values) => { pushUndo(); onChange({ ...trialRef.current, steps: trialRef.current.steps.map(s => s.step_id === stepId ? { ...s, ...values } : s), flow: flowRef.current }); };
   // Shared helper to clone an event node (used by paste and duplicate)
   const cloneEventNode = useCallback((sourceNode, sourceStep, offsetX = 40, offsetY = 40) => {
     const newStepId = crypto.randomUUID();
@@ -143,6 +170,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   };
 
   const addEvent = type => {
+    pushUndo();
     const item = createStep(type, { name: type[0].toUpperCase() + type.slice(1).replace('_', ' ') });
     const node = { id: `node_${item.step_id}`, type: 'event', step_id: item.step_id, label: item.name, x: 260, y: 140 + flow.nodes.length * 24 };
     onChange({ ...trial, steps: [...trial.steps, item], flow: { ...flow, nodes: [...flow.nodes, node] } });
@@ -231,11 +259,13 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     if (!connState || connState.source === target) { setDragConnection(null); return; }
     const sourceNode = flow.nodes.find(n => n.id === connState.source);
     if (!sourceNode) { setDragConnection(null); return; }
+    pushUndo();
     const withoutSameBranch = flow.edges.filter(e => !(e.source === connState.source && e.branch === connState.branch));
     updateFlow({ ...flow, edges: [...withoutSameBranch, { id: `edge_${crypto.randomUUID()}`, source: connState.source, target, branch: connState.branch }] });
     setDragConnection(null);
   };
   const removeNode = useCallback(id => {
+    pushUndo();
     const node = flow.nodes.find(n => n.id === id);
     if (!node) return;
     const isEventNode = node.type === 'event' && node.step_id;
@@ -258,6 +288,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
 
   const deleteEdge = useCallback((edgeId) => {
     if (!edgeId) return;
+    pushUndo();
     updateFlow({ ...flow, edges: flow.edges.filter(e => e.id !== edgeId) });
     setSelectedEdgeId(null); setContextMenu(null);
   }, [flow, updateFlow]);
@@ -272,6 +303,9 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
       const mod = e.metaKey || e.ctrlKey;
       // Space tracking for pan mode
       if (e.key === ' ' && !e.repeat) { spaceHeld.current = true; }
+      // Undo / Redo (visual flow editor)
+      if (mod && e.key === 'z' && !e.shiftKey) { e.preventDefault(); performUndo(); return; }
+      if (mod && ((e.key === 'z' && e.shiftKey) || e.key === 'y')) { e.preventDefault(); performRedo(); return; }
       // Copy / Paste / Duplicate / Select all
       if (mod && e.key === 'c') { e.preventDefault(); const primaryId = [...selectedNodeIds][0]; const n = flow.nodes.find(nd => nd.id === primaryId); if (n) copyNode(n); }
       if (mod && e.key === 'v') { e.preventDefault(); pasteNode(); }
@@ -318,7 +352,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     window.addEventListener('keydown', handler);
     window.addEventListener('keyup', keyup);
     return () => { window.removeEventListener('keydown', handler); window.removeEventListener('keyup', keyup); };
-  }, [selectedNodeIds, selectedEdgeId, flow, copyNode, pasteNode, duplicateNode, deleteEdge, removeNode, updateFlow, onChange]);
+  }, [selectedNodeIds, selectedEdgeId, flow, copyNode, pasteNode, duplicateNode, deleteEdge, removeNode, updateFlow, onChange]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const autoLayout = useCallback(() => {
     const start = flow.nodes.find(n => n.type === 'start');
@@ -429,6 +463,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
 
   const beginDrag = (e, node) => {
     if (disabled || e.target.closest('button,input,select')) return;
+    pushUndo(); // capture state before drag
     const rect = canvasRef.current.getBoundingClientRect();
     const dx = (e.clientX - rect.left) / zoom - node.x - pan.x / zoom;
     const dy = (e.clientY - rect.top) / zoom - node.y - pan.y / zoom;

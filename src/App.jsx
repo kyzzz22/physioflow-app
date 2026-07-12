@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { block, createNextProtocolVersion, duplicateProtocolAsProject, emotionTemplate, freezeProtocol, gonogoTemplate, stroopTemplate, unfreezeProtocol, protocol, STEP_TYPES, step, trial, validateProtocol, moveItem, stepContentIssues } from './domain';
 import { clearCurrentRun, getStorageInfo, loadCurrentRunAsync, loadProtocols, loadSessions, openDataDirectory, saveProtocols, selectDataDirectory } from './storage';
 import { saveAsset } from './fsStorage.js';
@@ -10,9 +10,13 @@ import Dashboard from './Dashboard';
 import SessionManager from './SessionManager';
 import { ConfirmDialog, AlertDialog, PromptDialog } from './Modal.jsx';
 import PreRunChecklist from './PreRunChecklist.jsx';
-import Analytics from './Analytics.jsx';
-import GuidePanel from './GuidePanel.jsx';
 import { STEP_DEFAULTS } from './constants.js';
+
+// Lazy-loaded for code splitting
+const Analytics = lazy(() => import('./Analytics.jsx'));
+const GuidePanel = lazy(() => import('./GuidePanel.jsx'));
+
+const LoadingFallback = () => <div style={{ position:'fixed',inset:0,zIndex:2000,display:'grid',placeItems:'center',background:'var(--surface)' }}><span style={{ color:'var(--muted)',fontSize:'.9rem' }}>Loading…</span></div>;
 
 const clone = x => structuredClone(x);
 const MAX_UNDO = 60;
@@ -338,6 +342,10 @@ export default function App() {
     setBuilderFocusTarget({ ...target, nonce: Date.now() });
   }, [preRunCheck]);
 
+  const handlePreRunContinue = useCallback(() => {
+    setRun(preRunCheck); setView('setup'); setPreRunCheck(null);
+  }, [preRunCheck]);
+
 
   if (view === 'builder' && current) {
     if (viewMode === 'visual') {
@@ -387,15 +395,8 @@ export default function App() {
         {deleteConfirm && <ConfirmDialog {...deleteConfirm} />}
         {alertState && <AlertDialog {...alertState} onClose={() => setAlert(null)} />}
         {promptState && <PromptDialog {...promptState} />}
-        {guideOpen && <GuidePanel initialTab={guideTab} onClose={() => setGuideOpen(false)} />}
-        {preRunCheck && <PreRunChecklist
-          protocol={preRunCheck}
-          storageInfo={storageInfo}
-          onChooseDataDirectory={chooseDataDirectory}
-          onClose={() => setPreRunCheck(null)}
-          onContinue={() => { setRun(preRunCheck); setView('setup'); setPreRunCheck(null); }}
-          onFix={focusPreRunIssue}
-        />}
+        {guideOpen && <Suspense fallback={null}><GuidePanel initialTab={guideTab} onClose={() => setGuideOpen(false)} /></Suspense>}
+        {preRunCheck && <PreRunChecklist protocol={preRunCheck} storageInfo={storageInfo} onChooseDataDirectory={chooseDataDirectory} onClose={() => setPreRunCheck(null)} onContinue={handlePreRunContinue} onFix={focusPreRunIssue} />}
       </div>;
     } else {
       return <>
@@ -432,15 +433,8 @@ export default function App() {
         {deleteConfirm && <ConfirmDialog {...deleteConfirm} />}
         {alertState && <AlertDialog {...alertState} onClose={() => setAlert(null)} />}
         {promptState && <PromptDialog {...promptState} />}
-        {guideOpen && <GuidePanel initialTab={guideTab} onClose={() => setGuideOpen(false)} />}
-        {preRunCheck && <PreRunChecklist
-          protocol={preRunCheck}
-          storageInfo={storageInfo}
-          onChooseDataDirectory={chooseDataDirectory}
-          onClose={() => setPreRunCheck(null)}
-          onContinue={() => { setRun(preRunCheck); setView('setup'); setPreRunCheck(null); }}
-          onFix={focusPreRunIssue}
-        />}
+        {guideOpen && <Suspense fallback={null}><GuidePanel initialTab={guideTab} onClose={() => setGuideOpen(false)} /></Suspense>}
+        {preRunCheck && <PreRunChecklist protocol={preRunCheck} storageInfo={storageInfo} onChooseDataDirectory={chooseDataDirectory} onClose={() => setPreRunCheck(null)} onContinue={handlePreRunContinue} onFix={focusPreRunIssue} />}
       </>;
     }
   }
@@ -465,8 +459,8 @@ export default function App() {
 
   if (view === 'analytics') {
     return <>
-      <Analytics onBack={() => setView('home')} initialSessions={sessions} onGuide={openGuide} />
-      {guideOpen && <GuidePanel initialTab={guideTab} onClose={() => setGuideOpen(false)} />}
+      <Suspense fallback={<LoadingFallback />}><Analytics onBack={() => setView('home')} initialSessions={sessions} onGuide={openGuide} /></Suspense>
+      {guideOpen && <Suspense fallback={null}><GuidePanel initialTab={guideTab} onClose={() => setGuideOpen(false)} /></Suspense>}
     </>;
   }
 
@@ -509,15 +503,8 @@ export default function App() {
     {deleteConfirm && <ConfirmDialog {...deleteConfirm} />}
     {alertState && <AlertDialog {...alertState} onClose={() => setAlert(null)} />}
     {promptState && <PromptDialog {...promptState} />}
-    {preRunCheck && <PreRunChecklist
-      protocol={preRunCheck}
-      storageInfo={storageInfo}
-      onChooseDataDirectory={chooseDataDirectory}
-      onClose={() => setPreRunCheck(null)}
-      onContinue={() => { setRun(preRunCheck); setView('setup'); setPreRunCheck(null); }}
-      onFix={focusPreRunIssue}
-    />}
-    {guideOpen && <GuidePanel initialTab={guideTab} onClose={() => setGuideOpen(false)} />}
+    {preRunCheck && <PreRunChecklist protocol={preRunCheck} storageInfo={storageInfo} onChooseDataDirectory={chooseDataDirectory} onClose={() => setPreRunCheck(null)} onContinue={handlePreRunContinue} onFix={focusPreRunIssue} />}
+    {guideOpen && <Suspense fallback={null}><GuidePanel initialTab={guideTab} onClose={() => setGuideOpen(false)} /></Suspense>}
   </>;
 }
 
@@ -1024,5 +1011,5 @@ function SessionSetup({ protocol: p, onBack, onStart, storageInfo, onChooseDataD
       {storageBlocked && onChooseDataDirectory && <button onClick={onChooseDataDirectory}>Select local data folder</button>}
     </div>
     <button className="primary wide" disabled={!participant.trim() || storageBlocked} onClick={() => onStart({ session_id: crypto.randomUUID(), participant_id: participant.trim(), operator_id: operator, device_start_reference: device, participant_language: participantLanguage, protocol_id: p.protocol_id, protocol_version: p.version, protocol_hash: p.config_hash || '', protocol_name: p.name, run_mode: p.status === 'frozen' ? 'formal' : 'preview', order_row: index, manual_orders: manualOrders, actual_trial_order: Object.fromEntries(p.blocks.map(block => [block.block_id, preview(block).map(trial => trial.trial_id)])), status: 'ready', started_at: null, ended_at: null, ...sync })}>{storageBlocked ? 'Select data folder first' : 'Start session'}</button>
-  </div>{guideOpen && <GuidePanel initialTab={guideTab} onClose={onCloseGuide} />}</main>;
+  </div>{guideOpen && <Suspense fallback={null}><GuidePanel initialTab={guideTab} onClose={onCloseGuide} /></Suspense>}</main>;
 }
