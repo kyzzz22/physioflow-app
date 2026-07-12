@@ -35,6 +35,9 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     catch { return []; }
   });
   const [snapshotsOpen, setSnapshotsOpen] = useState(false);
+  const [paletteCollapsed, setPaletteCollapsed] = useState(() => { try { return localStorage.getItem('physioflow.paletteCollapsed') === '1'; } catch { return false; } });
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(() => { try { return localStorage.getItem('physioflow.inspectorCollapsed') === '1'; } catch { return false; } });
+  const [previewNode, setPreviewNode] = useState(null);
   const handledFocus = useRef(null);
   const canvasRef = useRef(null);
   const panDragRef = useRef(null);
@@ -153,6 +156,33 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     updateFlow({ ...flow, nodes: [...flow.nodes, node] });
     setSelectedNodeIds(new Set([node.id]));
   };
+
+  // ── Full-screen node preview ──
+  const openPreview = useCallback((node) => {
+    const step = node.type === 'event' ? trial.steps.find(s => s.step_id === node.step_id) : null;
+    if (!step) return;
+    const resource = (stimuli || []).find(s => s.stimulus_id === step.stimulus_id);
+    const sharedQ = (questionnaires || []).find(q => q.questionnaire_id === step.questionnaire_id);
+    const resolvedStep = {
+      ...step,
+      questionnaire: step.questionnaire || sharedQ,
+      source_mode: step.source_url || step.asset_id ? step.source_mode : resource?.source_mode || step.source_mode,
+      source_url: step.source_url || resource?.source_url || '',
+      asset_id: step.asset_id || resource?.asset_id || '',
+      file_name: step.file_name || resource?.file_name || '',
+    };
+    setPreviewNode({ node, step: resolvedStep });
+  }, [trial.steps, stimuli, questionnaires]);
+
+  const closePreview = useCallback(() => setPreviewNode(null), []);
+
+  // Close preview on Escape
+  useEffect(() => {
+    if (!previewNode) return;
+    const handler = e => { if (e.key === 'Escape') closePreview(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [previewNode, closePreview]);
 
   const copyNode = useCallback((node) => {
     if (!node || ['start', 'end'].includes(node.type)) return;
@@ -337,8 +367,15 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   }, [snapshots, trial.trial_id]);
 
   const handleWheel = e => {
+    // Allow wheel zoom in fullscreen mode (document-level) and on the canvas
+    const target = canvasRef.current;
+    if (!target) return;
+    // In fullscreen, the canvas may fill the entire screen — use the fullscreen element's rect
+    const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+    const refEl = fsEl || target;
+    const rect = refEl.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
     e.preventDefault();
-    const rect = canvasRef.current.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
     setZoom(z => {
@@ -350,6 +387,13 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
       return newZoom;
     });
   };
+
+  // Attach wheel listener at document level so it works in fullscreen too
+  useEffect(() => {
+    const handler = e => { if (e.target.closest('.clean-canvas') || e.target.closest('.visual-editor-shell') || document.fullscreenElement) handleWheel(e); };
+    document.addEventListener('wheel', handler, { passive: false });
+    return () => document.removeEventListener('wheel', handler);
+  }, []);
 
   const dragRef = useRef(null);
   const [draggingId, setDraggingId] = useState(null);
@@ -538,12 +582,18 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   }, [flow.nodes, searchQuery, trial.steps]);
 
   return <div className="studio">
-    <aside className="studio-palette">
+    {!paletteCollapsed && <aside className="studio-palette">
       <div className="studio-brand"><span>＋</span><div><b>Add to flow</b><small>Drag nodes to arrange</small></div></div>
       {PALETTE.map(group => <section key={group.title}><h4>{group.title}</h4>{group.items.map(([type, icon, label]) => <button key={type} disabled={disabled} onClick={() => addEvent(type)}><i>{icon}</i><span>{label}</span></button>)}</section>)}
       <section><h4>Flow</h4><button disabled={disabled} onClick={() => addLogic('condition')}><i>◇</i><span>Condition</span></button><button disabled={disabled} onClick={() => addLogic('loop')}><i>↻</i><span>Loop</span></button></section>
       <section><h4>Utils</h4><button disabled={disabled} onClick={addNote}><i>✎</i><span>Note</span></button><button disabled={disabled} onClick={addJunction}><i>●</i><span>Junction</span></button></section>
-    </aside>
+    </aside>}
+    <button
+      className="panel-toggle palette-toggle"
+      onClick={() => { setPaletteCollapsed(v => { const nv = !v; try { localStorage.setItem('physioflow.paletteCollapsed', nv ? '1' : '0'); } catch {} return nv; }); }}
+      title={paletteCollapsed ? 'Show palette' : 'Hide palette'}
+      aria-label={paletteCollapsed ? 'Show palette' : 'Hide palette'}
+    >{paletteCollapsed ? '▸' : '◂'}</button>
 
     <section className="studio-center">
       <div className="canvas-bar">
@@ -596,7 +646,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
           </div>
         </div>
       )}
-      <div className="clean-canvas" ref={canvasRef} onWheel={handleWheel}
+      <div className="clean-canvas" ref={canvasRef}
         onPointerDown={e => {
           if (e.target === canvasRef.current || e.target.classList.contains('flow-bg') || e.target.closest('svg.flow-bg')) {
             if (e.button === 0 && !e.shiftKey) beginMarquee(e);
@@ -706,6 +756,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
               style={{ left: node.x, top: node.y, pointerEvents: 'auto', ...(node.color ? { borderColor: node.color, boxShadow: `0 0 0 2px ${node.color}20` } : {}), ...highlightStyle }} key={node.id}
               onPointerDown={e => beginDrag(e, node)}
               onClick={e => { e.stopPropagation(); if (e.shiftKey) { setSelectedNodeIds(prev => { const next = new Set(prev); if (next.has(node.id)) next.delete(node.id); else next.add(node.id); return next; }); } else { setSelectedNodeIds(new Set([node.id])); } setSelectedEdgeId(null); setContextMenu(null); }}
+              onDoubleClick={e => { e.stopPropagation(); if (node.type === 'event' && step) openPreview(node); }}
               onContextMenu={e => { e.stopPropagation(); setSelectedNodeIds(new Set([node.id])); setSelectedEdgeId(null); }}
             >
               {!['start', 'end'].includes(node.type) && <button className={`node-input ${dragConnection ? 'awaiting' : ''}`} title="Connect a wire to here" onClick={e => { e.stopPropagation(); finishConnection(node.id); }} />}
@@ -713,6 +764,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
               {node.type === 'event' && <span className="event-kind">{step?.type}
                 {nodeHasError && <span className="node-issue-dot error" title={nodeIssues.filter(i => i.kind === 'error').map(i => i.message).join('; ')}>!</span>}
                 {nodeHasWarn && <span className="node-issue-dot warn" title={nodeIssues.map(i => i.message).join('; ')}>△</span>}
+                {step && <button className="node-preview-btn" onClick={e => { e.stopPropagation(); openPreview(node); }} title="Preview step (double-click)">⛶</button>}
               </span>}
               {branchesFor(node).length > 0 && <div className="node-outputs">
                 {branchesFor(node).map(branch => <button className={dragConnection?.source === node.id && dragConnection.branch === branch ? 'active' : ''} key={branch} onPointerDown={e => beginConnDrag(e, node, branch)} onClick={e => { e.stopPropagation(); setDragConnection(null); setDragConnection({ source: node.id, branch, clientX: e.clientX, clientY: e.clientY }); }} title={`Drag to connect ${branch}`}>{branch}<i /></button>)}
@@ -803,7 +855,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
       </>}
     </section>
 
-    <Inspector
+    {!inspectorCollapsed && <Inspector
       node={selectedNode} edge={selectedEdge} trial={trial} stimuli={stimuli}
       questionnaires={questionnaires} disabled={disabled}
       selectedCount={selectedNodeIds.size}
@@ -817,6 +869,135 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
       hasClipboard={!!clipboardNode}
       flow={flow}
       updateFlow={updateFlow}
-    />
+      onPreview={selectedNode?.type === 'event' && trial.steps.find(s => s.step_id === selectedNode.step_id) ? () => openPreview(selectedNode) : null}
+    />}
+    <button
+      className="panel-toggle inspector-toggle"
+      onClick={() => { setInspectorCollapsed(v => { const nv = !v; try { localStorage.setItem('physioflow.inspectorCollapsed', nv ? '1' : '0'); } catch {} return nv; }); }}
+      title={inspectorCollapsed ? 'Show inspector' : 'Hide inspector'}
+      aria-label={inspectorCollapsed ? 'Show inspector' : 'Hide inspector'}
+    >{inspectorCollapsed ? '◂' : '▸'}</button>
+
+    {/* ── Full-screen step preview modal ── */}
+    {previewNode && <NodePreviewModal node={previewNode.node} step={previewNode.step} onClose={closePreview} />}
+  </div>;
+}
+
+/** Full-screen preview showing how the step content will appear to participants */
+function NodePreviewModal({ node, step, onClose }) {
+  const previewBg = '#1a1a2e';
+  const media = ['video', 'audio', 'image'].includes(step.type);
+  const hasText = ['instruction', 'response', 'manual_event', 'device_check', 'attention_check', 'questionnaire'].includes(step.type);
+
+  return <div className="node-preview-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="node-preview-header">
+      <div>
+        <span className="preview-badge">{step.type}</span>
+        <b>{step.name}</b>
+        <small>{node.type} node</small>
+      </div>
+      <button onClick={onClose} title="Close preview (Esc)">×</button>
+    </div>
+    <div className="node-preview-stage" style={{ background: previewBg }}>
+      {/* Instruction / text-based steps */}
+      {hasText && (
+        <div className="node-preview-content">
+          {step.type === 'attention_check' && <span className="node-preview-eyebrow">⚠ ATTENTION CHECK</span>}
+          {step.type === 'questionnaire' && <span className="node-preview-eyebrow">☷ QUESTIONNAIRE</span>}
+          {step.type === 'response' && <span className="node-preview-eyebrow">↵ RESPONSE</span>}
+          {step.type === 'manual_event' && <span className="node-preview-eyebrow">◆ OPERATOR EVENT</span>}
+          {step.type === 'device_check' && <span className="node-preview-eyebrow">✓ DEVICE CHECK</span>}
+          <h1 style={{ fontFamily: "'Instrument Serif', serif", fontSize: 'clamp(1.6rem, 4vw, 2.8rem)', color: '#fff', margin: '.5rem 0 1rem', textAlign: 'center' }}>
+            {step.name}
+          </h1>
+          {(step.content_i18n?.en || step.content_i18n?.zh || '') && (
+            <div className="node-preview-i18n">
+              {['zh', 'ja', 'en'].map(lang => {
+                const text = step.content_i18n?.[lang];
+                if (!text) return null;
+                return <div key={lang} className="preview-lang-block">
+                  <span className="preview-lang-label">{lang === 'zh' ? '中文' : lang === 'ja' ? '日本語' : 'EN'}</span>
+                  <p>{text}</p>
+                </div>;
+              })}
+            </div>
+          )}
+          {step.type === 'response' && (
+            <div className="node-preview-responses">
+              {(step.response_options || []).map((opt, i) => (
+                <div key={i} className="preview-response-option">
+                  {opt.key && <kbd>{opt.key}</kbd>}
+                  <span>{opt.label_i18n?.en || opt.value || ''}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {step.type === 'attention_check' && (
+            <div className="node-preview-attention">
+              <p>{step.attention_prompt_i18n?.en || 'Press the key'}</p>
+              <kbd style={{ fontSize: '1.5rem', padding: '.5rem 1.2rem' }}>{step.attention_expected_key === ' ' ? 'Space' : step.attention_expected_key || '?'}</kbd>
+            </div>
+          )}
+          {step.type === 'questionnaire' && (step.questionnaire?.questions || []).length > 0 && (
+            <div className="node-preview-questions">
+              {step.questionnaire.questions.slice(0, 5).map((q, i) => (
+                <div key={i} className="preview-question-row">
+                  <span className="preview-q-type">{q.type}</span>
+                  <span>{q.prompt_i18n?.en || `Question ${i + 1}`}</span>
+                </div>
+              ))}
+              {step.questionnaire.questions.length > 5 && <small>+{step.questionnaire.questions.length - 5} more questions</small>}
+            </div>
+          )}
+        </div>
+      )}
+      {/* Fixation / Timer / Rest (visual-only) */}
+      {['fixation', 'timer', 'rest'].includes(step.type) && (
+        <div className="node-preview-content" style={{ textAlign: 'center' }}>
+          <span className="node-preview-eyebrow">{step.type.toUpperCase()}</span>
+          <h1 style={{ fontFamily: "'Instrument Serif', serif", fontSize: '2.5rem', color: '#fff', margin: '.5rem 0' }}>{step.name}</h1>
+          {step.type === 'fixation' && <div className="node-preview-fixation"><div className="fixation-h" /><div className="fixation-v" /></div>}
+          {step.type === 'timer' && <div className="node-preview-timer"><span>{Math.round((step.planned_duration_ms || 5000) / 1000)}s</span></div>}
+          {step.type === 'rest' && <div className="node-preview-rest">☕</div>}
+          {step.duration_mode === 'fixed' && <p style={{ color: '#aaa', marginTop: '1rem' }}>Duration: {step.planned_duration_ms || 0}ms</p>}
+        </div>
+      )}
+      {/* Media steps */}
+      {media && (
+        <div className="node-preview-content" style={{ textAlign: 'center' }}>
+          <span className="node-preview-eyebrow">{step.type.toUpperCase()} STIMULUS</span>
+          <h1 style={{ fontFamily: "'Instrument Serif', serif", fontSize: '2rem', color: '#fff', margin: '.5rem 0' }}>{step.name}</h1>
+          {step.source_url ? (
+            <div className="node-preview-media-info">
+              <span>Source: {step.source_mode === 'youtube' ? 'YouTube' : 'URL'}</span>
+              <code>{step.source_url.slice(0, 60)}{step.source_url.length > 60 ? '…' : ''}</code>
+            </div>
+          ) : step.asset_id ? (
+            <div className="node-preview-media-info">
+              <span>Uploaded file</span>
+              <code>{step.file_name || step.asset_id}</code>
+            </div>
+          ) : (
+            <p style={{ color: '#e88' }}>⚠ No media source configured</p>
+          )}
+          <div className="node-preview-media-options">
+            {step.volume != null && step.volume < 1 && <span>Vol: {Math.round(step.volume * 100)}%</span>}
+            {step.muted && <span>Muted</span>}
+            {step.loop && <span>Looping</span>}
+            {step.show_controls !== false && <span>Controls visible</span>}
+          </div>
+        </div>
+      )}
+    </div>
+    <div className="node-preview-footer">
+      <div>
+        <span>Duration mode: <b>{step.duration_mode}</b></span>
+        {step.duration_mode === 'fixed' && <span>Planned: <b>{step.planned_duration_ms}ms</b></span>}
+        <span>Start: <b>{step.start_mode || 'auto'}</b></span>
+        <span>Auto advance: <b>{step.auto_advance !== false ? 'Yes' : 'No'}</b></span>
+        {step.is_analysis_window && <span className="preview-analysis-badge">Analysis window</span>}
+      </div>
+      <button onClick={onClose}>Close preview</button>
+    </div>
   </div>;
 }

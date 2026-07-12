@@ -125,15 +125,18 @@ export default function FlowWorkspaceOverlay({ protocol, onChange, onSave, onBac
             {overflowOpen && <>
               <div className="overflow-backdrop" onClick={() => setOverflowOpen(false)} />
               <div className="overflow-dropdown">
-                <button onClick={() => { setHierarchyOpen(true); setOverflowOpen(false); }}>Blocks &amp; Trials</button>
-                <button onClick={() => { setLibraryOpen(true); setOverflowOpen(false); }}>Stimuli library</button>
-                <button onClick={() => { setQuestionnaireOpen(true); setOverflowOpen(false); }}>Questionnaire library</button>
-                <button onClick={() => { onGuide?.('workflow'); setOverflowOpen(false); }}>Built-in guide</button>
-                <button onClick={() => { onGuide?.('data'); setOverflowOpen(false); }}>Data format</button>
-                {onExport && <button onClick={() => { onExport(); setOverflowOpen(false); }}>Export JSON</button>}
-                {protocol.status !== 'frozen' && onFreeze && <button onClick={() => { onFreeze(); setOverflowOpen(false); }}>Freeze version</button>}
-                {protocol.status === 'frozen' && onUnfreeze && <button onClick={() => { onUnfreeze(); setOverflowOpen(false); }}>Unfreeze version</button>}
-                {onSwitchText && <button onClick={() => { onSwitchText(); setOverflowOpen(false); }}>Advanced settings</button>}
+                <div className="overflow-section"><small>Navigation</small></div>
+                <button onClick={() => { setHierarchyOpen(true); setOverflowOpen(false); }}>📋 Blocks &amp; Trials</button>
+                <button onClick={() => { setLibraryOpen(true); setOverflowOpen(false); }}>🎬 Stimuli library</button>
+                <button onClick={() => { setQuestionnaireOpen(true); setOverflowOpen(false); }}>☷ Questionnaire library</button>
+                <div className="overflow-divider" />
+                <button onClick={() => { onGuide?.('workflow'); setOverflowOpen(false); }}>📖 Built-in guide</button>
+                <button onClick={() => { onGuide?.('data'); setOverflowOpen(false); }}>📊 Data format</button>
+                <div className="overflow-divider" />
+                {onExport && <button onClick={() => { onExport(); setOverflowOpen(false); }}>💾 Export JSON</button>}
+                {protocol.status !== 'frozen' && onFreeze && <button onClick={() => { onFreeze(); setOverflowOpen(false); }}>🔒 Freeze version</button>}
+                {protocol.status === 'frozen' && onUnfreeze && <button onClick={() => { onUnfreeze(); setOverflowOpen(false); }}>🔓 Unfreeze version</button>}
+                {onSwitchText && <button onClick={() => { onSwitchText(); setOverflowOpen(false); }}>⚙ Advanced settings</button>}
               </div>
             </>}
           </div>
