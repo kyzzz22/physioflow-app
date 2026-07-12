@@ -569,8 +569,8 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
         const minX = Math.min(prev.x1, prev.x2), maxX = Math.max(prev.x1, prev.x2);
         const minY = Math.min(prev.y1, prev.y2), maxY = Math.max(prev.y1, prev.y2);
         const inside = flowRef.current.nodes.filter(n => {
-          const nw = n.type === 'note' ? (n.width || 180) : n.type === 'junction' ? 24 : 184;
-          const nh = n.type === 'note' ? (n.height || 100) : n.type === 'junction' ? 24 : 104;
+          const nw = n.type === 'note' ? (n.width || 180) : n.type === 'junction' ? 28 : 168;
+          const nh = n.type === 'note' ? (n.height || 100) : n.type === 'junction' ? 28 : 70;
           return n.x + nw > minX && n.x < maxX && n.y + nh > minY && n.y < maxY;
         }).map(n => n.id);
         if (inside.length > 0) setSelectedNodeIds(new Set(inside));
@@ -590,7 +590,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   const bounds = useMemo(() => {
     if (!flow.nodes.length) return { minX: 0, minY: 0, maxX: 400, maxY: 300 };
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    flow.nodes.forEach(n => { const w = n.type === 'note' ? (n.width || 180) : n.type === 'junction' ? 24 : 200; const h = n.type === 'note' ? (n.height || 100) : n.type === 'junction' ? 24 : 80; minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); maxX = Math.max(maxX, n.x + w); maxY = Math.max(maxY, n.y + h); });
+    flow.nodes.forEach(n => { const w = n.type === 'note' ? (n.width || 180) : n.type === 'junction' ? 28 : 168; const h = n.type === 'note' ? (n.height || 100) : n.type === 'junction' ? 28 : 70; minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); maxX = Math.max(maxX, n.x + w); maxY = Math.max(maxY, n.y + h); });
     return { minX: minX - 40, minY: minY - 40, maxX: maxX + 40, maxY: maxY + 40 };
   }, [flow.nodes]);
   const worldW = bounds.maxX - bounds.minX;
@@ -695,7 +695,14 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
             {flow.edges.map(edge => {
               const a = flow.nodes.find(n => n.id === edge.source), b = flow.nodes.find(n => n.id === edge.target);
               if (!a || !b) return null;
-              const getPort = (node, isSource) => isSource ? { x: node.x + (node.type === 'junction' ? 12 : 184), y: node.y + (node.type === 'junction' ? 12 : node.type === 'note' ? (node.height || 100) / 2 : 55) } : { x: node.x + (node.type === 'junction' ? 0 : node.type === 'note' ? 0 : 0), y: node.y + (node.type === 'junction' ? 12 : node.type === 'note' ? (node.height || 100) / 2 : 55) };
+              const getPort = (node, isSource) => {
+                const noteH = node.height || 100;
+                const nodeW = 168; // compact node width
+                const nodeH = 70;  // compact node height
+                return isSource
+                  ? { x: node.x + (node.type === 'junction' ? 12 : nodeW), y: node.y + (node.type === 'junction' ? 12 : node.type === 'note' ? noteH / 2 : nodeH - 10) }
+                  : { x: node.x + (node.type === 'junction' ? 0 : 0), y: node.y + (node.type === 'junction' ? 12 : node.type === 'note' ? noteH / 2 : nodeH / 2) };
+              };
               const p1 = getPort(a, true), p2 = getPort(b, false);
               const x1 = p1.x, y1 = p1.y, x2 = p2.x, y2 = p2.y, m = x1 + (x2 - x1) / 2;
               const sel = selectedEdgeId === edge.id;
@@ -723,8 +730,9 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
           if (!srcNode) return null;
           const cr = canvasRef.current?.getBoundingClientRect();
           if (!cr) return null;
-          const sx = (srcNode.x + (srcNode.type === 'junction' ? 12 : 184)) * zoom + pan.x;
-          const sy = (srcNode.y + (srcNode.type === 'junction' ? 12 : srcNode.type === 'note' ? (srcNode.height || 100) / 2 : 55)) * zoom + pan.y;
+          const noteH = srcNode.height || 100; const nodeH = 70; const nodeW = 168;
+          const sx = (srcNode.x + (srcNode.type === 'junction' ? 12 : nodeW)) * zoom + pan.x;
+          const sy = (srcNode.y + (srcNode.type === 'junction' ? 12 : srcNode.type === 'note' ? noteH / 2 : nodeH - 10)) * zoom + pan.y;
           const ex = dragConnection.clientX - cr.left;
           const ey = dragConnection.clientY - cr.top;
           const mx = (sx + ex) / 2;
@@ -777,24 +785,36 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
               </div>;
             }
 
+            // Inline rule display for condition/loop nodes
+            const ruleText = node.type === 'condition' && node.rule?.variable
+              ? `if ${node.rule.variable} ${node.rule.operator || '='} ${node.rule.value || ''}`.trim()
+              : node.type === 'loop'
+              ? `repeat ≤ ${node.max_iterations ?? 1}×` + (node.rule?.variable ? ` while ${node.rule.variable}` : '')
+              : '';
+
             return (
             <div className={`clean-node ${node.type} ${sel ? 'selected' : ''} ${draggingId === node.id ? 'dragging' : ''} ${isDisabled ? 'disabled' : ''}`}
               data-node-id={node.id}
-              style={{ left: node.x, top: node.y, pointerEvents: 'auto', ...(node.color ? { borderColor: node.color, boxShadow: `0 0 0 2px ${node.color}20` } : {}), ...highlightStyle }} key={node.id}
+              style={{ left: node.x, top: node.y, pointerEvents: 'auto', ...(node.color ? { borderColor: node.color } : {}), ...highlightStyle }} key={node.id}
               onPointerDown={e => beginDrag(e, node)}
               onClick={e => { e.stopPropagation(); if (e.shiftKey) { setSelectedNodeIds(prev => { const next = new Set(prev); if (next.has(node.id)) next.delete(node.id); else next.add(node.id); return next; }); } else { setSelectedNodeIds(new Set([node.id])); } setSelectedEdgeId(null); setContextMenu(null); }}
               onDoubleClick={e => { e.stopPropagation(); if (node.type === 'event' && step) openPreview(node); }}
               onContextMenu={e => { e.stopPropagation(); setSelectedNodeIds(new Set([node.id])); setSelectedEdgeId(null); }}
             >
               {!['start', 'end'].includes(node.type) && <button className={`node-input ${dragConnection ? 'awaiting' : ''}`} title="Connect a wire to here" onClick={e => { e.stopPropagation(); finishConnection(node.id); }} />}
-              <div className="node-title"><i style={node.color ? { background: `${node.color}30`, color: node.color } : {}}>{nodeIcons[node.type]}</i><div><small>{node.type}</small><b>{node.label}</b></div></div>
-              {node.type === 'event' && <span className="event-kind">{step?.type}
+              <div className="node-title">
+                <i style={node.color ? { background: `${node.color}20`, color: node.color } : {}}>{nodeIcons[node.type]}</i>
+                <div><small>{node.type}</small><b>{node.label}</b></div>
+              </div>
+              {ruleText && <div className="rule-caption" title={ruleText}>{ruleText}</div>}
+              {node.type === 'event' && <span className="event-kind">
+                <span className="step-type-badge">{step?.type}</span>
                 {nodeHasError && <span className="node-issue-dot error" title={nodeIssues.filter(i => i.kind === 'error').map(i => i.message).join('; ')}>!</span>}
                 {nodeHasWarn && <span className="node-issue-dot warn" title={nodeIssues.map(i => i.message).join('; ')}>△</span>}
-                {step && <button className="node-preview-btn" onClick={e => { e.stopPropagation(); openPreview(node); }} title="Preview step (double-click)">⛶</button>}
+                {step && <button className="node-preview-btn" onClick={e => { e.stopPropagation(); openPreview(node); }} title="Preview (double-click)">▸</button>}
               </span>}
               {branchesFor(node).length > 0 && <div className="node-outputs">
-                {branchesFor(node).map(branch => <button className={dragConnection?.source === node.id && dragConnection.branch === branch ? 'active' : ''} key={branch} onPointerDown={e => beginConnDrag(e, node, branch)} onClick={e => { e.stopPropagation(); setDragConnection(null); setDragConnection({ source: node.id, branch, clientX: e.clientX, clientY: e.clientY }); }} title={`Drag to connect ${branch}`}>{branch}<i /></button>)}
+                {branchesFor(node).map(branch => <button className={dragConnection?.source === node.id && dragConnection.branch === branch ? 'active' : ''} key={branch} onPointerDown={e => beginConnDrag(e, node, branch)} title={`${branch} → drag to connect`}>{branch}<i /></button>)}
               </div>}
             </div>
           )})}
@@ -825,7 +845,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
             }}>
             <svg viewBox={`${bounds.minX} ${bounds.minY} ${worldW} ${worldH}`}>
               <rect x={bounds.minX} y={bounds.minY} width={worldW} height={worldH} fill="#1a2e2420" rx="4" />
-              {flow.nodes.map(n => <rect key={n.id} x={n.x} y={n.y} width={n.type === 'junction' ? 24 : n.type === 'note' ? (n.width || 180) : 180} height={n.type === 'junction' ? 24 : n.type === 'note' ? (n.height || 100) : 50} rx="6" fill={n.type === 'event' ? '#5ee0a660' : n.type === 'condition' ? '#f4d77e60' : n.type === 'loop' ? '#89c4f460' : n.type === 'note' ? '#ffe08260' : n.type === 'junction' ? '#ce93d860' : '#bec8c160'} />)}
+              {flow.nodes.map(n => <rect key={n.id} x={n.x} y={n.y} width={n.type === 'junction' ? 28 : n.type === 'note' ? (n.width || 180) : 168} height={n.type === 'junction' ? 28 : n.type === 'note' ? (n.height || 100) : 40} rx="5" fill={n.type === 'event' ? '#5ee0a660' : n.type === 'condition' ? '#f4d77e60' : n.type === 'loop' ? '#89c4f460' : n.type === 'note' ? '#ffe08260' : n.type === 'junction' ? '#ce93d860' : '#bec8c160'} />)}
               <rect className="viewport" x={-(pan.x / zoom) + bounds.minX} y={-(pan.y / zoom) + bounds.minY} width={(canvasRef.current?.clientWidth || 800) / zoom} height={(canvasRef.current?.clientHeight || 600) / zoom} onPointerDown={e => { e.stopPropagation(); e.preventDefault(); const minimap = e.target.closest('.flow-minimap'); if (minimap?._drag) minimap._drag(e); }} style={{ cursor: 'grab', pointerEvents: 'auto' }} />
             </svg>
           </div>
