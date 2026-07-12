@@ -1,6 +1,5 @@
 import { stepContentIssues } from './domain';
 import QuestionnaireDesigner, { createQuestionnaire } from './QuestionnaireDesigner';
-import StepPreview from './StepPreview';
 import { MEDIA_TYPES, PALETTE, STEP_DEFAULTS } from './constants.js';
 import MediaSettings from './MediaSettings.jsx';
 
@@ -122,13 +121,6 @@ function EventFullSettings({ item, trial: _trial, stimuli, questionnaires, disab
         {PALETTE.flatMap(g => g.items).map(([t, , lbl]) => <option value={t} key={t}>{lbl}</option>)}
       </select>
     </label>
-    <div className="step-preview-section">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '.3rem' }}>
-        <small style={{ fontSize: '.62rem', fontWeight: 700, color: 'var(--green)', letterSpacing: '.1em', textTransform: 'uppercase' }}>Step preview</small>
-        <small style={{ fontSize: '.58rem', color: '#7b867f' }}>{media ? 'Media preview below' : 'Participant view'}</small>
-      </div>
-      <StepPreview step={item} trialLayout={_trial?.layout} stimuli={stimuli} questionnaires={questionnaires} language="en" />
-    </div>
     <details className="i18n-group"><summary>Participant title · 中 / 日 / EN</summary>
       {[['zh', '中文标题'], ['ja', '日本語タイトル'], ['en', 'English title']].map(([lang, lbl]) => <label key={lang}>{lbl}<input value={names[lang] || ''} disabled={disabled} onChange={e => updateStep({ name_i18n: { ...names, [lang]: e.target.value } })} /></label>)}
     </details>

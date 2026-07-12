@@ -178,8 +178,8 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
       asset_id: step.asset_id || resource?.asset_id || '',
       file_name: step.file_name || resource?.file_name || '',
     };
-    setPreviewNode({ node, step: resolvedStep });
-  }, [trial.steps, stimuli, questionnaires]);
+    setPreviewNode({ node, step: resolvedStep, trialLayout: trial.layout });
+  }, [trial.steps, trial.layout, stimuli, questionnaires]);
 
   const closePreview = useCallback(() => setPreviewNode(null), []);
 
@@ -928,12 +928,18 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     >{inspectorCollapsed ? '◂' : '▸'}</button>
 
     {/* ── Full-screen step preview modal ── */}
-    {previewNode && <NodePreviewModal step={previewNode.step} onClose={closePreview} />}
+    {previewNode && <NodePreviewModal step={previewNode.step} trialLayout={previewNode.trialLayout} onClose={closePreview} />}
   </div>;
 }
 
-/** Full-screen preview — reuses RuntimeContent for accurate rendering */
-function NodePreviewModal({ step, onClose }) {
+/** Full-screen preview — reuses RuntimeContent with actual trial layout */
+function NodePreviewModal({ step, trialLayout, onClose }) {
+  const layout = trialLayout || {};
+  const app = (step.appearance && typeof step.appearance === 'object') ? step.appearance : {};
+  const bg = app.background ?? layout.background ?? '#fafbf8';
+  const fg = app.color ?? layout.foreground ?? '#17221d';
+  const align = app.alignment ?? layout.alignment ?? 'center';
+
   return <div className="node-preview-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
     <div className="node-preview-header">
       <div>
@@ -943,7 +949,7 @@ function NodePreviewModal({ step, onClose }) {
       </div>
       <button onClick={onClose} title="Close preview (Esc)">×</button>
     </div>
-    <div className="node-preview-stage">
+    <div className="node-preview-stage" style={{ background: bg, color: fg, textAlign: align }}>
       <RuntimeContent
         step={step}
         session={{ participant_language: 'en' }}
