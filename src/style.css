@@ -371,19 +371,40 @@ code { font-size: .84rem; color: var(--muted); }
   font-size: .78rem;
 }
 
-.markers {
-  position: fixed;
-  right: 1rem; bottom: 1rem;
-  width: 180px;
-  background: white;
-  border: 1px solid var(--line);
-  padding: .8rem;
-  border-radius: 8px;
-  box-shadow: 0 8px 30px #1d2a221e;
-  z-index: 5;
+/* ── Collapsible markers container ── */
+.markers-container {
+  position: fixed; right: 0; bottom: 1rem; z-index: 5;
+  display: flex; align-items: flex-end; gap: 0;
 }
-.markers button { display: block; width: 100%; font-size: .8rem; padding: .3rem; margin: .2rem 0; }
-.markers small { display: block; margin-top: .5rem; color: var(--muted); }
+.markers-container.collapsed { pointer-events: none; }
+.markers-container.collapsed .markers-toggle { pointer-events: auto; }
+.markers-toggle {
+  flex-shrink: 0; padding: .4rem .55rem;
+  border: 1px solid var(--line); border-right: none;
+  background: var(--paper); border-radius: 6px 0 0 6px;
+  font-size: .72rem; cursor: pointer; color: var(--muted);
+  position: relative; z-index: 6; transition: all .15s;
+}
+.markers-toggle:hover { color: var(--green-strong); background: var(--mint); }
+.markers-toggle-dot {
+  position: absolute; top: 2px; right: 2px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--green); animation: pulse 1s ease-in-out infinite;
+}
+.markers {
+  width: 190px; max-height: calc(100vh - 200px); overflow-y: auto;
+  background: var(--paper); border: 1px solid var(--line);
+  padding: .7rem; border-radius: 8px;
+  box-shadow: 0 8px 30px #1d2a221e;
+}
+.markers button { display: block; width: 100%; font-size: .75rem; padding: .28rem; margin: .15rem 0; }
+.markers small { display: block; margin-top: .4rem; color: var(--muted); font-size: .7rem; }
+.markers .quick-note { margin-bottom: .6rem; padding-bottom: .5rem; border-bottom: 1px solid var(--line); }
+.markers .quick-note textarea { font: inherit; }
+.markers .interval-marker { margin: .5rem 0; padding-top: .4rem; border-top: 1px solid var(--line); }
+.markers .interval-marker select { width: 100%; font-size: .72rem; padding: .2rem; margin-bottom: .2rem; }
+.dark-mode .markers { background: var(--paper); border-color: var(--line); color: var(--ink); }
+.dark-mode .markers-toggle { background: var(--paper); border-color: var(--line); color: var(--muted); }
 
 .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin: 2rem 0; }
 .metrics div { background: white; padding: 1.5rem; text-align: center; border-radius: 8px; }
@@ -1249,6 +1270,60 @@ kbd {
 .native-image { display: block; max-width: 100%; max-height: calc(100vh - 200px); border-radius: 8px; object-fit: contain; margin: 0 auto; }
 
 .studio-center { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+/* ── Canvas toolbar ── */
+.canvas-bar {
+  display: flex; align-items: center; gap: .6rem;
+  height: 38px; padding: 0 .7rem; flex-shrink: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+  font-size: .78rem; line-height: 1;
+}
+.canvas-bar > div:first-child {
+  display: flex; align-items: center; gap: .5rem;
+  min-width: 0; flex-shrink: 0;
+}
+.canvas-bar > div:first-child b {
+  font-size: .8rem; font-weight: 700; white-space: nowrap;
+  max-width: 160px; overflow: hidden; text-overflow: ellipsis;
+}
+.canvas-bar > div:first-child span {
+  font-size: .68rem; color: var(--muted); white-space: nowrap;
+}
+.canvas-bar .connection-hint {
+  flex: 1; min-width: 0; font-size: .7rem; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  display: flex; align-items: center; gap: .3rem;
+}
+.canvas-bar .connection-hint.focus-warning {
+  color: var(--warning); font-weight: 600;
+  background: #fffcf0; padding: .2rem .5rem; border-radius: 4px;
+}
+.canvas-bar .connection-hint button {
+  font-size: .65rem; padding: .1rem .4rem; border: 1px solid var(--line);
+  border-radius: 4px; background: var(--paper); cursor: pointer;
+  white-space: nowrap; flex-shrink: 0;
+}
+.canvas-bar button {
+  font-size: .72rem; padding: .25rem .55rem; line-height: 1;
+  white-space: nowrap; flex-shrink: 0;
+}
+.canvas-bar label.check-row { font-size: .72rem; flex-shrink: 0; }
+/* Node search bar */
+.node-search-bar {
+  display: flex; align-items: center; gap: .5rem; flex-shrink: 0;
+  height: 36px; padding: 0 .7rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper-soft);
+}
+.node-search-bar input {
+  flex: 1; border: 1px solid var(--line); border-radius: 6px;
+  padding: .3rem .5rem; font-size: .78rem; background: var(--paper);
+}
+.node-search-bar span { font-size: .7rem; color: var(--muted); white-space: nowrap; }
+.dark-mode .canvas-bar { background: var(--paper); border-color: var(--line); }
+.dark-mode .canvas-bar .connection-hint.focus-warning { background: #28261d; color: #f0bf68; }
+.dark-mode .node-search-bar { background: var(--paper-soft); border-color: var(--line); }
 .studio { display: flex; height: 100%; }
 
 .flow-project input:focus { outline: none; border-bottom: 1px solid var(--lime); }

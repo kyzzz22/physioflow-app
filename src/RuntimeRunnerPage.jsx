@@ -46,6 +46,7 @@ export default function RuntimeRunnerPage({ data, onDone }) {
   const [markerHistory, setMarkerHistory] = useState([]);
   const [operatorNote, setOperatorNote] = useState('');
   const [deviceCheckState, setDeviceCheckState] = useState({});
+  const [markersCollapsed, setMarkersCollapsed] = useState(true);
 
   const logger = useRef(createLogger(data.session, data.restore?.events || []));
   const timer = useRef(null);
@@ -498,49 +499,60 @@ export default function RuntimeRunnerPage({ data, onDone }) {
       )}
     </div>
 
-    {/* Markers sidebar */}
-    <aside className="markers" role="complementary" aria-label="Event markers">
-      {/* Quick operator note */}
-      <div className="quick-note">
-        <b>Quick note</b>
-        <textarea
-          rows={2}
-          value={operatorNote}
-          onChange={e => setOperatorNote(e.target.value)}
-          placeholder="Timestamped operator note..."
-          style={{ width: '100%', fontSize: '.72rem', resize: 'vertical' }}
-        />
-        <button onClick={() => { if (operatorNote.trim()) { log('manual_marker', contextOf(item), { marker_type: 'operator_note', note: operatorNote.trim() }); persist(); setOperatorNote(''); } }} style={{ width: '100%', fontSize: '.72rem', marginTop: '.2rem' }} disabled={!operatorNote.trim()}>
-          ＋ Log note
-        </button>
-      </div>
-      <b>Instant markers</b>
-      {MARKER_TYPES.map(type => <button key={type} onClick={() => addMarker(type)} title={`Mark: ${type}`}>{type}</button>)}
-      <div className="interval-marker">
-        <b>Interval marker</b>
-        <select value={activeMarker?.marker_type || markerType} disabled={Boolean(activeMarker)} onChange={e => setMarkerType(e.target.value)} aria-label="Interval marker type">
-          {MARKER_TYPES.map(type => <option value={type} key={type}>{type}</option>)}
-        </select>
-        <button className={activeMarker ? 'danger' : 'primary'} onClick={toggleMarkerInterval}>{activeMarker ? '⏹ End interval' : '▶ Start interval'}</button>
-        {activeMarker && <small>● Recording {activeMarker.marker_type}</small>}
-      </div>
-      <small>{eventCount} events captured</small>
+    {/* Markers sidebar — collapsible */}
+    <div className={`markers-container${markersCollapsed ? ' collapsed' : ''}`}>
+      <button
+        className="markers-toggle"
+        onClick={() => setMarkersCollapsed(v => !v)}
+        title={markersCollapsed ? '展开标记面板' : '收起标记面板'}
+        aria-label={markersCollapsed ? 'Expand markers' : 'Collapse markers'}
+      >
+        {markersCollapsed ? '◀ 标记' : '▶'}
+        {activeMarker && <span className="markers-toggle-dot" />}
+      </button>
+      {!markersCollapsed && <aside className="markers" role="complementary" aria-label="Event markers">
+        {/* Quick operator note */}
+        <div className="quick-note">
+          <b>Quick note</b>
+          <textarea
+            rows={2}
+            value={operatorNote}
+            onChange={e => setOperatorNote(e.target.value)}
+            placeholder="Timestamped operator note..."
+            style={{ width: '100%', fontSize: '.72rem', resize: 'vertical' }}
+          />
+          <button onClick={() => { if (operatorNote.trim()) { log('manual_marker', contextOf(item), { marker_type: 'operator_note', note: operatorNote.trim() }); persist(); setOperatorNote(''); } }} style={{ width: '100%', fontSize: '.72rem', marginTop: '.2rem' }} disabled={!operatorNote.trim()}>
+            ＋ Log note
+          </button>
+        </div>
+        <b>Instant markers</b>
+        {MARKER_TYPES.map(type => <button key={type} onClick={() => addMarker(type)} title={`Mark: ${type}`}>{type}</button>)}
+        <div className="interval-marker">
+          <b>Interval marker</b>
+          <select value={activeMarker?.marker_type || markerType} disabled={Boolean(activeMarker)} onChange={e => setMarkerType(e.target.value)} aria-label="Interval marker type">
+            {MARKER_TYPES.map(type => <option value={type} key={type}>{type}</option>)}
+          </select>
+          <button className={activeMarker ? 'danger' : 'primary'} onClick={toggleMarkerInterval}>{activeMarker ? '⏹ End interval' : '▶ Start interval'}</button>
+          {activeMarker && <small>● Recording {activeMarker.marker_type}</small>}
+        </div>
+        <small>{eventCount} events captured</small>
 
-      {/* Marker history */}
-      {markerHistory.length > 0 && (
-        <details className="marker-history" open>
-          <summary>Recent markers ({markerHistory.length})</summary>
-          <div className="marker-list">
-            {markerHistory.slice(-20).reverse().map((m, i) => (
-              <div key={i} className="marker-item" title={JSON.stringify(m.metadata)}>
-                <span className={`marker-dot ${m.type}`} />
-                <small>{m.metadata?.marker_type || m.type}{m.metadata?.note ? `: ${m.metadata.note.slice(0, 40)}` : ''}</small>
-              </div>
-            ))}
-          </div>
-        </details>
-      )}
-    </aside>
+        {/* Marker history */}
+        {markerHistory.length > 0 && (
+          <details className="marker-history" open>
+            <summary>Recent markers ({markerHistory.length})</summary>
+            <div className="marker-list">
+              {markerHistory.slice(-20).reverse().map((m, i) => (
+                <div key={i} className="marker-item" title={JSON.stringify(m.metadata)}>
+                  <span className={`marker-dot ${m.type}`} />
+                  <small>{m.metadata?.marker_type || m.type}{m.metadata?.note ? `: ${m.metadata.note.slice(0, 40)}` : ''}</small>
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
+      </aside>}
+    </div>
 
     {confirmAbort && <ConfirmDialog {...confirmAbort} />}
     {promptMarker && <PromptDialog {...promptMarker} />}
