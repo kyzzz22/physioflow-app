@@ -255,6 +255,13 @@ export function LanguageProvider({ children }) {
 }
 
 export function useLanguage() { return useContext(LanguageContext); }
+
+/** Translate a key to the current language. Falls back to the key itself. */
+export function translate(key, lang = 'en') {
+  if (lang === 'en' || !dictionaries[lang]) return key;
+  return dictionaries[lang][key] || key;
+}
+
 export function LanguageToggle() {
   const { language, setLanguage } = useLanguage();
   return <div className="language-toggle" aria-label="Language"><button className={language==='zh'?'active':''} onClick={() => setLanguage('zh')}>中文</button><button className={language==='ja'?'active':''} onClick={() => setLanguage('ja')}>日本語</button><button className={language==='en'?'active':''} onClick={() => setLanguage('en')}>EN</button></div>;

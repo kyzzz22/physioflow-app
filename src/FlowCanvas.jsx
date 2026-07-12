@@ -4,6 +4,7 @@ import { normalizeFlow, validateFlow } from './flowEngine';
 import { Inspector } from './Inspector';
 import { PALETTE } from './constants.js';
 import RuntimeContent from './RuntimeContent';
+import { translate } from './i18n';
 
 const nodeIcons = { start: 'START', end: 'END', condition: 'IF', loop: 'LOOP', event: 'STEP', note: '✎', junction: '●' };
 const branchesFor = node => node.type === 'note' ? [] : node.type === 'condition' ? ['true', 'false'] : node.type === 'loop' ? ['body', 'exit'] : ['next'];
