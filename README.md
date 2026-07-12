@@ -2,6 +2,20 @@
 
 Independent visual experiment workflow system for behavioral and physiological research. It provides a local-first protocol builder, visual trial flow editor, runtime runner, recovery support, session export, and analytics entry point.
 
+## What's new in v0.3.0
+
+- **ITI jittering** with 4 distributions (fixed, uniform, normal, exponential) and randomization constraints (max-consecutive, no-immediate-repeat)
+- **Practice block** support with auto-exclusion from analysis windows
+- **Attention check** step type for catch trials with configurable pass/fail feedback and condition branching
+- **Performance-based branching**: runtime variables for accuracy, RT, and attention results usable in Condition nodes
+- **Stroop task** and **Go/No-Go task** built-in templates
+- **Screen calibration** step type and **visual angle calculator** utility
+- **Operator session notes** panel with timestamped quick notes
+- **BIDS v1.8.0** behavioral export (events.tsv, sidecar JSON, participants.tsv, dataset_description.json)
+- **Flow snapshot history**: save / restore / rename / delete named flow states per trial
+
+See [CHANGELOG.md](./CHANGELOG.md) for the full history.
+
 ## Run locally
 
 ```bash
@@ -75,14 +89,99 @@ In the desktop app, the dashboard storage banner includes `Open folder`, which r
 
 ## Operator workflow
 
-1. Create a new protocol, import a protocol JSON, or start from the emotion template.
-2. Use Blocks & Trials to set hierarchy, repeat counts, order rules, and trial conditions.
+1. Create a new protocol, import a protocol JSON, or start from a built-in template (emotion, Stroop, Go/No-Go).
+2. Use Blocks & Trials to set hierarchy, repeat counts, order rules, randomization constraints, ITI jitter, and practice flags.
 3. Open the visual editor, add event nodes, connect output ports, and use Condition or Loop nodes only when the path branches or repeats.
-4. Attach media, fill participant content, configure questionnaires, and enable Generate analysis window on intervals needed for physiology analysis.
+4. Attach media, fill participant content, configure questionnaires, add attention checks, and enable Generate analysis window on intervals needed for physiology analysis.
 5. Run the protocol check, freeze the version for reproducibility, select a local data folder, then start a formal session.
-6. Export the session ZIP and keep it with the original device recordings.
+6. Export the session ZIP (standard format and/or BIDS format) and keep it with the original device recordings.
 
 The app also includes an in-app Guide panel from the dashboard and visual editor toolbar. It summarizes the workflow, node types, and output files for new users.
+
+## Step types
+
+| Type | Description |
+|------|-------------|
+| `instruction` | Participant-facing text before or between tasks |
+| `fixation` | Centered cross for baseline / gaze reset |
+| `timer` | Countdown without media or questionnaire |
+| `video` | Local, URL, or YouTube video stimulus |
+| `audio` | Sound stimulus with media lifecycle events |
+| `image` | Still image stimulus |
+| `questionnaire` | Built-in or external (Google Forms / Qualtrics) |
+| `response` | Single quick button / keyboard response with RT |
+| `attention_check` | Catch trial with expected keypress and pass/fail feedback |
+| `manual_event` | Operator-confirmed external event |
+| `device_check` | Operator checklist for sensors and setup |
+| `rest` | Recovery period between trials or stimuli |
+| `screen_calibration` | Pre-experiment display calibration with visual angle reference |
+
+### Control nodes
+
+| Node | Description |
+|------|-------------|
+| `start` | Entry point for the trial flow |
+| `condition` | Branches on true/false using participant fields, answers, or performance variables |
+| `loop` | Repeats a body path until a rule fails or max iterations reached |
+| `end` | Stops the current trial and advances to the next unit |
+| `note` | Sticky note annotation (visual only, ignored at runtime) |
+| `junction` | Wire routing node (pass-through) |
+
+### Performance variables (usable in Condition nodes)
+
+| Variable | Description |
+|----------|-------------|
+| `last_accuracy` | Accuracy of the most recent response (true/false) |
+| `last_rt_ms` | Reaction time of the most recent response (ms) |
+| `cumulative_accuracy` | Cumulative correct ratio across all scored responses |
+| `last_attention_passed` | Whether the last attention check was passed |
+| `attention_fail_count` | Total number of failed attention checks |
+| `attention_total_count` | Total number of attention checks presented |
+
+## Task templates
+
+- **Emotion template**: Five-condition (HVHA/LVHA/LVLA/HVLA/NVLA) emotion physiology experiment with SAM questionnaire, video stimuli, and analysis windows.
+- **Stroop task**: 16-trial color-word Stroop (4 colors × 4 words) with congruent/incongruent conditions, practice block, constrained randomization, and jittered ITI.
+- **Go/No-Go task**: 40-trial inhibition task (70% Go / 30% No-Go) with practice block, constrained randomization, and jittered ITI.
+
+## Randomization
+
+Blocks support 4 order rules:
+
+- `fixed` — trials run in the order listed
+- `random` — Fisher-Yates shuffle with optional constraints (max consecutive same condition, no immediate repeat)
+- `latin_square` — rotated offset per participant
+- `manual` — operator-defined order per session
+
+Trials can be repeated and each repetition respects the block's order rule. ITI jitter is applied between trials with configurable distribution (fixed, uniform, normal, exponential).
+
+## BIDS export
+
+In addition to the standard session ZIP, PhysioFlow can export in [BIDS v1.8.0](https://bids-specification.readthedocs.io/) behavioral format:
+
+```
+sub-<participant>/
+  ses-<date>/
+    beh/
+      sub-*_ses-*_task-*_events.tsv    ← Event timing
+      sub-*_ses-*_task-*_events.json   ← Column descriptions
+      sub-*_ses-*_task-*_beh.json      ← Behavioral metadata
+participants.tsv                       ← Participant info
+dataset_description.json               ← Dataset metadata
+```
+
+## Visual angle calculator
+
+Import from `src/visualAngle.js`:
+
+- `pixelsPerDegree(displayWidthPx, displayWidthCm, viewingDistanceCm)` — pixels per visual degree
+- `cmToVisualAngle(sizeCm, viewingDistanceCm)` — cm → degrees
+- `visualAngleToCm(angleDeg, viewingDistanceCm)` — degrees → cm
+- `pixelsToVisualAngle(pixels, ppd)` — pixels → degrees
+- `visualAngleToPixels(angleDeg, ppd)` — degrees → pixels
+- `calibrationReport({...})` — full calibration report with 1°/2°/5°/10° reference sizes
+- `estimateScreenSize(diagonalInches, aspectRatioX, aspectRatioY)` — physical size from diagonal
+- `getViewportDimensions()` — current browser viewport pixel dimensions
 
 ## Lab readiness checklist
 
@@ -98,6 +197,21 @@ The dashboard includes a Lab readiness summary for each project and the whole wo
 
 Use this checklist before handing the app to another operator or exporting formal data.
 
+## Export data format
+
+Each completed or aborted session exports a ZIP with these files:
+
+- `session.json`: session metadata, participant ID, sync settings, run status, and integrity summary.
+- `export_manifest.json`: machine-readable package manifest, generation time, IDs, and record counts.
+- `README.txt`: human-readable notes for the exported session package.
+- `protocol.json`: the exact protocol snapshot used for the session.
+- `events.csv`: append-only log for block/trial/step entry, completion, media events, pause/resume, skip/retry, manual markers, attention checks, and graph node IDs.
+- `responses.csv`: one row per submitted questionnaire answer or Response-node choice.
+- `analysis_windows.csv`: derived intervals for steps marked as analysis windows, including duration, validity status, pause count, and overlapping markers.
+- `stimulus_manifest.csv`: media source information, upload IDs, filenames, checksums, and metadata.
+- `integrity_report.json`: automated checks for continuity, missing end events, invalid windows, and timing attention flags.
+- `data_dictionary.csv`: field descriptions for the CSV files and manifest.
+
 ## Data and privacy
 
 - Desktop mode writes protocols, sessions, recovery snapshots, and uploaded media to `~/Documents/PhysioFlow Data`.
@@ -107,21 +221,6 @@ Use this checklist before handing the app to another operator or exporting forma
 - No account, name, email, or student number is collected by default. Researchers should use anonymous participant IDs.
 - Deleting a Session requires typing its participant ID. Clearing browser site data also removes locally stored experiments and uploads.
 - Each export is one ZIP containing protocol, Session metadata, raw events, responses, analysis windows, stimulus manifest, integrity report, and data dictionary.
-
-## Export data format
-
-Each completed or aborted session exports a ZIP with these files:
-
-- `session.json`: session metadata, participant ID, sync settings, run status, and integrity summary.
-- `export_manifest.json`: machine-readable package manifest, generation time, IDs, and record counts.
-- `README.txt`: human-readable notes for the exported session package.
-- `protocol.json`: the exact protocol snapshot used for the session.
-- `events.csv`: append-only log for block/trial/step entry, completion, media events, pause/resume, skip/retry, manual markers, and graph node IDs.
-- `responses.csv`: one row per submitted questionnaire answer.
-- `analysis_windows.csv`: derived intervals for steps marked as analysis windows, including duration, validity status, pause count, and overlapping markers.
-- `stimulus_manifest.csv`: media source information, upload IDs, filenames, checksums, and metadata.
-- `integrity_report.json`: automated checks for continuity, missing end events, invalid windows, and timing attention flags.
-- `data_dictionary.csv`: field descriptions for the CSV files and manifest.
 
 ## Timing scope
 

@@ -189,4 +189,4 @@ export const MAX_UNDO = 60;
 export const MAX_CONTROL_TRANSITIONS = 10000;
 export const MAX_FLOW_TRANSITIONS = 5000;
 
-export const APP_VERSION = '0.2.0';
+export const APP_VERSION = '0.3.0';

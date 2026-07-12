@@ -1,7 +1,7 @@
 {
   "name": "physioflow-app",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Visual experiment workflow system for behavioral and physiological research",
   "author": "PhysioFlow",
   "type": "module",
