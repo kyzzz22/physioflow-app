@@ -32,7 +32,8 @@ export function validateProtocol(p){
       const trialPath=`${blockPath} / Trial ${ti+1}`;add(t.trial_id,trialPath);
       if(!t.name?.trim())errors.push(`${trialPath}: «Trial name» is required`);
       if(!Number.isFinite(Number(t.repeat_count))||Number(t.repeat_count)<1)errors.push(`${trialPath}: «Repeat» must be at least 1`);
-      if(!Number.isFinite(Number(t.iti_jitter_ms))||Number(t.iti_jitter_ms)<0)errors.push(`${trialPath}: «ITI jitter» must be a non-negative number`);
+      const itiJitter = Number(t.iti_jitter_ms ?? 0);
+      if(!Number.isFinite(itiJitter)||itiJitter<0)errors.push(`${trialPath}: «ITI jitter» must be a non-negative number`);
       if(!['uniform','normal','exponential','fixed'].includes(t.iti_jitter_distribution||'fixed'))errors.push(`${trialPath}: «Jitter distribution» must be uniform, normal, exponential, or fixed`);
       if(!t.steps?.length)errors.push(`${trialPath} has no Steps — click a step type button (e.g. "+ instruction")`);
       t.steps?.forEach((s,si)=>{

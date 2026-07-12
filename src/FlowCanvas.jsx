@@ -70,10 +70,13 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
       setFocusHighlightStepId(targetStepId);
       setFocusMessage(`「${targetStep?.name || targetStep?.type || 'Step'}」未放入流程图。请在下方的"Steps outside flow"面板中点击 Insert，或从左侧 Add to flow 添加对应节点。`);
     } else {
+      // Trial-level issue (no specific step) — e.g. ITI jitter, validation errors
       setSelectedNodeIds(new Set());
-      setFocusMessage('打开此 Trial 并检查其流程图连接。');
+      const issueText = focusTarget.issueMessage || '';
+      const trialName = focusTarget.trialName || trial.name || '';
+      setFocusMessage(`此 Trial「${trialName}」有需要修复的设置项。${issueText ? `具体问题：${issueText}` : ''} 请点击顶部 ⋯ → "Advanced settings" 切换到文本编辑器修改 Trial 设置（如 ITI jitter、repeat count 等）。`);
     }
-  }, [focusTarget, flow.nodes, trial.steps, trial.trial_id]);
+  }, [focusTarget, flow.nodes, trial.steps, trial.trial_id, trial.name]);
 
   const updateFlow = useCallback(next => onChange({ ...trialRef.current, flow: next }), [onChange]);
   const updateNode = (id, values) => updateFlow({ ...flowRef.current, nodes: flowRef.current.nodes.map(n => n.id === id ? { ...n, ...values } : n) });

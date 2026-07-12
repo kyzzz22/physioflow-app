@@ -91,6 +91,12 @@ const issueAdvice = message => {
     summary: '开始模式设为”Participant click”但播放控件被隐藏了，参与者无法触发播放。',
     steps: ['点击”定位并修改”打开对应的媒体节点。', '开启 Show player controls，或将 Start mode 改为 Automatic。'],
   };
+  // ── ITI Jitter ──
+  if (/ITI jitter.*non-negative|Jitter distribution/i.test(text)) return {
+    title: 'ITI 抖动设置无效',
+    summary: 'Trial 的 ITI jitter（试次间间隔抖动）字段值不合法。jitter 必须是一个 ≥0 的数字，分布类型必须是 fixed、uniform、normal 或 exponential。',
+    steps: ['此设置只能在文本编辑器中修改。', '点击"跳转到 Trial"后会定位到对应 Trial。', '点击 ⋯ → Advanced settings 切换到文本编辑器。', '找到该 Trial，确保 ITI jitter ms ≥ 0，分布类型在可选范围内。'],
+  };
   // ── Structural ──
   if (/Protocol name|protocol name/i.test(text)) return {
     title: '方案名称未填写',
@@ -150,6 +156,13 @@ const enrichTarget = (protocol, target) => {
 
 function FixCard({ severity = 'error', title, summary, steps = [], location, raw, onFix }) {
   const canFix = Boolean(onFix && location);
+  const handleFix = () => {
+    if (onFix && location) {
+      onFix({ ...location, issueMessage: raw || title });
+    }
+  };
+  // Has a specific step to navigate to
+  const hasStepTarget = location?.stepIndex != null || location?.step_id;
   return <article className={`fix-card ${severity}`}>
     <div className="fix-card-main">
       <b>{title}</b>
@@ -158,7 +171,7 @@ function FixCard({ severity = 'error', title, summary, steps = [], location, raw
     </div>
     {steps.length > 0 && <ol>{steps.map((step, index) => <li key={index}>{step}</li>)}</ol>}
     <div className="fix-card-actions">
-      {canFix && <button className="primary" onClick={() => onFix(location)}>定位并修改</button>}
+      {canFix && <button className="primary" onClick={handleFix}>{hasStepTarget ? '定位并修改' : '跳转到 Trial'}</button>}
       {raw && <details><summary>查看原始提示</summary><code>{raw}</code></details>}
     </div>
   </article>;
