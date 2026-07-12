@@ -499,18 +499,17 @@ export default function RuntimeRunnerPage({ data, onDone }) {
       )}
     </div>
 
-    {/* Markers sidebar — collapsible */}
-    <div className={`markers-container${markersCollapsed ? ' collapsed' : ''}`}>
-      <button
-        className="markers-toggle"
-        onClick={() => setMarkersCollapsed(v => !v)}
-        title={markersCollapsed ? '展开标记面板' : '收起标记面板'}
-        aria-label={markersCollapsed ? 'Expand markers' : 'Collapse markers'}
-      >
-        {markersCollapsed ? '◀ 标记' : '▶'}
-        {activeMarker && <span className="markers-toggle-dot" />}
-      </button>
-      {!markersCollapsed && <aside className="markers" role="complementary" aria-label="Event markers">
+    {/* Markers toggle — always visible floating button */}
+    <button
+      className={`markers-toggle${!markersCollapsed ? ' active' : ''}${activeMarker ? ' recording' : ''}`}
+      onClick={() => setMarkersCollapsed(v => !v)}
+      title={markersCollapsed ? '展开标记面板' : '收起标记面板'}
+      aria-label={markersCollapsed ? 'Expand markers' : 'Collapse markers'}
+    >
+      {markersCollapsed ? '▸' : '▸'} 标记
+      {activeMarker && <span className="markers-toggle-dot" />}
+    </button>
+    {!markersCollapsed && <aside className="markers" role="complementary" aria-label="Event markers">
         {/* Quick operator note */}
         <div className="quick-note">
           <b>Quick note</b>
@@ -552,7 +551,6 @@ export default function RuntimeRunnerPage({ data, onDone }) {
           </details>
         )}
       </aside>}
-    </div>
 
     {confirmAbort && <ConfirmDialog {...confirmAbort} />}
     {promptMarker && <PromptDialog {...promptMarker} />}
