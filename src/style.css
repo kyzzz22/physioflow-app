@@ -887,6 +887,18 @@ code { font-size: .84rem; color: var(--muted); }
 }
 .dark-mode .operator { background: #0d0d1a; }
 .dark-mode .operator span { color: var(--muted); }
+.dark-mode .question { background: var(--paper); border-color: var(--line); }
+.dark-mode .questionnaire-form fieldset { background: #111a16; border-color: var(--line); }
+.dark-mode .questionnaire-form legend { color: var(--ink); }
+.dark-mode .questionnaire-form textarea,
+.dark-mode .questionnaire-form input[type="text"],
+.dark-mode .questionnaire-form input[type="number"] { background: #111a16; border-color: var(--line); color: var(--ink); }
+.dark-mode .scale-input label { background: #111a16; border-color: var(--line); color: var(--ink); }
+.dark-mode .scale-input label.selected { background: #1a3328; border-color: var(--green); color: var(--green); }
+.dark-mode .choice-list label { border-color: var(--line); }
+.dark-mode .choice-list label:has(input:checked) { background: #1a3328; border-color: var(--green); color: var(--green); }
+.dark-mode .submitted-state { color: var(--green); }
+.dark-mode .external-questionnaire { color: var(--ink); }
 /* Session search */
 .session-search {
   width: 100%;
