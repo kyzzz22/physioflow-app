@@ -426,7 +426,7 @@ code { font-size: .84rem; color: var(--muted); }
 
 /* ── Markers toggle button (always visible) ── */
 .markers-toggle {
-  position: fixed; right: .5rem; bottom: 1rem; z-index: 6;
+  position: fixed; right: .5rem; bottom: 1rem; z-index: 25;
   padding: .35rem .6rem; border: 1px solid var(--line);
   background: var(--paper); border-radius: 6px;
   font-size: .7rem; cursor: pointer; color: var(--muted);
@@ -444,7 +444,7 @@ code { font-size: .84rem; color: var(--muted); }
 }
 /* Markers panel (to the left of toggle) */
 .markers {
-  position: fixed; right: 3.8rem; bottom: .6rem; z-index: 5;
+  position: fixed; right: 3.8rem; bottom: .6rem; z-index: 25;
   width: 190px; max-height: calc(100vh - 180px); overflow-y: auto;
   background: var(--paper); border: 1px solid var(--line);
   padding: .7rem; border-radius: 8px;
@@ -570,18 +570,17 @@ code { font-size: .84rem; color: var(--muted); }
   letter-spacing: .05em;
 }
 
-/* Continue bar */
+/* Continue bar — minimal, no gradient covering content */
 .continue-bar {
-  padding: 1rem 2rem; display: flex; justify-content: center; align-items: flex-end;
+  padding: 0 0 1.2rem; display: flex; justify-content: center; align-items: flex-end;
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 20;
-  background: linear-gradient(0deg, var(--paper) 65%, transparent);
-  pointer-events: none;
+  pointer-events: none; background: none;
 }
 .continue-bar button {
   min-width: 180px; font-size: 1rem; padding: .6rem 1.5rem;
   pointer-events: auto; border-radius: 8px;
+  box-shadow: 0 4px 20px #00000015;
 }
-.dark-mode .continue-bar { background: linear-gradient(0deg, #101713 65%, transparent); }
 
 /* Operator panels (manual event, device check) */
 .operator-step-panel {
