@@ -543,6 +543,8 @@ code { font-size: .84rem; color: var(--muted); }
   font-size: .9rem; max-width: 500px; margin: 0 auto;
 }
 .dark-mode .media-error { background: #2a1f1f; border-color: #5a3a3a; color: #fca5a5; }
+.dark-mode .audio-player { background: linear-gradient(145deg, #1a1a2e, #0d0d1a); }
+.dark-mode .rest-icon { color: var(--ink); }
 
 /* Trial layout */
 .trial-content {
