@@ -1770,3 +1770,13 @@ kbd {
 
 /* ── Edge hit area ── */
 .edge-hit { stroke: transparent; stroke-width: 18; fill: none; cursor: pointer; }
+
+/* ── Unplaced step focus highlight ── */
+.unplaced-step-panel.focus-active { border-color: var(--green); box-shadow: 0 0 0 3px #19745320; }
+.unplaced-step-panel article.focus-highlight {
+  background: var(--mint); border: 2px solid var(--green);
+  border-radius: 6px; padding: .4rem .6rem; margin: .2rem 0;
+  animation: focus-pulse .6s ease-in-out 3;
+}
+@keyframes focus-pulse { 0%, 100% { box-shadow: 0 0 0 0 #19745340; } 50% { box-shadow: 0 0 0 6px #19745310; } }
+.dark-mode .unplaced-step-panel article.focus-highlight { background: #1a3328; }

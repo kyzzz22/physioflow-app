@@ -27,6 +27,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [contextMenu, setContextMenu] = useState(null);
   const [focusMessage, setFocusMessage] = useState('');
+  const [focusHighlightStepId, setFocusHighlightStepId] = useState(null);
   const [snapEnabled, setSnapEnabled] = useState(() => { try { return localStorage.getItem('physioflow.snap') !== '0'; } catch { return true; } });
   const [searchQuery, setSearchQuery] = useState('');
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -57,6 +58,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     handledFocus.current = focusKey;
     const targetNode = flow.nodes.find(node => node.type === 'event' && node.step_id === targetStepId);
     setSelectedEdgeId(null);
+    setFocusHighlightStepId(null);
     if (targetNode) {
       setSelectedNodeIds(new Set([targetNode.id]));
       setZoom(1);
@@ -65,10 +67,11 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     } else if (targetStepId) {
       const targetStep = trial.steps.find(step => step.step_id === targetStepId);
       setSelectedNodeIds(new Set());
-      setFocusMessage(`${targetStep?.name || targetStep?.type || 'This step'} is not placed in the flow. Use the "Steps outside flow" panel to insert or remove it.`);
+      setFocusHighlightStepId(targetStepId);
+      setFocusMessage(`「${targetStep?.name || targetStep?.type || 'Step'}」未放入流程图。请在下方的"Steps outside flow"面板中点击 Insert，或从左侧 Add to flow 添加对应节点。`);
     } else {
       setSelectedNodeIds(new Set());
-      setFocusMessage('Open this Trial and review its flow connections.');
+      setFocusMessage('打开此 Trial 并检查其流程图连接。');
     }
   }, [focusTarget, flow.nodes, trial.steps, trial.trial_id]);
 
@@ -598,7 +601,9 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     <section className="studio-center">
       <div className="canvas-bar">
         <div><b>{trial.name}</b><span>{flow.nodes.length} nodes · {flow.edges.length} connections</span></div>
-        <div className={`connection-hint ${focusMessage ? 'focus-warning' : ''}`}>{focusMessage ? <span>{focusMessage}</span> : dragConnection ? <>Connect <strong>{dragConnection.branch}</strong> → <button onClick={() => setDragConnection(null)}>Cancel</button></> : null}</div>
+        <div className={`connection-hint ${focusMessage ? 'focus-warning' : ''}`}>
+          {focusMessage ? <span>{focusMessage} {focusHighlightStepId && <button onClick={() => { setFocusHighlightStepId(null); setFocusMessage(''); }} style={{ fontSize: '.7rem', padding: '.15rem .5rem', marginLeft: '.5rem' }}>知道了</button>}</span> : dragConnection ? <>Connect <strong>{dragConnection.branch}</strong> → <button onClick={() => setDragConnection(null)}>Cancel</button></> : null}
+        </div>
         <label className="check-row" style={{ fontSize: '12px', whiteSpace: 'nowrap', gap: '4px', display: 'flex', alignItems: 'center', margin: 0 }}>
           <input type="checkbox" checked={snapEnabled} onChange={e => { setSnapEnabled(e.target.checked); try { localStorage.setItem('physioflow.snap', e.target.checked ? '1' : '0'); } catch {} }} /> Snap
         </label>
@@ -631,15 +636,15 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
         </div>
       )}
       {unplacedSteps.length > 0 && !disabled && (
-        <div className="unplaced-step-panel" role="status">
+        <div className={`unplaced-step-panel${focusHighlightStepId ? ' focus-active' : ''}`} role="status">
           <b>Steps outside flow · {unplacedSteps.length}</b>
-          <span>These steps exist in the Trial but will not run until placed in the graph.</span>
+          <span>{focusHighlightStepId ? '已定位到以下步骤，请点击 Insert 放入流程图' : 'These steps exist in the Trial but will not run until placed in the graph.'}</span>
           <div>
             {unplacedSteps.map(step => (
-              <article key={step.step_id}>
+              <article key={step.step_id} className={focusHighlightStepId === step.step_id ? 'focus-highlight' : ''}>
                 <i>{step.type}</i>
                 <strong>{step.name || step.type}</strong>
-                <button onClick={() => placeExistingStep(step)}>Insert</button>
+                <button onClick={() => { placeExistingStep(step); setFocusHighlightStepId(null); setFocusMessage(''); }}>Insert</button>
                 <button className="danger" onClick={() => removeUnplacedStep(step.step_id)}>Remove unused</button>
               </article>
             ))}

@@ -345,7 +345,9 @@ export function stepContentIssues(step, stimuli, questionnaires) {
   }
   if (['instruction','response','manual_event','device_check'].includes(step.type)) {
     const empty = !Object.values(step.content_i18n || {}).some(t => t?.trim());
-    if (empty) issues.push({ kind: step.type === 'response' ? 'error' : 'warn', key: 'empty_content', message: 'Content is empty — fill in «Participant content» in at least one language' });
+    // Response nodes use buttons/options, not content text — empty content is only advisory
+    // Instruction and device_check benefit from content text but it's not blocking
+    if (empty) issues.push({ kind: step.type === 'response' ? 'warn' : 'warn', key: 'empty_content', message: step.type === 'response' ? 'No instruction text — the response buttons are the primary interface' : 'Content is empty — fill in «Participant content» in at least one language for clearer participant guidance' });
   }
   if (step.type === 'response') {
     if (!String(step.response_variable || '').trim()) issues.push({ kind: 'error', key: 'missing_response_variable', message: 'Response variable is empty — set a name such as response or rating' });
