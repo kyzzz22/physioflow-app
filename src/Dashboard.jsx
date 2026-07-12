@@ -4,6 +4,7 @@ import { createNextProtocolVersion, duplicateProtocolAsProject, hashProtocol, pr
 import { verifyProtocolAssets } from './assetStore.js';
 import { ConfirmDialog, AlertDialog } from './Modal.jsx';
 import { assessProtocolReadiness, summarizeWorkspaceReadiness } from './readiness.js';
+import TemplateButton from './TemplateConfig.jsx';
 
 const groupProjects = protocols => Object.values(protocols.filter(item => item.status !== 'retired' && !item.archived_at).reduce((groups, item) => { (groups[item.project_id] ??= []).push(item); return groups; }, {})).map(versions => versions.sort((left, right) => Number(right.version) - Number(left.version)));
 
@@ -107,8 +108,8 @@ export default function Dashboard({ protocols, sessions, onOpen, onNew, onTempla
         </div>
         <button className="primary" onClick={onNew}>＋ New protocol</button>
         <button onClick={onTemplate}>Emotion template</button>
-        {onStroopTemplate && <button onClick={onStroopTemplate}>Stroop task</button>}
-        {onGonogoTemplate && <button onClick={onGonogoTemplate}>Go/No-Go task</button>}
+        {onStroopTemplate && <TemplateButton label="Stroop task" onCreate={onStroopTemplate} templateKey="stroop" />}
+        {onGonogoTemplate && <TemplateButton label="Go/No-Go task" onCreate={onGonogoTemplate} templateKey="gonogo" />}
         <button onClick={() => input.current.click()}>Import protocol</button>
         <div className="dashboard-secondary-actions">
           <button onClick={() => onGuide?.('workflow')}>Tutorial</button>

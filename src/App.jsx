@@ -471,8 +471,8 @@ export default function App() {
       onOpen={open}
       onNew={() => addAndOpen(protocol())}
       onTemplate={() => addAndOpen(emotionTemplate())}
-      onStroopTemplate={() => addAndOpen(stroopTemplate())}
-      onGonogoTemplate={() => addAndOpen(gonogoTemplate())}
+      onStroopTemplate={(cfg) => addAndOpen(stroopTemplate(cfg))}
+      onGonogoTemplate={(cfg) => addAndOpen(gonogoTemplate(cfg))}
       onImport={addAndOpen}
       onRun={value => { setPreRunCheck(value); }}
       onNextVersion={value => addAndOpen(createNextProtocolVersion(value))}

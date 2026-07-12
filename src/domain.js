@@ -182,15 +182,17 @@ function stroopStimuli() {
   return { colors, trials };
 }
 
-export function stroopTemplate() {
+export function stroopTemplate(cfg = {}) {
+  const { trials: trialCount = 16, practice = true, jitter = 300 } = cfg || {};
   const { trials: stroopTrials } = stroopStimuli();
+  const selected = stroopTrials.slice(0, Math.min(trialCount, stroopTrials.length));
   const practiceBlock = block({
     name: 'Stroop practice',
     is_practice: true,
     order_rule: 'random',
     repeat_count: 1,
     max_consecutive_same: 2,
-    trials: stroopTrials.slice(0, 8).map((t, i) => trial({
+    trials: selected.slice(0, Math.min(8, Math.ceil(selected.length * 0.5))).map((t, i) => trial({
       name: `Practice ${i + 1}`,
       condition: t.condition,
       steps: [
@@ -220,7 +222,7 @@ export function stroopTemplate() {
     repeat_count: 2,
     max_consecutive_same: 3,
     no_immediate_repeat: false,
-    trials: stroopTrials.map((t, i) => trial({
+    trials: selected.map((t, i) => trial({
       name: `Stroop ${i + 1}`,
       condition: t.condition,
       steps: [
@@ -240,14 +242,14 @@ export function stroopTemplate() {
         }),
         step('rest', { name: 'ITI', planned_duration_ms: 500, show_countdown_ring: false }),
       ],
-      iti_jitter_ms: 300,
+      iti_jitter_ms: jitter,
       iti_jitter_distribution: 'uniform',
     })),
   });
   return protocol({
     name: 'Stroop color-word task',
     version_name: 'Stroop template v1',
-    blocks: [practiceBlock, mainBlock],
+    blocks: [practice ? practiceBlock : null, mainBlock].filter(Boolean),
     stimuli: [],
     questionnaires: [],
   });
@@ -256,19 +258,22 @@ export function stroopTemplate() {
 // ── Go/No-Go Task Template ──
 // Participants respond to "Go" stimuli and withhold response to "No-Go" stimuli.
 // Typically 70% Go, 30% No-Go to build prepotent response tendency.
-export function gonogoTemplate() {
+export function gonogoTemplate(cfg = {}) {
+  const { trials: trialCount = 40, goRatio = 70, practice = true, jitter = 250 } = cfg || {};
+  const goCount = Math.round(trialCount * goRatio / 100);
+  const nogoCount = trialCount - goCount;
   const goStimulus = { type: 'go', label: 'Go (press space)', key: ' ', color: '#43A047', shape: '●' };
   const nogoStimulus = { type: 'nogo', label: 'No-Go (withhold)', key: null, color: '#E53935', shape: '■' };
-  // 70% Go, 30% No-Go
   const trialDefs = [];
-  for (let i = 0; i < 40; i++) trialDefs.push(i < 28 ? goStimulus : nogoStimulus);
+  for (let i = 0; i < goCount; i++) trialDefs.push(goStimulus);
+  for (let i = 0; i < nogoCount; i++) trialDefs.push(nogoStimulus);
 
   const practiceBlock = block({
     name: 'Go/No-Go practice',
     is_practice: true,
     order_rule: 'random',
     repeat_count: 1,
-    trials: trialDefs.slice(0, 10).map((t, i) => trial({
+    trials: trialDefs.slice(0, Math.min(10, Math.ceil(trialDefs.length * 0.25))).map((t, i) => trial({
       name: `Practice ${i + 1}`,
       condition: t.type,
       steps: [
@@ -288,7 +293,7 @@ export function gonogoTemplate() {
         }),
         step('rest', { name: 'ITI', planned_duration_ms: 500, show_countdown_ring: false }),
       ],
-      iti_jitter_ms: 250,
+      iti_jitter_ms: jitter,
       iti_jitter_distribution: 'uniform',
     })),
   });
@@ -327,7 +332,7 @@ export function gonogoTemplate() {
   return protocol({
     name: 'Go/No-Go inhibition task',
     version_name: 'Go/No-Go template v1',
-    blocks: [practiceBlock, mainBlock],
+    blocks: [practice ? practiceBlock : null, mainBlock].filter(Boolean),
     stimuli: [],
     questionnaires: [],
   });
