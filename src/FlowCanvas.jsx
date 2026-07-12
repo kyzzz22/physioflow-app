@@ -697,11 +697,13 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
               if (!a || !b) return null;
               const getPort = (node, isSource) => {
                 const noteH = node.height || 100;
-                const nodeW = 168; // compact node width
-                const nodeH = 70;  // compact node height
+                const nodeW = 168;
+                const nodeH = 70;
+                const inputPortY = 13; // matches .clean-node .node-input { top: 13px }
+                const outputPortY = nodeH - 8; // bottom area where output ports are
                 return isSource
-                  ? { x: node.x + (node.type === 'junction' ? 12 : nodeW), y: node.y + (node.type === 'junction' ? 12 : node.type === 'note' ? noteH / 2 : nodeH - 10) }
-                  : { x: node.x + (node.type === 'junction' ? 0 : 0), y: node.y + (node.type === 'junction' ? 12 : node.type === 'note' ? noteH / 2 : nodeH / 2) };
+                  ? { x: node.x + (node.type === 'junction' ? 12 : nodeW), y: node.y + (node.type === 'junction' ? 12 : node.type === 'note' ? noteH / 2 : outputPortY) }
+                  : { x: node.x, y: node.y + (node.type === 'junction' ? 12 : node.type === 'note' ? noteH / 2 : inputPortY) };
               };
               const p1 = getPort(a, true), p2 = getPort(b, false);
               const x1 = p1.x, y1 = p1.y, x2 = p2.x, y2 = p2.y, m = x1 + (x2 - x1) / 2;
@@ -730,9 +732,9 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
           if (!srcNode) return null;
           const cr = canvasRef.current?.getBoundingClientRect();
           if (!cr) return null;
-          const noteH = srcNode.height || 100; const nodeH = 70; const nodeW = 168;
+          const noteH = srcNode.height || 100; const nodeW = 168;
           const sx = (srcNode.x + (srcNode.type === 'junction' ? 12 : nodeW)) * zoom + pan.x;
-          const sy = (srcNode.y + (srcNode.type === 'junction' ? 12 : srcNode.type === 'note' ? noteH / 2 : nodeH - 10)) * zoom + pan.y;
+          const sy = (srcNode.y + (srcNode.type === 'junction' ? 12 : srcNode.type === 'note' ? noteH / 2 : 62)) * zoom + pan.y;
           const ex = dragConnection.clientX - cr.left;
           const ey = dragConnection.clientY - cr.top;
           const mx = (sx + ex) / 2;

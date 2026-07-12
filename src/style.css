@@ -1911,9 +1911,9 @@ kbd {
   border-color: var(--green-strong);
 }
 
-/* Node input port (left side) */
+/* Node input port — top-left, aligned with icon (not blocking title) */
 .clean-node .node-input {
-  left: -6px; top: 50%; transform: translateY(-50%);
+  left: -7px; top: 13px; transform: none;
   width: 12px; height: 12px;
 }
 .clean-node .node-input:hover { background: var(--green); }
