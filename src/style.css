@@ -1272,67 +1272,6 @@ kbd {
 
 .studio-center { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 
-/* ── Canvas toolbar (single row, fixed height) ── */
-.canvas-bar {
-  display: flex; align-items: center; gap: .4rem;
-  height: 32px; padding: 0 .5rem; flex-shrink: 0; overflow: hidden;
-  border-bottom: 1px solid var(--line);
-  background: var(--paper);
-}
-.canvas-bar > * { flex-shrink: 0; }
-.canvas-bar > div:first-child {
-  display: flex; align-items: baseline; gap: .4rem; min-width: 0;
-}
-.canvas-bar > div:first-child b {
-  font-size: .75rem; font-weight: 700; white-space: nowrap;
-  max-width: 130px; overflow: hidden; text-overflow: ellipsis;
-}
-.canvas-bar > div:first-child span {
-  font-size: .64rem; color: var(--muted); white-space: nowrap;
-}
-.canvas-bar .connection-hint {
-  flex: 1; min-width: 0; font-size: .66rem; color: var(--muted);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.canvas-bar .connection-hint.focus-warning {
-  color: var(--warning); font-weight: 600;
-  background: #fffcf0; padding: 0 .4rem; border-radius: 3px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.canvas-bar .connection-hint button {
-  font-size: .62rem; padding: 0 .35rem; border: 1px solid var(--line);
-  border-radius: 3px; background: var(--paper); cursor: pointer; white-space: nowrap;
-}
-.canvas-bar > button {
-  font-size: .66rem; padding: .15rem .4rem; white-space: nowrap;
-}
-.canvas-bar > label { font-size: .66rem; white-space: nowrap; margin: 0; }
-.canvas-bar > label input { vertical-align: middle; margin: 0; }
-.canvas-bar > .flow-status { font-size: .64rem; padding: 0 .4rem; }
-/* Node search bar */
-.node-search-bar {
-  display: flex; align-items: center; gap: .5rem; flex-shrink: 0;
-  height: 30px; padding: 0 .5rem;
-  border-bottom: 1px solid var(--line);
-  background: var(--paper-soft);
-}
-.node-search-bar input {
-  flex: 1; border: 1px solid var(--line); border-radius: 5px;
-  padding: .2rem .4rem; font-size: .74rem; background: var(--paper);
-}
-.node-search-bar span { font-size: .66rem; color: var(--muted); white-space: nowrap; }
-.dark-mode .canvas-bar { background: var(--paper); border-color: var(--line); }
-.dark-mode .canvas-bar .connection-hint.focus-warning { background: #28261d; color: #f0bf68; }
-.dark-mode .node-search-bar { background: var(--paper-soft); border-color: var(--line); }
-
-/* Hide non-essential bar items on narrow screens */
-@media (max-width: 820px) {
-  .canvas-bar > div:first-child span { display: none; }
-  .canvas-bar > label { display: none; }
-}
-@media (max-width: 640px) {
-  .canvas-bar .connection-hint { display: none; }
-}
 .studio { display: flex; height: 100%; }
 
 .flow-project input:focus { outline: none; border-bottom: 1px solid var(--lime); }
@@ -1773,125 +1712,11 @@ kbd {
 .dark-mode .node-preview-header { background: #0a0a0a; border-color: #2a2a2a; }
 .dark-mode .node-preview-footer { background: #0a0a0a; border-color: #2a2a2a; }
 
-/* ── Cleaner node styling ── */
-.clean-node {
-  transition: box-shadow .12s, border-color .12s, transform .1s;
-  min-width: 164px; max-width: 200px;
-}
-.clean-node.dragging {
-  box-shadow: 0 12px 32px #00000022 !important; z-index: 10;
-  transform: scale(1.03);
-}
-.clean-node.disabled { opacity: .45; pointer-events: none; }
-.clean-node .node-title {
-  padding: 10px 10px 6px 36px;
-  flex-direction: column; align-items: flex-start; gap: 1px;
-}
-.clean-node .node-title i {
-  width: 26px; height: 26px; border-radius: 6px;
-  font-size: 12px; position: absolute; left: 8px; top: 9px;
-}
-.clean-node .node-title > div { min-width: 0; width: 100%; }
-.clean-node .node-title small {
-  font-size: 9px; letter-spacing: .1em; color: var(--muted);
-}
-.clean-node .node-title b {
-  font-size: 12px; font-weight: 650; display: block;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  max-width: 140px;
-}
-/* Event kind row */
-.clean-node .event-kind {
-  margin: 0 10px 4px 36px; padding: 2px 0;
-  font-size: 10px; gap: 5px;
-  display: flex; align-items: center;
-}
-.clean-node .step-type-badge {
-  font-size: 9px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .04em; color: var(--muted);
-  padding: 1px 5px; border-radius: 3px;
-  background: var(--paper-soft); border: 1px solid var(--line);
-}
-/* Output ports row */
-.clean-node .node-outputs {
-  padding: 4px 8px 8px; gap: 4px;
-  border-top: 1px solid var(--line);
-  justify-content: center;
-}
-.clean-node .node-outputs button {
-  font-size: 10px; padding: 3px 8px; border-radius: 99px;
-  background: var(--paper-soft); gap: 3px;
-  transition: all .12s;
-}
-.clean-node .node-outputs button i {
-  width: 6px; height: 6px; border-radius: 50%; background: var(--muted);
-}
-.clean-node .node-outputs button.active {
-  background: var(--mint); border-color: var(--green); color: var(--green-strong);
-}
-.clean-node .node-outputs button.active i { background: var(--green-strong); }
-.clean-node .node-outputs button:hover:not(.active) {
-  background: var(--paper); border-color: var(--green);
-}
-
-/* Node type accent — left border instead of top */
-.clean-node.condition { border-top: none; border-left: 3px solid #e7b834; }
-.clean-node.loop { border-top: none; border-left: 3px solid #4d91d2; }
-.clean-node.start { border-top: none; border-left: 3px solid #76af33; }
-.clean-node.end { border-top: none; border-left: 3px solid #d7625b; }
-.clean-node.event { border-top: none; border-left: 3px solid var(--green); }
-.clean-node.junction {
-  border-top: none; border-left: 3px solid #ce93d8; border-radius: 50%;
-  min-width: 28px; max-width: 28px; width: 28px; height: 28px;
-  padding: 0; display: grid; place-items: center;
-}
-.clean-node.note { border-top: none; border-left: 3px solid #ffd54f; }
-
-/* Selected state */
-.clean-node.selected {
-  box-shadow: 0 0 0 2px var(--green), 0 6px 18px #1d2d2318;
-  border-color: var(--green-strong);
-}
-
-/* Node input port — top-left, aligned with icon (not blocking title) */
-.clean-node .node-input {
-  left: -7px; top: 13px; transform: none;
-  width: 12px; height: 12px;
-}
-.clean-node .node-input:hover { background: var(--green); }
-.clean-node .node-input.awaiting { background: var(--lime); box-shadow: 0 0 0 4px #c9f25c66; animation: pulse .6s ease-in-out infinite; }
-
-/* Preview button */
-.clean-node .node-preview-btn {
-  width: 18px; height: 18px; font-size: 10px; margin-left: auto;
-  opacity: 0; transition: opacity .12s;
-}
-.clean-node:hover .node-preview-btn { opacity: 1; }
-
-/* Dark mode */
-.dark-mode .clean-node.dragging { box-shadow: 0 12px 32px #00000066 !important; }
-.dark-mode .clean-node .node-outputs { border-color: var(--line); }
-.dark-mode .clean-node .node-outputs button { background: var(--paper-soft); border-color: var(--line); color: var(--ink); }
-.dark-mode .clean-node .node-outputs button.active { background: #1a3328; border-color: var(--green); color: var(--green); }
-.dark-mode .clean-node .node-outputs button.active i { background: var(--green); }
-.dark-mode .clean-node .node-outputs button:hover:not(.active) { background: #1e2b24; border-color: var(--green); }
-
-/* Inline rule caption (condition/loop body) */
-.clean-node .rule-caption {
-  margin: 0 10px 6px 36px; font-size: 10px; color: var(--muted);
-  font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.dark-mode .clean-node .rule-caption { color: var(--muted); }
+/* ── Node styles now in flow.css (loaded after style.css) ── */
+/* ── Dark mode supplements for elements not in flow.css ── */
 .dark-mode .clean-node .step-type-badge { background: #1f2b25; border-color: var(--line); color: var(--muted); }
+.dark-mode .clean-node .rule-caption { color: var(--muted); }
 .dark-mode .clean-node .node-preview-btn { color: var(--muted); }
-
-/* Junction dot */
-.junction-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin: 0 auto; }
-
-/* Note sticky */
-.clean-node.note {
-  border-radius: 2px 8px 8px 2px; border: 1px solid #e6d972; border-left: 3px solid #f4c542;
-}
 
 /* ── Studio layout with collapsible panels ── */
 .studio { position: relative; }
@@ -1900,11 +1725,6 @@ kbd {
 .panel-toggle.inspector-toggle { right: 0; }
 
 /* ── Flow status badge ── */
-.flow-status { font-size: .72rem; padding: .2rem .5rem; border-radius: 99px; font-weight: 700; }
-.flow-status.valid { color: var(--green); background: var(--mint); }
-.flow-status.invalid { color: var(--danger); background: #fff5f5; }
-.dark-mode .flow-status.valid { background: #1a3328; }
-.dark-mode .flow-status.invalid { background: #2a1f1f; }
 
 /* ── Edge hit area ── */
 .edge-hit { stroke: transparent; stroke-width: 18; fill: none; cursor: pointer; }
