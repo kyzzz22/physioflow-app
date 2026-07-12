@@ -835,6 +835,8 @@ code { font-size: .84rem; color: var(--muted); }
   animation: toast-in .25s ease-out;
   pointer-events: auto;
 }
+.dark-mode .toast { background: #0d0d0d; color: #eef7f1; }
+.dark-mode .undo-toast { background: #0d0d0d; color: #eef7f1; }
 @keyframes toast-in { from { opacity: 0; translate: 0 .5rem; } to { opacity: 1; translate: 0 0; } }
 
 /* Inline undo toast */
@@ -863,21 +865,7 @@ code { font-size: .84rem; color: var(--muted); }
 
 /* Drag placeholder */
 
-/* Timer circle */
-.timer-circle {
-  width: 160px; height: 160px;
-  border-radius: 50%;
-  display: grid; place-items: center;
-  position: relative;
-  margin: 0 auto;
-}
-.timer-circle svg { position: absolute; inset: 0; width: 100%; height: 100%; rotate: -90deg; }
-.timer-circle svg circle { fill: none; stroke-width: 4; }
-.timer-circle .track { stroke: #e5ebe4; }
-.dark-mode .timer-circle .track { stroke: #333; }
-.dark-mode .instruction { color: var(--ink); }
-.dark-mode .timer-face { color: var(--ink); }
-.dark-mode .timer-face small { color: var(--muted); }
+/* Timer circle / runtime dark mode — consolidated in runtime section above */
 .dark-mode .response-options button {
   background: var(--paper); border-color: var(--line); color: var(--ink);
 }
@@ -1167,7 +1155,7 @@ kbd {
   border-color: var(--line-strong);
 }
 .clean-node.selected {
-  border-color: var(--green-strong) !important;
+  border-color: var(--green-strong);
   box-shadow: 0 0 0 2px #19745330, 0 4px 14px #00000014;
 }
 .clean-node.dragging {
@@ -1429,10 +1417,7 @@ kbd {
 }
 
 /* Node issue dots */
-.node-issue-dot { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; font-size: 9px; line-height: 1; font-weight: 700; }
-.node-issue-dot.error { background: #a32e25; color: white; }
-.node-issue-dot.warn { background: #f4d77e; color: #111; }
-.rule-caption { font-size: .78rem; color: var(--muted); font-weight: 600; }
+/* node-issue-dot — consolidated in Flow Canvas Nodes section above */
 
 /* Responsive breakpoints */
 @media (max-width: 850px) {
