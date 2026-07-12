@@ -3,6 +3,7 @@ import { step as createStep, stepContentIssues } from './domain';
 import { normalizeFlow, validateFlow } from './flowEngine';
 import { Inspector } from './Inspector';
 import { PALETTE } from './constants.js';
+import RuntimeContent from './RuntimeContent';
 
 const nodeIcons = { start: 'START', end: 'END', condition: 'IF', loop: 'LOOP', event: 'STEP', note: '✎', junction: '●' };
 const branchesFor = node => node.type === 'note' ? [] : node.type === 'condition' ? ['true', 'false'] : node.type === 'loop' ? ['body', 'exit'] : ['next'];
@@ -928,125 +929,46 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     >{inspectorCollapsed ? '◂' : '▸'}</button>
 
     {/* ── Full-screen step preview modal ── */}
-    {previewNode && <NodePreviewModal node={previewNode.node} step={previewNode.step} onClose={closePreview} />}
+    {previewNode && <NodePreviewModal step={previewNode.step} onClose={closePreview} />}
   </div>;
 }
 
-/** Full-screen preview showing how the step content will appear to participants */
-function NodePreviewModal({ node, step, onClose }) {
-  const previewBg = '#1a1a2e';
-  const media = ['video', 'audio', 'image'].includes(step.type);
-  const hasText = ['instruction', 'response', 'manual_event', 'device_check', 'attention_check', 'questionnaire'].includes(step.type);
-
+/** Full-screen preview — reuses RuntimeContent for accurate rendering */
+function NodePreviewModal({ step, onClose }) {
   return <div className="node-preview-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
     <div className="node-preview-header">
       <div>
         <span className="preview-badge">{step.type}</span>
         <b>{step.name}</b>
-        <small>{node.type} node</small>
+        <small>{step.duration_mode === 'fixed' ? `${step.planned_duration_ms || 0}ms` : step.duration_mode} · {step.start_mode || 'auto'} start{step.is_analysis_window ? ' · ↗ analysis' : ''}</small>
       </div>
       <button onClick={onClose} title="Close preview (Esc)">×</button>
     </div>
-    <div className="node-preview-stage" style={{ background: previewBg }}>
-      {/* Instruction / text-based steps */}
-      {hasText && (
-        <div className="node-preview-content">
-          {step.type === 'attention_check' && <span className="node-preview-eyebrow">⚠ ATTENTION CHECK</span>}
-          {step.type === 'questionnaire' && <span className="node-preview-eyebrow">☷ QUESTIONNAIRE</span>}
-          {step.type === 'response' && <span className="node-preview-eyebrow">↵ RESPONSE</span>}
-          {step.type === 'manual_event' && <span className="node-preview-eyebrow">◆ OPERATOR EVENT</span>}
-          {step.type === 'device_check' && <span className="node-preview-eyebrow">✓ DEVICE CHECK</span>}
-          <h1 style={{ fontFamily: "'Instrument Serif', serif", fontSize: 'clamp(1.6rem, 4vw, 2.8rem)', color: '#fff', margin: '.5rem 0 1rem', textAlign: 'center' }}>
-            {step.name}
-          </h1>
-          {(step.content_i18n?.en || step.content_i18n?.zh || '') && (
-            <div className="node-preview-i18n">
-              {['zh', 'ja', 'en'].map(lang => {
-                const text = step.content_i18n?.[lang];
-                if (!text) return null;
-                return <div key={lang} className="preview-lang-block">
-                  <span className="preview-lang-label">{lang === 'zh' ? '中文' : lang === 'ja' ? '日本語' : 'EN'}</span>
-                  <p>{text}</p>
-                </div>;
-              })}
-            </div>
-          )}
-          {step.type === 'response' && (
-            <div className="node-preview-responses">
-              {(step.response_options || []).map((opt, i) => (
-                <div key={i} className="preview-response-option">
-                  {opt.key && <kbd>{opt.key}</kbd>}
-                  <span>{opt.label_i18n?.en || opt.value || ''}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {step.type === 'attention_check' && (
-            <div className="node-preview-attention">
-              <p>{step.attention_prompt_i18n?.en || 'Press the key'}</p>
-              <kbd style={{ fontSize: '1.5rem', padding: '.5rem 1.2rem' }}>{step.attention_expected_key === ' ' ? 'Space' : step.attention_expected_key || '?'}</kbd>
-            </div>
-          )}
-          {step.type === 'questionnaire' && (step.questionnaire?.questions || []).length > 0 && (
-            <div className="node-preview-questions">
-              {step.questionnaire.questions.slice(0, 5).map((q, i) => (
-                <div key={i} className="preview-question-row">
-                  <span className="preview-q-type">{q.type}</span>
-                  <span>{q.prompt_i18n?.en || `Question ${i + 1}`}</span>
-                </div>
-              ))}
-              {step.questionnaire.questions.length > 5 && <small>+{step.questionnaire.questions.length - 5} more questions</small>}
-            </div>
-          )}
-        </div>
-      )}
-      {/* Fixation / Timer / Rest (visual-only) */}
-      {['fixation', 'timer', 'rest'].includes(step.type) && (
-        <div className="node-preview-content" style={{ textAlign: 'center' }}>
-          <span className="node-preview-eyebrow">{step.type.toUpperCase()}</span>
-          <h1 style={{ fontFamily: "'Instrument Serif', serif", fontSize: '2.5rem', color: '#fff', margin: '.5rem 0' }}>{step.name}</h1>
-          {step.type === 'fixation' && <div className="node-preview-fixation"><div className="fixation-h" /><div className="fixation-v" /></div>}
-          {step.type === 'timer' && <div className="node-preview-timer"><span>{Math.round((step.planned_duration_ms || 5000) / 1000)}s</span></div>}
-          {step.type === 'rest' && <div className="node-preview-rest">☕</div>}
-          {step.duration_mode === 'fixed' && <p style={{ color: '#aaa', marginTop: '1rem' }}>Duration: {step.planned_duration_ms || 0}ms</p>}
-        </div>
-      )}
-      {/* Media steps */}
-      {media && (
-        <div className="node-preview-content" style={{ textAlign: 'center' }}>
-          <span className="node-preview-eyebrow">{step.type.toUpperCase()} STIMULUS</span>
-          <h1 style={{ fontFamily: "'Instrument Serif', serif", fontSize: '2rem', color: '#fff', margin: '.5rem 0' }}>{step.name}</h1>
-          {step.source_url ? (
-            <div className="node-preview-media-info">
-              <span>Source: {step.source_mode === 'youtube' ? 'YouTube' : 'URL'}</span>
-              <code>{step.source_url.slice(0, 60)}{step.source_url.length > 60 ? '…' : ''}</code>
-            </div>
-          ) : step.asset_id ? (
-            <div className="node-preview-media-info">
-              <span>Uploaded file</span>
-              <code>{step.file_name || step.asset_id}</code>
-            </div>
-          ) : (
-            <p style={{ color: '#e88' }}>⚠ No media source configured</p>
-          )}
-          <div className="node-preview-media-options">
-            {step.volume != null && step.volume < 1 && <span>Vol: {Math.round(step.volume * 100)}%</span>}
-            {step.muted && <span>Muted</span>}
-            {step.loop && <span>Looping</span>}
-            {step.show_controls !== false && <span>Controls visible</span>}
-          </div>
-        </div>
-      )}
+    <div className="node-preview-stage">
+      <RuntimeContent
+        step={step}
+        session={{ participant_language: 'en' }}
+        language="en"
+        timing={{ current: { remaining: 0, started_at: 0, active: false } }}
+        onComplete={() => {}}
+        onQuestionnaireSubmit={() => {}}
+        onResponseSubmit={() => {}}
+        onMediaEvent={() => {}}
+        onQuestionnaireExternalEvent={() => {}}
+        preview
+      />
     </div>
     <div className="node-preview-footer">
       <div>
-        <span>Duration mode: <b>{step.duration_mode}</b></span>
-        {step.duration_mode === 'fixed' && <span>Planned: <b>{step.planned_duration_ms}ms</b></span>}
+        <span>End: <b>{step.duration_mode}</b></span>
+        {step.duration_mode === 'fixed' && <span><b>{step.planned_duration_ms}ms</b></span>}
         <span>Start: <b>{step.start_mode || 'auto'}</b></span>
-        <span>Auto advance: <b>{step.auto_advance !== false ? 'Yes' : 'No'}</b></span>
-        {step.is_analysis_window && <span className="preview-analysis-badge">Analysis window</span>}
+        <span>Auto: <b>{step.auto_advance !== false ? 'yes' : 'no'}</b></span>
+        {step.is_analysis_window && <span className="preview-analysis-badge">↗ analysis</span>}
+        {step.allow_skip === false && <span>no skip</span>}
+        {step.allow_retry && <span>retry ok</span>}
       </div>
-      <button onClick={onClose}>Close preview</button>
+      <button onClick={onClose}>Close</button>
     </div>
   </div>;
 }
