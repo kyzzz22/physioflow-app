@@ -570,8 +570,8 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
         const minX = Math.min(prev.x1, prev.x2), maxX = Math.max(prev.x1, prev.x2);
         const minY = Math.min(prev.y1, prev.y2), maxY = Math.max(prev.y1, prev.y2);
         const inside = flowRef.current.nodes.filter(n => {
-          const nw = n.type === 'note' ? (n.width || 180) : n.type === 'junction' ? 28 : 168;
-          const nh = n.type === 'note' ? (n.height || 100) : n.type === 'junction' ? 28 : 70;
+          const nw = n.type === 'note' ? (n.width || 180) : n.type === 'junction' ? 20 : 180;
+          const nh = n.type === 'note' ? (n.height || 100) : n.type === 'junction' ? 20 : 55;
           return n.x + nw > minX && n.x < maxX && n.y + nh > minY && n.y < maxY;
         }).map(n => n.id);
         if (inside.length > 0) setSelectedNodeIds(new Set(inside));
@@ -591,7 +591,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   const bounds = useMemo(() => {
     if (!flow.nodes.length) return { minX: 0, minY: 0, maxX: 400, maxY: 300 };
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    flow.nodes.forEach(n => { const w = n.type === 'note' ? (n.width || 180) : n.type === 'junction' ? 28 : 168; const h = n.type === 'note' ? (n.height || 100) : n.type === 'junction' ? 28 : 70; minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); maxX = Math.max(maxX, n.x + w); maxY = Math.max(maxY, n.y + h); });
+    flow.nodes.forEach(n => { const w = n.type === 'note' ? (n.width || 180) : n.type === 'junction' ? 20 : 180; const h = n.type === 'note' ? (n.height || 100) : n.type === 'junction' ? 20 : 55; minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); maxX = Math.max(maxX, n.x + w); maxY = Math.max(maxY, n.y + h); });
     return { minX: minX - 40, minY: minY - 40, maxX: maxX + 40, maxY: maxY + 40 };
   }, [flow.nodes]);
   const worldW = bounds.maxX - bounds.minX;
@@ -698,10 +698,9 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
               if (!a || !b) return null;
               const getPort = (node, isSource) => {
                 const noteH = node.height || 100;
-                const nodeW = 168;
-                const nodeH = 70;
-                const inputPortY = 13; // matches .clean-node .node-input { top: 13px }
-                const outputPortY = nodeH - 8; // bottom area where output ports are
+                const nodeW = 180; // avg node width
+                const inputPortY = 13; // matches .node-input { top: 13px }
+                const outputPortY = 46; // bottom output row area
                 return isSource
                   ? { x: node.x + (node.type === 'junction' ? 12 : nodeW), y: node.y + (node.type === 'junction' ? 12 : node.type === 'note' ? noteH / 2 : outputPortY) }
                   : { x: node.x, y: node.y + (node.type === 'junction' ? 12 : node.type === 'note' ? noteH / 2 : inputPortY) };
@@ -733,9 +732,9 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
           if (!srcNode) return null;
           const cr = canvasRef.current?.getBoundingClientRect();
           if (!cr) return null;
-          const noteH = srcNode.height || 100; const nodeW = 168;
-          const sx = (srcNode.x + (srcNode.type === 'junction' ? 12 : nodeW)) * zoom + pan.x;
-          const sy = (srcNode.y + (srcNode.type === 'junction' ? 12 : srcNode.type === 'note' ? noteH / 2 : 62)) * zoom + pan.y;
+          const noteH = srcNode.height || 100;
+          const sx = (srcNode.x + (srcNode.type === 'junction' ? 12 : 180)) * zoom + pan.x;
+          const sy = (srcNode.y + (srcNode.type === 'junction' ? 12 : srcNode.type === 'note' ? noteH / 2 : 46)) * zoom + pan.y;
           const ex = dragConnection.clientX - cr.left;
           const ey = dragConnection.clientY - cr.top;
           const mx = (sx + ex) / 2;
@@ -848,7 +847,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
             }}>
             <svg viewBox={`${bounds.minX} ${bounds.minY} ${worldW} ${worldH}`}>
               <rect x={bounds.minX} y={bounds.minY} width={worldW} height={worldH} fill="#1a2e2420" rx="4" />
-              {flow.nodes.map(n => <rect key={n.id} x={n.x} y={n.y} width={n.type === 'junction' ? 28 : n.type === 'note' ? (n.width || 180) : 168} height={n.type === 'junction' ? 28 : n.type === 'note' ? (n.height || 100) : 40} rx="5" fill={n.type === 'event' ? '#5ee0a660' : n.type === 'condition' ? '#f4d77e60' : n.type === 'loop' ? '#89c4f460' : n.type === 'note' ? '#ffe08260' : n.type === 'junction' ? '#ce93d860' : '#bec8c160'} />)}
+              {flow.nodes.map(n => <rect key={n.id} x={n.x} y={n.y} width={n.type === 'junction' ? 20 : n.type === 'note' ? (n.width || 180) : 180} height={n.type === 'junction' ? 20 : n.type === 'note' ? (n.height || 100) : 35} rx="4" fill={n.type === 'event' ? '#5ee0a660' : n.type === 'condition' ? '#f4d77e60' : n.type === 'loop' ? '#89c4f460' : n.type === 'note' ? '#ffe08260' : n.type === 'junction' ? '#ce93d860' : '#bec8c160'} />)}
               <rect className="viewport" x={-(pan.x / zoom) + bounds.minX} y={-(pan.y / zoom) + bounds.minY} width={(canvasRef.current?.clientWidth || 800) / zoom} height={(canvasRef.current?.clientHeight || 600) / zoom} onPointerDown={e => { e.stopPropagation(); e.preventDefault(); const minimap = e.target.closest('.flow-minimap'); if (minimap?._drag) minimap._drag(e); }} style={{ cursor: 'grab', pointerEvents: 'auto' }} />
             </svg>
           </div>
