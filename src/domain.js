@@ -5,8 +5,8 @@ export { STEP_TYPES, ROLES };
 export const uid=p=>{const uuid=(()=>{try{if(crypto?.randomUUID)return crypto.randomUUID()}catch{}const a='xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx';return a.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==='x'?r:r&0x3|0x8).toString(16)})})();return`${p}_${uuid}`};
 const defaultExtras=d=>Object.fromEntries(Object.entries(d).filter(([key])=>!['name','duration_mode','planned_duration_ms','recovery_behavior'].includes(key)));
 export const step=(type='instruction',x={})=>{const d=STEP_DEFAULTS[type]||STEP_DEFAULTS.instruction;return{step_id:uid('step'),type,name:d.name,name_i18n:{zh:'',ja:'',en:''},role:'custom',appearance:{font_size:null,alignment:null,color:null,background:null},duration_mode:d.duration_mode,planned_duration_ms:d.planned_duration_ms,content:'',content_i18n:{zh:'',ja:'',en:''},stimulus_id:'',questionnaire_id:'',analysis_label:'',is_analysis_window:false,allow_skip:true,allow_retry:false,required:true,recovery_behavior:d.recovery_behavior||'resume_remaining',source_mode:MEDIA_TYPES.includes(type)?'url':'none',source_url:'',asset_id:'',file_name:'',start_mode:'auto',auto_advance:true,show_controls:true,muted:false,loop:false,volume:1,...defaultExtras(d),...x}};
-export const trial=(x={})=>({trial_id:uid('trial'),name:'New trial',condition:'',repeat_count:1,layout:{background:'#fffef9',foreground:'#17221d',content_width:900,alignment:'center',padding:48,gap:24,show_progress:true,show_step_type:true,border_radius:12},steps:[step()],...x});
-export const block=(x={})=>({block_id:uid('block'),name:'New block',description:'',order_rule:'fixed',repeat_count:1,trials:[trial()],...x});
+export const trial=(x={})=>({trial_id:uid('trial'),name:'New trial',condition:'',repeat_count:1,iti_jitter_ms:0,iti_jitter_distribution:'uniform',layout:{background:'#fffef9',foreground:'#17221d',content_width:900,alignment:'center',padding:48,gap:24,show_progress:true,show_step_type:true,border_radius:12},steps:[step()],...x});
+export const block=(x={})=>({block_id:uid('block'),name:'New block',description:'',order_rule:'fixed',repeat_count:1,is_practice:false,max_consecutive_same:0,no_immediate_repeat:false,trials:[trial()],...x});
 export const protocol=(x={})=>({schema_version:'1.0.0',protocol_id:uid('protocol'),project_id:uid('project'),name:'Untitled experiment',version:1,version_name:'Draft 1',status:'draft',archived_at:null,created_at:new Date().toISOString(),updated_at:new Date().toISOString(),frozen_at:null,config_hash:null,app_version:APP_VERSION,blocks:[block()],stimuli:[],questionnaires:[],...x});
 const canonical=(v,seen=new WeakSet())=>{if(v&&typeof v==='object'){if(seen.has(v))return'[Circular]';seen.add(v)}return Array.isArray(v)?v.map(item=>canonical(item,seen)):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k],seen)])):v};
 export async function hashProtocol(p){const clean={...p,config_hash:null,frozen_at:null,updated_at:null,archived_at:null,created_at:null};const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(canonical(clean))));return [...new Uint8Array(d)].map(x=>x.toString(16).padStart(2,'0')).join('')}
@@ -25,11 +25,15 @@ export function validateProtocol(p){
     if(!b.name?.trim())errors.push(`${blockPath}: «Block name» is required — enter a name for this block`);
     if(!['fixed','random','latin_square','manual'].includes(b.order_rule))errors.push(`${blockPath}: invalid order rule`);
     if(!Number.isFinite(Number(b.repeat_count))||Number(b.repeat_count)<1)errors.push(`${blockPath}: «Repeat» must be at least 1`);
+    if(b.no_immediate_repeat&&b.order_rule==='random'&&b.trials?.length<3)warnings.push(`${blockPath}: «No immediate repeat» is on but only ${b.trials?.length||0} trial(s) exist — need at least 3 for effective shuffling`);
+    if(Number(b.max_consecutive_same)>0&&b.order_rule==='random'&&b.trials?.length<4)warnings.push(`${blockPath}: «Max consecutive same» constraint needs at least 4 trials with multiple conditions`);
     if(!b.trials?.length)errors.push(`${blockPath} has no Trials — click "+ Add trial"`);
     b.trials?.forEach((t,ti)=>{
       const trialPath=`${blockPath} / Trial ${ti+1}`;add(t.trial_id,trialPath);
       if(!t.name?.trim())errors.push(`${trialPath}: «Trial name» is required`);
       if(!Number.isFinite(Number(t.repeat_count))||Number(t.repeat_count)<1)errors.push(`${trialPath}: «Repeat» must be at least 1`);
+      if(!Number.isFinite(Number(t.iti_jitter_ms))||Number(t.iti_jitter_ms)<0)errors.push(`${trialPath}: «ITI jitter» must be a non-negative number`);
+      if(!['uniform','normal','exponential','fixed'].includes(t.iti_jitter_distribution||'fixed'))errors.push(`${trialPath}: «Jitter distribution» must be uniform, normal, exponential, or fixed`);
       if(!t.steps?.length)errors.push(`${trialPath} has no Steps — click a step type button (e.g. "+ instruction")`);
       t.steps?.forEach((s,si)=>{
         const stepPath=`${trialPath} / Step ${si+1}`;add(s.step_id,stepPath);
@@ -149,6 +153,185 @@ export function protocolDiff(previous,next){
 const samQuestionnaire=()=>({questionnaire_id:uid('questionnaire'),name:'SAM and emotion label',questions:[{question_id:uid('question'),type:'sam_valence',required:true,prompt_i18n:{zh:'此刻您的愉悦程度如何？',ja:'現在の快・不快の程度を教えてください。',en:'How pleasant do you feel right now?'},scale_min:1,scale_max:9},{question_id:uid('question'),type:'sam_arousal',required:true,prompt_i18n:{zh:'此刻您的唤醒程度如何？',ja:'現在の覚醒度を教えてください。',en:'How aroused do you feel right now?'},scale_min:1,scale_max:9},{question_id:uid('question'),type:'single_choice',required:true,prompt_i18n:{zh:'请选择最符合的情绪标签',ja:'最も近い感情ラベルを選んでください',en:'Choose the closest emotion label'},options_i18n:{zh:['A','B','C','D','E','F'],ja:['A','B','C','D','E','F'],en:['A','B','C','D','E','F']}}]});
 export function emotionTemplate(){const conditions=['HVHA','LVHA','LVLA','HVLA','NVLA'],sharedQ=samQuestionnaire();return protocol({name:'Five-condition emotion physiology experiment',version_name:'Emotion template v1',blocks:[block({name:'Main emotion block',order_rule:'latin_square',trials:conditions.map((c,i)=>trial({name:`Emotion trial ${i+1}`,condition:c,steps:[step('fixation',{name:'Baseline',role:'baseline',analysis_label:'baseline',is_analysis_window:true,planned_duration_ms:30000}),step('video',{name:`${c} video`,role:'stimulus',analysis_label:'stimulus',is_analysis_window:true,stimulus_id:c}),step('questionnaire',{name:'SAM and emotion label',duration_mode:'manual',questionnaire_id:sharedQ.questionnaire_id,questionnaire:samQuestionnaire()}),step('rest',{name:'Recovery',role:'recovery',analysis_label:'recovery',is_analysis_window:true,planned_duration_ms:30000})]}))})],stimuli:conditions.map(c=>({stimulus_id:c,name:c,type:'video',file_name:`${c}.mp4`,checksum:'',metadata:{target_condition:c}})),questionnaires:[sharedQ]})}
 
+// ── Stroop Task Template ──
+// Classic color-word Stroop: participants see color names displayed in colored ink
+// and must respond with the ink color (not the word). Congruent = word matches ink,
+// Incongruent = word conflicts with ink.
+function stroopStimuli() {
+  const colors = [
+    { name: 'Red',    hex: '#E53935', key: 'r' },
+    { name: 'Green',  hex: '#43A047', key: 'g' },
+    { name: 'Blue',   hex: '#1E88E5', key: 'b' },
+    { name: 'Yellow', hex: '#FDD835', key: 'y' },
+  ];
+  const trials = [];
+  // Generate congruent (word=color) and incongruent (word≠color) trials
+  colors.forEach(ink => {
+    colors.forEach(word => {
+      const congruency = ink.name === word.name ? 'congruent' : 'incongruent';
+      trials.push({
+        condition: congruency,
+        word: word.name,
+        ink_color: ink.name,
+        ink_hex: ink.hex,
+        correct_key: ink.key,
+      });
+    });
+  });
+  return { colors, trials };
+}
+
+export function stroopTemplate() {
+  const { trials: stroopTrials } = stroopStimuli();
+  const practiceBlock = block({
+    name: 'Stroop practice',
+    is_practice: true,
+    order_rule: 'random',
+    repeat_count: 1,
+    max_consecutive_same: 2,
+    trials: stroopTrials.slice(0, 8).map((t, i) => trial({
+      name: `Practice ${i + 1}`,
+      condition: t.condition,
+      steps: [
+        step('fixation', { name: 'Fixation', planned_duration_ms: 500, show_countdown_ring: false }),
+        step('response', {
+          name: `Stroop: ${t.word} in ${t.ink_color}`,
+          duration_mode: 'fixed',
+          planned_duration_ms: 2000,
+          response_variable: 'stroop_response',
+          response_required: true,
+          response_auto_advance: true,
+          response_options: [
+            { value: t.correct_key, key: t.correct_key, label_i18n: { en: t.ink_color, zh: t.ink_color, ja: t.ink_color } },
+          ],
+          content_i18n: { en: t.word, zh: t.word, ja: t.word },
+          appearance: { color: t.ink_hex, font_size: '2.5rem', alignment: 'center' },
+        }),
+        step('rest', { name: 'ITI', planned_duration_ms: 500, show_countdown_ring: false }),
+      ],
+      iti_jitter_ms: 300,
+      iti_jitter_distribution: 'uniform',
+    })),
+  });
+  const mainBlock = block({
+    name: 'Stroop main task',
+    order_rule: 'random',
+    repeat_count: 2,
+    max_consecutive_same: 3,
+    no_immediate_repeat: false,
+    trials: stroopTrials.map((t, i) => trial({
+      name: `Stroop ${i + 1}`,
+      condition: t.condition,
+      steps: [
+        step('fixation', { name: 'Fixation', planned_duration_ms: 500, show_countdown_ring: false }),
+        step('response', {
+          name: `Stroop: ${t.word} in ${t.ink_color}`,
+          duration_mode: 'fixed',
+          planned_duration_ms: 2000,
+          response_variable: 'stroop_response',
+          response_required: true,
+          response_auto_advance: true,
+          response_options: [
+            { value: t.correct_key, key: t.correct_key, label_i18n: { en: t.ink_color, zh: t.ink_color, ja: t.ink_color } },
+          ],
+          content_i18n: { en: t.word, zh: t.word, ja: t.word },
+          appearance: { color: t.ink_hex, font_size: '2.5rem', alignment: 'center' },
+        }),
+        step('rest', { name: 'ITI', planned_duration_ms: 500, show_countdown_ring: false }),
+      ],
+      iti_jitter_ms: 300,
+      iti_jitter_distribution: 'uniform',
+    })),
+  });
+  return protocol({
+    name: 'Stroop color-word task',
+    version_name: 'Stroop template v1',
+    blocks: [practiceBlock, mainBlock],
+    stimuli: [],
+    questionnaires: [],
+  });
+}
+
+// ── Go/No-Go Task Template ──
+// Participants respond to "Go" stimuli and withhold response to "No-Go" stimuli.
+// Typically 70% Go, 30% No-Go to build prepotent response tendency.
+export function gonogoTemplate() {
+  const goStimulus = { type: 'go', label: 'Go (press space)', key: ' ', color: '#43A047', shape: '●' };
+  const nogoStimulus = { type: 'nogo', label: 'No-Go (withhold)', key: null, color: '#E53935', shape: '■' };
+  // 70% Go, 30% No-Go
+  const trialDefs = [];
+  for (let i = 0; i < 40; i++) trialDefs.push(i < 28 ? goStimulus : nogoStimulus);
+
+  const practiceBlock = block({
+    name: 'Go/No-Go practice',
+    is_practice: true,
+    order_rule: 'random',
+    repeat_count: 1,
+    trials: trialDefs.slice(0, 10).map((t, i) => trial({
+      name: `Practice ${i + 1}`,
+      condition: t.type,
+      steps: [
+        step('fixation', { name: 'Fixation', planned_duration_ms: 500, show_countdown_ring: false }),
+        step('response', {
+          name: t.label,
+          duration_mode: 'fixed',
+          planned_duration_ms: 1000,
+          response_variable: 'gonogo_response',
+          response_required: false,
+          response_auto_advance: true,
+          response_options: [
+            { value: 'press', key: ' ', label_i18n: { en: 'Press', zh: '按键', ja: '押す' } },
+          ],
+          content_i18n: { en: t.shape, zh: t.shape, ja: t.shape },
+          appearance: { color: t.color, font_size: '3rem', alignment: 'center' },
+        }),
+        step('rest', { name: 'ITI', planned_duration_ms: 500, show_countdown_ring: false }),
+      ],
+      iti_jitter_ms: 250,
+      iti_jitter_distribution: 'uniform',
+    })),
+  });
+
+  const mainBlock = block({
+    name: 'Go/No-Go main task',
+    order_rule: 'random',
+    repeat_count: 2,
+    max_consecutive_same: 4,
+    no_immediate_repeat: false,
+    trials: trialDefs.map((t, i) => trial({
+      name: `Trial ${i + 1}`,
+      condition: t.type,
+      steps: [
+        step('fixation', { name: 'Fixation', planned_duration_ms: 500, show_countdown_ring: false }),
+        step('response', {
+          name: t.label,
+          duration_mode: 'fixed',
+          planned_duration_ms: 1000,
+          response_variable: 'gonogo_response',
+          response_required: false,
+          response_auto_advance: true,
+          response_options: [
+            { value: 'press', key: ' ', label_i18n: { en: 'Press', zh: '按键', ja: '押す' } },
+          ],
+          content_i18n: { en: t.shape, zh: t.shape, ja: t.shape },
+          appearance: { color: t.color, font_size: '3rem', alignment: 'center' },
+        }),
+        step('rest', { name: 'ITI', planned_duration_ms: 500, show_countdown_ring: false }),
+      ],
+      iti_jitter_ms: 250,
+      iti_jitter_distribution: 'uniform',
+    })),
+  });
+
+  return protocol({
+    name: 'Go/No-Go inhibition task',
+    version_name: 'Go/No-Go template v1',
+    blocks: [practiceBlock, mainBlock],
+    stimuli: [],
+    questionnaires: [],
+  });
+}
+
 
 // Per-step content-level checks — softer than protocol validation; used for inline hints.
 export function stepContentIssues(step, stimuli, questionnaires) {
@@ -180,6 +363,11 @@ export function stepContentIssues(step, stimuli, questionnaires) {
       if (!Object.values(q.prompt_i18n || {}).some(t => t?.trim())) issues.push({ kind: 'warn', key: 'empty_prompt', message: `Q${qi + 1}: «Prompt» is empty — add a question title in at least one language` });
       if (['single_choice','multiple_choice'].includes(q.type) && q.required && !Object.values(q.options_i18n || {}).some(o => o?.some(x => x?.trim()))) issues.push({ kind: 'error', key: 'missing_options', message: `Q${qi + 1}: «Options» are empty — add at least one choice option` });
     });
+  }
+  if (step.type === 'attention_check') {
+    if (!step.attention_expected_key?.trim()) issues.push({ kind: 'warn', key: 'missing_expected_key', message: '«Expected key» is empty — set the key the participant must press (e.g. space)' });
+    const promptEmpty = !Object.values(step.attention_prompt_i18n || {}).some(t => t?.trim());
+    if (promptEmpty) issues.push({ kind: 'warn', key: 'empty_prompt', message: '«Prompt» is empty — the participant will not know what to do' });
   }
   if ((step.type === 'fixation' || step.type === 'timer' || step.type === 'rest') && step.duration_mode === 'fixed' && (!step.planned_duration_ms || step.planned_duration_ms <= 0)) {
     issues.push({ kind: 'warn', key: 'zero_dur', message: '«Duration» is 0ms — this step will end immediately unless you set a duration' });

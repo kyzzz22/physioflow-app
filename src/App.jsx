@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { block, createNextProtocolVersion, duplicateProtocolAsProject, emotionTemplate, freezeProtocol, unfreezeProtocol, protocol, STEP_TYPES, step, trial, validateProtocol, moveItem, stepContentIssues } from './domain';
+import { block, createNextProtocolVersion, duplicateProtocolAsProject, emotionTemplate, freezeProtocol, gonogoTemplate, stroopTemplate, unfreezeProtocol, protocol, STEP_TYPES, step, trial, validateProtocol, moveItem, stepContentIssues } from './domain';
 import { clearCurrentRun, getStorageInfo, loadCurrentRunAsync, loadProtocols, loadSessions, openDataDirectory, saveProtocols, selectDataDirectory } from './storage';
 import { saveAsset } from './fsStorage.js';
 import RunnerPage from './RuntimeRunnerPage';
@@ -477,6 +477,8 @@ export default function App() {
       onOpen={open}
       onNew={() => addAndOpen(protocol())}
       onTemplate={() => addAndOpen(emotionTemplate())}
+      onStroopTemplate={() => addAndOpen(stroopTemplate())}
+      onGonogoTemplate={() => addAndOpen(gonogoTemplate())}
       onImport={addAndOpen}
       onRun={value => { setPreRunCheck(value); }}
       onNextVersion={value => addAndOpen(createNextProtocolVersion(value))}
@@ -686,6 +688,17 @@ function Builder({ value, onChange, onSave, onBack, onRun, undo, redo, canUndo, 
               <select value={b.repeat_count ?? 1} disabled={locked} style={{ width: 70 }} onChange={e => update(n => n.blocks[bi].repeat_count = Number(e.target.value))} title="Repeat count">
                 {[1, 2, 3, 4, 5, 6, 7, 8].map(v => <option key={v} value={v}>×{v}</option>)}
               </select>
+              <label title="Practice block — excluded from analysis" style={{ fontSize: '.72rem', display: 'flex', alignItems: 'center', gap: '.2rem', whiteSpace: 'nowrap' }}>
+                <input type="checkbox" checked={b.is_practice || false} disabled={locked} onChange={e => update(n => n.blocks[bi].is_practice = e.target.checked)} /> Practice
+              </label>
+              {b.order_rule === 'random' && <>
+                <label title="Max consecutive trials with same condition (0 = no limit)" style={{ fontSize: '.72rem', display: 'flex', alignItems: 'center', gap: '.2rem' }}>
+                  <input type="number" min="0" max="10" value={b.max_consecutive_same || 0} disabled={locked} style={{ width: 36, padding: '.15rem' }} onChange={e => update(n => n.blocks[bi].max_consecutive_same = Number(e.target.value))} /> max same
+                </label>
+                <label title="No immediate repeat of the same condition" style={{ fontSize: '.72rem', display: 'flex', alignItems: 'center', gap: '.2rem', whiteSpace: 'nowrap' }}>
+                  <input type="checkbox" checked={b.no_immediate_repeat || false} disabled={locked} onChange={e => update(n => n.blocks[bi].no_immediate_repeat = e.target.checked)} /> no repeat
+                </label>
+              </>}
               <button className="move-btn" disabled={locked || bi === 0} onClick={() => update(n => { const items = moveItem(n.blocks, bi, -1); n.blocks = items; })} title="Move up">▲</button>
               <button className="move-btn" disabled={locked || bi === p.blocks.length - 1} onClick={() => update(n => { const items = moveItem(n.blocks, bi, 1); n.blocks = items; })} title="Move down">▼</button>
               <button className="icon" disabled={locked} onClick={() => confirmRemove(bi)}>×</button>
@@ -705,6 +718,12 @@ function Builder({ value, onChange, onSave, onBack, onRun, undo, redo, canUndo, 
                   <select value={t.repeat_count || 1} disabled={locked} style={{ width: 70 }} onChange={e => update(n => n.blocks[bi].trials[ti].repeat_count = Number(e.target.value))} title="Repeat count">
                     {[1, 2, 3, 4, 5, 6, 7, 8].map(v => <option key={v} value={v}>×{v}</option>)}
                   </select>
+                  <label title="ITI jitter (ms)" style={{ fontSize: '.72rem', display: 'flex', alignItems: 'center', gap: '.2rem' }}>
+                    <input type="number" min="0" max="10000" step="50" value={t.iti_jitter_ms || 0} disabled={locked} style={{ width: 52, padding: '.15rem' }} onChange={e => update(n => n.blocks[bi].trials[ti].iti_jitter_ms = Number(e.target.value))} /> ms jitter
+                  </label>
+                  {Number(t.iti_jitter_ms || 0) > 0 && <select value={t.iti_jitter_distribution || 'fixed'} disabled={locked} style={{ width: 90, fontSize: '.72rem' }} onChange={e => update(n => n.blocks[bi].trials[ti].iti_jitter_distribution = e.target.value)} title="Jitter distribution">
+                    {['fixed', 'uniform', 'normal', 'exponential'].map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>}
                   <button className="move-btn" disabled={locked || ti === 0} onClick={() => update(n => { n.blocks[bi].trials = moveItem(n.blocks[bi].trials, ti, -1); })} title="Move up">▲</button>
                   <button className="move-btn" disabled={locked || ti === b.trials.length - 1} onClick={() => update(n => { n.blocks[bi].trials = moveItem(n.blocks[bi].trials, ti, 1); })} title="Move down">▼</button>
                   <button className="icon" disabled={locked} onClick={() => confirmRemove(bi, ti)}>×</button>

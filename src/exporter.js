@@ -245,3 +245,148 @@ export function downloadBundle(files, prefix) {
   anchor.href=URL.createObjectURL(zipBundle(files));anchor.download=`${safePrefix}_session_bundle.zip`;anchor.click();
   setTimeout(()=>{try{URL.revokeObjectURL(anchor.href)}catch{/* ignore */}},30000);
 }
+
+// ── BIDS-compatible export ──
+// BIDS v1.8.0 behavioral events format
+// See: https://bids-specification.readthedocs.io/en/stable/modality-specific-files/behavioral-experiments.html
+
+const tsvesc = value => {
+  if (value == null || value === '') return 'n/a';
+  const s = String(value);
+  // In TSV, tabs and newlines must be escaped
+  return s.includes('\t') || s.includes('\n') ? `"${s.replace(/"/g, '""').replace(/\n/g, '\\n').replace(/\r/g, '\\r')}"` : s;
+};
+
+function bidsEventTsv(events) {
+  const rows = events.map(e => [
+    (e.elapsed_monotonic_ms / 1000).toFixed(3),                    // onset in seconds
+    (e.metadata?.duration_ms ? (e.metadata.duration_ms / 1000).toFixed(3) : 'n/a'), // duration
+    e.condition || e.event_type || 'n/a',                           // trial_type
+    e.metadata?.reaction_time_ms != null ? (e.metadata.reaction_time_ms / 1000).toFixed(3) : 'n/a',
+    e.block_id || 'n/a',
+    e.trial_id || 'n/a',
+    e.step_id || 'n/a',
+    e.condition || 'n/a',
+    e.event_type || 'n/a',
+  ].map(tsvesc).join('\t'));
+  return 'onset\tduration\ttrial_type\tresponse_time\tblock_id\ttrial_id\tstep_id\tcondition\tevent_type\n' + rows.join('\n') + '\n';
+}
+
+function bidsEventsSidecar(session, protocol) {
+  const sidecar = {
+    TaskName: protocol.name || 'experiment',
+    TaskDescription: 'PhysioFlow experiment session',
+    Instructions: 'See protocol.json for full trial structure',
+    CogAtlasID: '',
+    CogPOID: '',
+    InstitutionName: '',
+    InstitutionAddress: '',
+    DeviceSerialNumber: '',
+    SampledChannels: 'See data_dictionary.csv',
+    SampleRate: 'See data_dictionary.csv',
+    Manufacturer: 'PhysioFlow',
+    ManufacturersModelName: `PhysioFlow v${protocol.app_version || '0.2.0'}`,
+    SoftwareVersions: `PhysioFlow v${protocol.app_version || '0.2.0'}`,
+    TaskDescription_i18n: {
+      participant_id: session.participant_id || '',
+      protocol_hash: session.protocol_hash || '',
+      run_mode: session.run_mode || '',
+    },
+    columns: {
+      onset: { Description: 'Event onset in seconds from session start (monotonic clock).', Units: 'seconds' },
+      duration: { Description: 'Event duration in seconds.', Units: 'seconds' },
+      trial_type: { Description: 'Trial condition label or event type.' },
+      response_time: { Description: 'Participant response time in seconds. n/a when not applicable.', Units: 'seconds' },
+      block_id: { Description: 'Block identifier from protocol hierarchy.' },
+      trial_id: { Description: 'Trial identifier from protocol hierarchy.' },
+      step_id: { Description: 'Step identifier from protocol hierarchy.' },
+      condition: { Description: 'Trial condition label.' },
+      event_type: { Description: 'Event type: step_entered, step_completed, media_play_started, manual_marker, etc.' },
+    },
+  };
+  return JSON.stringify(sidecar, null, 2);
+}
+
+function bidsParticipantsTsv(session) {
+  const row = [
+    `sub-${String(session.participant_id || '').replace(/[^a-zA-Z0-9]/g, '')}`,
+    session.session_id || '',
+    session.protocol_name || '',
+    session.run_mode || 'formal',
+    session.started_at || 'n/a',
+    session.ended_at || 'n/a',
+    session.participant_language || 'n/a',
+    session.sync_method || 'same_computer_clock',
+    session.timezone || 'Asia/Tokyo',
+    session.sampling_rate || 'n/a',
+  ].map(tsvesc).join('\t');
+  return 'participant_id\tsession_id\tprotocol_name\trun_mode\tstarted_at\tended_at\tparticipant_language\tsync_method\ttimezone\tsampling_rate\n' + row + '\n';
+}
+
+export function bidsBundle(session, protocol, events, responses = []) {
+  const subId = `sub-${String(session.participant_id || 'unknown').replace(/[^a-zA-Z0-9]/g, '')}`;
+  const sesId = `ses-${(session.started_at || '').replace(/[^0-9]/g, '').slice(0, 8) || '01'}`;
+  const taskName = (protocol.name || 'task').replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'experiment';
+  const prefix = `${subId}/${sesId}/beh/${subId}_${sesId}_task-${taskName}`;
+
+  const files = {};
+  files[`${prefix}_events.tsv`] = bidsEventTsv(events);
+  files[`${prefix}_events.json`] = bidsEventsSidecar(session, protocol);
+  files[`${prefix}_beh.json`] = JSON.stringify({
+    TaskName: protocol.name,
+    ParticipantId: session.participant_id,
+    SessionId: session.session_id,
+    ProtocolVersion: protocol.version,
+    ProtocolHash: session.protocol_hash || '',
+    RunMode: session.run_mode,
+    EventCount: events.length,
+    ResponseCount: responses.length,
+  }, null, 2);
+  files[`participants.tsv`] = bidsParticipantsTsv(session);
+  files[`dataset_description.json`] = JSON.stringify({
+    Name: protocol.name || 'PhysioFlow experiment',
+    BIDSVersion: '1.8.0',
+    DatasetType: 'raw',
+    License: 'CC0',
+    Authors: [''],
+    HowToAcknowledge: '',
+    Funding: [''],
+    EthicsApprovals: [''],
+    ReferencesAndLinks: [''],
+    DatasetDOI: '',
+    GeneratedBy: [{ Name: 'PhysioFlow', Version: protocol.app_version || '0.2.0' }],
+  }, null, 2);
+  files['README'] = [
+    'BIDS-compatible PhysioFlow session export',
+    '',
+    `Participant: ${session.participant_id}`,
+    `Session: ${session.session_id}`,
+    `Protocol: ${protocol.name}`,
+    '',
+    'Directory structure:',
+    `  ${subId}/`,
+    `    ${sesId}/`,
+    `      beh/`,
+    `        *_events.tsv   — Event timing in BIDS format`,
+    `        *_events.json  — Column descriptions (sidecar)`,
+    `        *_beh.json     — Session-level behavioral metadata`,
+    '  participants.tsv  — Participant metadata',
+    '  dataset_description.json',
+    '',
+    'For full data, also export the standard PhysioFlow session ZIP.',
+  ].join('\n');
+
+  return files;
+}
+
+export function downloadBidsBundle(session, protocol, events, responses = []) {
+  const files = bidsBundle(session, protocol, events, responses);
+  const subId = `sub-${String(session.participant_id || 'unknown').replace(/[^a-zA-Z0-9]/g, '')}`;
+  const anchor = document.createElement('a');
+  const safePrefix = `${subId}_bids_export`;
+  const zip = zipBundle(files);
+  anchor.href = URL.createObjectURL(zip);
+  anchor.download = `${safePrefix}.zip`;
+  anchor.click();
+  setTimeout(() => { try { URL.revokeObjectURL(anchor.href); } catch { /* ignore */ } }, 30000);
+}

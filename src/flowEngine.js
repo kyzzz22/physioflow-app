@@ -85,7 +85,7 @@ export function compileTrialFlow(trial, runtimeValues = {}) {
 export function validateFlow(flow, steps = []) {
   const errors = [], warnings = [], nodes = flow?.nodes || [], edges = flow?.edges || [];
   const responseVariables=steps.filter(step=>step.type==='response').flatMap(step=>[step.response_variable||'response',`answer.${step.response_variable||'response'}`,`answers.${step.response_variable||'response'}`]);
-  const knownVariables=new Set(['','participant_language','participant_id','order_row','condition',...responseVariables,...steps.flatMap(step=>step.questionnaire?.questions||[]).flatMap(question=>[question.question_id,`answer.${question.question_id}`,`answers.${question.question_id}`])]);
+  const knownVariables=new Set(['','participant_language','participant_id','order_row','condition','last_accuracy','last_rt_ms','cumulative_accuracy','cumulative_rt_sum_ms','cumulative_rt_count','last_attention_passed','attention_fail_count','attention_total_count','last_step_id',...responseVariables,...steps.flatMap(step=>step.questionnaire?.questions||[]).flatMap(question=>[question.question_id,`answer.${question.question_id}`,`answers.${question.question_id}`])]);
   const starts = nodes.filter(node => node.type === 'start'), ends = nodes.filter(node => node.type === 'end');
   if (starts.length !== 1) errors.push(`Flow needs exactly one Start node (found ${starts.length})`);
   if (!ends.length) errors.push('Flow needs at least one End node');

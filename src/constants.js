@@ -1,13 +1,14 @@
 // constants.js — Shared constants, palette, and type metadata
 
-export const STEP_TYPES = ['instruction','fixation','timer','video','audio','image','questionnaire','response','manual_event','rest','device_check'];
+export const STEP_TYPES = ['instruction','fixation','timer','video','audio','image','questionnaire','response','manual_event','rest','device_check','attention_check','screen_calibration'];
 
 export const ROLES = ['baseline','stimulus','recovery','task','exclude','custom'];
 
 export const PALETTE = [
   { title: 'Presentation', items: [['instruction', 'Aa', 'Instruction'], ['fixation', '＋', 'Fixation'], ['timer', '◷', 'Timer'], ['rest', '☕', 'Rest']] },
   { title: 'Media', items: [['video', '▶', 'Video'], ['audio', '♫', 'Audio'], ['image', '▧', 'Image']] },
-  { title: 'Interaction', items: [['questionnaire', '☷', 'Questionnaire'], ['response', '↵', 'Response'], ['manual_event', '◆', 'Manual event'], ['device_check', '✓', 'Device check']] },
+  { title: 'Interaction', items: [['questionnaire', '☷', 'Questionnaire'], ['response', '↵', 'Response'], ['attention_check', '⚠', 'Attention check'], ['manual_event', '◆', 'Manual event'], ['device_check', '✓', 'Device check']] },
+  { title: 'Setup', items: [['screen_calibration', '⊞', 'Screen calibration']] },
 ];
 
 export const PALETTE_ICONS = Object.fromEntries(PALETTE.flatMap(g => g.items).map(([type, icon]) => [type, icon]));
@@ -27,6 +28,8 @@ export const STEP_DEFAULTS = {
   ] },
   manual_event:{ name: 'Manual event',duration_mode: 'manual', planned_duration_ms: 0, icon: '◆', operator_confirm_label: 'Confirm event', operator_note_required: false },
   device_check:{ name: 'Device check',duration_mode: 'manual', planned_duration_ms: 0, icon: '✓', device_checks: ['Sensor connected', 'Recording software ready', 'Sync reference prepared'], require_all_device_checks: true },
+  attention_check:{ name: 'Attention check', duration_mode: 'fixed', planned_duration_ms: 3000, icon: '⚠', attention_prompt_i18n: { zh: '请按空格键', ja: 'スペースキーを押してください', en: 'Press the spacebar now' }, attention_expected_key: ' ', attention_timeout_ms: 2000, attention_feedback_duration_ms: 800, attention_pass_feedback_i18n: { zh: '✓ 已检测到响应', ja: '✓ 反応を検出しました', en: '✓ Response detected' }, attention_fail_feedback_i18n: { zh: '✗ 未检测到响应', ja: '✗ 応答が検出されませんでした', en: '✗ No response detected' } },
+  screen_calibration:{ name: 'Screen calibration', duration_mode: 'manual', planned_duration_ms: 0, icon: '⊞', calibration_viewing_distance_cm: 60, calibration_display_width_cm: null, calibration_display_height_cm: null, calibration_check_items: ['Display at native resolution', 'Scaling at 100% in OS settings', 'Brightness at comfortable level', 'Measure viewing distance'], require_all_calibration_checks: true },
 };
 
 export const STEP_GUIDE = {
@@ -84,6 +87,16 @@ export const STEP_GUIDE = {
     summary: 'Operator checkpoint for sensors, acquisition software, or room setup.',
     setup: 'Configure the checklist items that must be ticked before the run can continue.',
     output: 'Exports device_check_completed with item-level pass state, note, and setup timing.',
+  },
+  attention_check: {
+    summary: 'Catch trial to verify participant attention. Shows a prompt and expects a specific keypress within a time window.',
+    setup: 'Configure the prompt, expected key, timeout duration, and pass/fail feedback text. Use in condition nodes with last_attention_passed to branch.',
+    output: 'Exports attention_check_passed / attention_check_failed with reaction time, expected key, and actual key.',
+  },
+  screen_calibration: {
+    summary: 'Pre-experiment display calibration to measure screen dimensions and viewing distance for visual angle calculations.',
+    setup: 'Enter viewing distance and screen dimensions. The operator confirms display settings before the session proceeds.',
+    output: 'Exports calibration measurements and calculated pixels-per-degree value for visual angle reference.',
   },
 };
 

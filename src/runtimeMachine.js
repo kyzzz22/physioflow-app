@@ -8,10 +8,11 @@ function expandUnits(protocol, session) {
   protocol.blocks.forEach((block, blockOrder) => {
     const blockRepeats = Math.max(0, Number(block.repeat_count ?? 1));
     for (let blockRepeat = 0; blockRepeat < blockRepeats; blockRepeat++) {
-      const ordered = resolveTrials(block.trials, block.order_rule, Number(session.order_row ?? 0), session.manual_orders?.[block.block_id] || []);
+      const constraints = { max_consecutive_same: block.max_consecutive_same || 0, no_immediate_repeat: block.no_immediate_repeat || false };
+      const ordered = resolveTrials(block.trials, block.order_rule, Number(session.order_row ?? 0), session.manual_orders?.[block.block_id] || [], constraints);
       ordered.forEach((trial, trialOrder) => {
         const trialRepeats = Math.max(0, Number(trial.repeat_count ?? 1));
-        for (let trialRepeat = 0; trialRepeat < trialRepeats; trialRepeat++) units.push({ block, blockOrder, blockRepeat, trial, trialOrder, trialRepeat });
+        for (let trialRepeat = 0; trialRepeat < trialRepeats; trialRepeat++) units.push({ block, blockOrder, blockRepeat, trial, trialOrder, trialRepeat, iti_jitter_ms: trial.iti_jitter_ms || 0, iti_jitter_distribution: trial.iti_jitter_distribution || 'fixed', is_practice: block.is_practice || false });
       });
     }
   });
@@ -32,6 +33,15 @@ export function createRuntime(protocol, session) {
       order_row: session.order_row,
       answers: {},
       session: { ...session },
+      // Performance tracking for adaptive experiments
+      last_accuracy: null,
+      last_rt_ms: null,
+      cumulative_accuracy: null,
+      cumulative_rt_sum_ms: 0,
+      cumulative_rt_count: 0,
+      last_attention_passed: null,
+      attention_fail_count: 0,
+      attention_total_count: 0,
     },
     completed_steps: [],
     skipped_steps: [],
@@ -60,7 +70,8 @@ export function completeRuntimeStep(runtime, units, answers = []) {
   const current = currentRuntimeItem(state, units);
   if (!current) return { state, units };
   state.completed_steps.push({ unit_index: state.unit_index, node_id: state.node_id, step_id: current.step.step_id, completed_at_epoch_ms: Date.now() });
-  const RESERVED = new Set(['answers', 'session', 'condition', 'participant_id', 'participant_language', 'order_row', 'last_step_id', 'answer']);
+  const RESERVED = new Set(['answers', 'session', 'condition', 'participant_id', 'participant_language', 'order_row', 'last_step_id', 'answer',
+    'last_accuracy', 'last_rt_ms', 'cumulative_accuracy', 'cumulative_rt_sum_ms', 'cumulative_rt_count', 'last_attention_passed', 'attention_fail_count', 'attention_total_count']);
   answers.forEach(answer => {
     state.variables.answers[answer.question_id] = answer.value;
     state.variables[`answer.${answer.question_id}`] = answer.value;
@@ -69,9 +80,43 @@ export function completeRuntimeStep(runtime, units, answers = []) {
       state.variables[answer.question_id] = answer.value;
     }
   });
+  // Track reaction time if provided (Response step type)
+  if (current.step.type === 'response' && answers.some(a => a.reaction_time_ms != null)) {
+    const rt = answers.find(a => a.reaction_time_ms != null)?.reaction_time_ms;
+    state.variables.last_rt_ms = rt;
+    state.variables.cumulative_rt_sum_ms += (rt || 0);
+    state.variables.cumulative_rt_count += 1;
+    state.variables.answer.rt_ms = rt;
+  }
+  // Track accuracy if answer has an expected value
+  if (answers.some(a => a.expected_value != null)) {
+    const acc = answers.filter(a => a.expected_value != null).every(a => String(a.value) === String(a.expected_value));
+    state.variables.last_accuracy = acc;
+    const prevTotal = (runtime.variables.cumulative_accuracy != null) ? (runtime.variables._accuracy_total || 0) : 0;
+    const prevCorrect = (runtime.variables.cumulative_accuracy != null) ? (runtime.variables._accuracy_correct || 0) : 0;
+    state.variables._accuracy_total = prevTotal + 1;
+    state.variables._accuracy_correct = prevCorrect + (acc ? 1 : 0);
+    state.variables.cumulative_accuracy = state.variables._accuracy_total > 0 ? state.variables._accuracy_correct / state.variables._accuracy_total : null;
+    state.variables.answer.correct = acc;
+  }
   state.variables.last_step_id = current.step.step_id;
   state.variables.condition = current.trial.condition;
   return advanceRuntime(state, units, state.node_id);
+}
+
+/** Record the result of an attention check step.
+ *  @param {object} runtime — current runtime state
+ *  @param {boolean} passed — whether the participant responded correctly
+ *  @param {number|null} rtMs — reaction time in ms
+ *  @returns {object} new runtime state
+ */
+export function recordAttentionResult(runtime, passed, rtMs = null) {
+  const state = structuredClone(runtime);
+  state.variables.last_attention_passed = passed;
+  state.variables.attention_total_count = (state.variables.attention_total_count || 0) + 1;
+  if (!passed) state.variables.attention_fail_count = (state.variables.attention_fail_count || 0) + 1;
+  state.variables.last_rt_ms = rtMs;
+  return state;
 }
 
 export function skipRuntimeStep(runtime, units) {

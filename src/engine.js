@@ -1,7 +1,113 @@
 import { compileTrialFlow } from './flowEngine.js';
 
-export function resolveTrials(trials,rule='fixed',n=0,manualOrder=[]){const a=[...trials];const validRules=['fixed','random','latin_square','manual'];if(!validRules.includes(rule)){console.warn(`resolveTrials: unrecognized rule "${rule}" — falling back to fixed`);return a}if(rule==='latin_square'&&a.length){const k=((n%a.length)+a.length)%a.length;return[...a.slice(k),...a.slice(0,k)]}if(rule==='random'){let seed=(n+1)*2654435761;for(let i=a.length-1;i>0;i--){seed=(seed*1664525+1013904223)>>>0;const j=seed%(i+1);[a[i],a[j]]=[a[j],a[i]]}}if(rule==='manual'&&manualOrder.length){const rank=new Map(manualOrder.map((id,index)=>[id,index]));return a.map((trial,index)=>({trial,index})).sort((left,right)=>(rank.get(left.trial.trial_id)??manualOrder.length+left.index)-(rank.get(right.trial.trial_id)??manualOrder.length+right.index)).map(item=>item.trial)}return a}
-export function flattenProtocol(p,runtime=0){const n=(runtime!=null&&typeof runtime==='object')?(runtime.order_row||0):runtime,values=(runtime!=null&&typeof runtime==='object')?runtime:{};return (p?.blocks||[]).flatMap((b,bi)=>resolveTrials(b?.trials||[],b.order_rule,n).flatMap((t,ti)=>compileTrialFlow(t,{...values,condition:t.condition}).map((s,si)=>({block:b,block_order:bi,trial:t,trial_order:ti,step:s,step_order:si}))))}
+export function resolveTrials(trials, rule = 'fixed', n = 0, manualOrder = [], constraints = {}) {
+  const a = [...trials];
+  const validRules = ['fixed', 'random', 'latin_square', 'manual'];
+  const { max_consecutive_same: maxConsec = 0, no_immediate_repeat: noRepeat = false } = constraints || {};
+
+  if (!validRules.includes(rule)) {
+    console.warn(`resolveTrials: unrecognized rule "${rule}" — falling back to fixed`);
+    return a;
+  }
+
+  if (rule === 'latin_square' && a.length) {
+    const k = ((n % a.length) + a.length) % a.length;
+    return [...a.slice(k), ...a.slice(0, k)];
+  }
+
+  if (rule === 'random') {
+    let seed = (n + 1) * 2654435761;
+    const nextRandom = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed; };
+
+    const shuffle = arr => {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = nextRandom() % (i + 1);
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    };
+
+    // Simple shuffle if no constraints
+    if (!noRepeat && !maxConsec) return shuffle(a);
+
+    // Constrained randomization: no immediate repeat of same condition,
+    // and/or max consecutive trials with the same condition
+    const ordered = [];
+    const remaining = [...a];
+
+    while (remaining.length > 0) {
+      if (remaining.length === 1) {
+        ordered.push(...remaining);
+        remaining.length = 0;
+        break;
+      }
+
+      let candidates = [...remaining];
+
+      // Filter out trials that would create an immediate repeat
+      if (noRepeat && ordered.length > 0) {
+        const lastCondition = ordered[ordered.length - 1].condition;
+        candidates = candidates.filter(t => t.condition !== lastCondition);
+      }
+
+      // Filter out trials that would exceed max consecutive same condition
+      if (maxConsec > 0 && ordered.length >= maxConsec) {
+        const recent = ordered.slice(-maxConsec);
+        const allSame = recent.every(t => t.condition === recent[0].condition);
+        if (allSame) {
+          candidates = candidates.filter(t => t.condition !== recent[0].condition);
+        }
+      }
+
+      // Fallback: if constraints eliminated all candidates, relax them
+      if (candidates.length === 0) {
+        candidates = [...remaining];
+      }
+
+      const pick = candidates[nextRandom() % candidates.length];
+      ordered.push(pick);
+      remaining.splice(remaining.indexOf(pick), 1);
+    }
+
+    return ordered;
+  }
+
+  if (rule === 'manual' && manualOrder.length) {
+    const rank = new Map(manualOrder.map((id, index) => [id, index]));
+    return a
+      .map((trial, index) => ({ trial, index }))
+      .sort((left, right) =>
+        (rank.get(left.trial.trial_id) ?? manualOrder.length + left.index) -
+        (rank.get(right.trial.trial_id) ?? manualOrder.length + right.index)
+      )
+      .map(item => item.trial);
+  }
+
+  return a;
+}
+
+/** Generate ITI jitter duration in milliseconds based on the configured distribution. */
+export function generateItiJitter(jitterMs, distribution = 'fixed') {
+  if (!jitterMs || jitterMs <= 0) return 0;
+  switch (distribution) {
+    case 'uniform': return Math.random() * jitterMs;
+    case 'normal': {
+      // Box-Muller: mean=jitterMs/2, sd=jitterMs/4 (99.7% within 0..jitterMs)
+      let u = 0, v = 0;
+      while (u === 0) u = Math.random();
+      while (v === 0) v = Math.random();
+      const z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+      return Math.max(0, Math.min(jitterMs, jitterMs / 2 + z * jitterMs / 4));
+    }
+    case 'exponential': {
+      // Exponential with mean=jitterMs/3, capped at jitterMs
+      return Math.min(jitterMs, -Math.log(Math.max(1e-10, Math.random())) * jitterMs / 3);
+    }
+    case 'fixed':
+    default: return jitterMs;
+  }
+}
+export function flattenProtocol(p,runtime=0){const n=(runtime!=null&&typeof runtime==='object')?(runtime.order_row||0):runtime,values=(runtime!=null&&typeof runtime==='object')?runtime:{};const manualOrders=(runtime!=null&&typeof runtime==='object')?runtime.manual_orders||{}:{};return (p?.blocks||[]).flatMap((b,bi)=>resolveTrials(b?.trials||[],b.order_rule,n,manualOrders[b.block_id]||[],{max_consecutive_same:b.max_consecutive_same||0,no_immediate_repeat:b.no_immediate_repeat||false}).flatMap((t,ti)=>compileTrialFlow(t,{...values,condition:t.condition}).map((s,si)=>({block:b,block_order:bi,trial:t,trial_order:ti,step:s,step_order:si}))))}
 
 const LOG_SCHEMA_VERSION = '1.2.0';
 

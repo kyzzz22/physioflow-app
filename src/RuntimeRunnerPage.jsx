@@ -500,6 +500,20 @@ export default function RuntimeRunnerPage({ data, onDone }) {
 
     {/* Markers sidebar */}
     <aside className="markers" role="complementary" aria-label="Event markers">
+      {/* Quick operator note */}
+      <div className="quick-note">
+        <b>Quick note</b>
+        <textarea
+          rows={2}
+          value={operatorNote}
+          onChange={e => setOperatorNote(e.target.value)}
+          placeholder="Timestamped operator note..."
+          style={{ width: '100%', fontSize: '.72rem', resize: 'vertical' }}
+        />
+        <button onClick={() => { if (operatorNote.trim()) { log('manual_marker', contextOf(item), { marker_type: 'operator_note', note: operatorNote.trim() }); persist(); setOperatorNote(''); } }} style={{ width: '100%', fontSize: '.72rem', marginTop: '.2rem' }} disabled={!operatorNote.trim()}>
+          ＋ Log note
+        </button>
+      </div>
       <b>Instant markers</b>
       {MARKER_TYPES.map(type => <button key={type} onClick={() => addMarker(type)} title={`Mark: ${type}`}>{type}</button>)}
       <div className="interval-marker">
@@ -517,10 +531,10 @@ export default function RuntimeRunnerPage({ data, onDone }) {
         <details className="marker-history" open>
           <summary>Recent markers ({markerHistory.length})</summary>
           <div className="marker-list">
-            {markerHistory.slice(-15).reverse().map((m, i) => (
+            {markerHistory.slice(-20).reverse().map((m, i) => (
               <div key={i} className="marker-item" title={JSON.stringify(m.metadata)}>
                 <span className={`marker-dot ${m.type}`} />
-                <small>{m.metadata?.marker_type || m.type}</small>
+                <small>{m.metadata?.marker_type || m.type}{m.metadata?.note ? `: ${m.metadata.note.slice(0, 40)}` : ''}</small>
               </div>
             ))}
           </div>

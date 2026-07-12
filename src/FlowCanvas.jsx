@@ -30,6 +30,11 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   const [snapEnabled, setSnapEnabled] = useState(() => { try { return localStorage.getItem('physioflow.snap') !== '0'; } catch { return true; } });
   const [searchQuery, setSearchQuery] = useState('');
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [snapshots, setSnapshots] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(`physioflow.snapshots.${trial.trial_id}`) || '[]'); }
+    catch { return []; }
+  });
+  const [snapshotsOpen, setSnapshotsOpen] = useState(false);
   const handledFocus = useRef(null);
   const canvasRef = useRef(null);
   const panDragRef = useRef(null);
@@ -289,6 +294,48 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     updateFlow({ ...flow, nodes });
   }, [flow, updateFlow]);
 
+  // ── Flow snapshots ──
+  const saveSnapshot = useCallback(() => {
+    const snapshot = {
+      id: crypto.randomUUID(),
+      name: `Snapshot ${snapshots.length + 1}`,
+      created_at: new Date().toISOString(),
+      flow: structuredClone(flow),
+      steps: structuredClone(trial.steps),
+    };
+    const next = [...snapshots, snapshot].slice(-20); // keep last 20
+    setSnapshots(next);
+    try { localStorage.setItem(`physioflow.snapshots.${trial.trial_id}`, JSON.stringify(next)); } catch {}
+  }, [snapshots, flow, trial.steps, trial.trial_id]);
+
+  const restoreSnapshot = useCallback((snapshot) => {
+    if (disabled) return;
+    onChange({
+      ...trialRef.current,
+      steps: structuredClone(snapshot.steps),
+      flow: structuredClone(snapshot.flow),
+    });
+    setSelectedNodeIds(new Set());
+    setSelectedEdgeId(null);
+  }, [disabled, onChange]);
+
+  const deleteSnapshot = useCallback((snapshotId) => {
+    const next = snapshots.filter(s => s.id !== snapshotId);
+    setSnapshots(next);
+    try { localStorage.setItem(`physioflow.snapshots.${trial.trial_id}`, JSON.stringify(next)); } catch {}
+  }, [snapshots, trial.trial_id]);
+
+  const renameSnapshot = useCallback((snapshotId, newName) => {
+    const next = snapshots.map(s => s.id === snapshotId ? { ...s, name: newName } : s);
+    setSnapshots(next);
+    try { localStorage.setItem(`physioflow.snapshots.${trial.trial_id}`, JSON.stringify(next)); } catch {}
+  }, [snapshots, trial.trial_id]);
+
+  // Persist snapshots when trial changes
+  useEffect(() => {
+    try { localStorage.setItem(`physioflow.snapshots.${trial.trial_id}`, JSON.stringify(snapshots)); } catch {}
+  }, [snapshots, trial.trial_id]);
+
   const handleWheel = e => {
     e.preventDefault();
     const rect = canvasRef.current.getBoundingClientRect();
@@ -506,6 +553,25 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
           <input type="checkbox" checked={snapEnabled} onChange={e => { setSnapEnabled(e.target.checked); try { localStorage.setItem('physioflow.snap', e.target.checked ? '1' : '0'); } catch {} }} /> Snap
         </label>
         <button onClick={autoLayout}>Auto layout</button>
+        <div style={{ position: 'relative' }}>
+          <button onClick={() => setSnapshotsOpen(o => !o)} title="Flow snapshots">{snapshots.length > 0 ? `📸 ${snapshots.length}` : '📸'}</button>
+          {snapshotsOpen && <div className="snapshots-dropdown" style={{ position: 'absolute', top: '100%', right: 0, zIndex: 50, background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: 8, padding: '.5rem', minWidth: 240, maxHeight: 320, overflowY: 'auto', boxShadow: 'var(--shadow-md)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.3rem .5rem' }}>
+              <b style={{ fontSize: '.78rem' }}>Flow snapshots</b>
+              <button onClick={() => { saveSnapshot(); setSnapshotsOpen(true); }} style={{ fontSize: '.72rem', padding: '.25rem .5rem' }}>+ Save</button>
+            </div>
+            {snapshots.length === 0 && <p style={{ padding: '.5rem', color: 'var(--muted)', fontSize: '.78rem' }}>No snapshots yet. Save a snapshot to preserve your current flow layout.</p>}
+            {snapshots.map((s, _i) => (
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '.4rem', padding: '.35rem .5rem', borderBottom: '1px solid var(--line)' }}>
+                <span style={{ fontSize: '.72rem', flex: 1 }} title={s.created_at}>{s.name}</span>
+                <small style={{ color: 'var(--muted)', fontSize: '.65rem' }}>{s.created_at?.slice(11, 19) || ''}</small>
+                <button onClick={() => restoreSnapshot(s)} style={{ fontSize: '.68rem', padding: '.2rem .4rem' }} title="Restore">↩</button>
+                <button onClick={() => { const name = window.prompt('Snapshot name:', s.name); if (name) renameSnapshot(s.id, name); }} style={{ fontSize: '.68rem', padding: '.2rem .4rem' }} title="Rename">✎</button>
+                <button onClick={() => deleteSnapshot(s.id)} className="danger" style={{ fontSize: '.68rem', padding: '.2rem .4rem' }} title="Delete">×</button>
+              </div>
+            ))}
+          </div>}
+        </div>
         <span className={check.valid ? 'flow-status valid' : 'flow-status invalid'} title={check.errors.concat(check.warnings).slice(0, 5).join('\n')}>{check.valid ? '✓ Ready' : `! ${check.errors.length} issues`}</span>
       </div>
       {searchQuery !== '' && (

@@ -24,7 +24,7 @@ function formatDuration(ms) {
   return m > 0 ? `~${m}m ${s}s` : `~${s}s`;
 }
 
-export default function Dashboard({ protocols, sessions, onOpen, onNew, onTemplate, onImport, onRun, onNextVersion, onDuplicate, onArchive, onRenameProject, onAnalytics, storageInfo, onChooseDataDirectory, onOpenDataFolder, onGuide }) {
+export default function Dashboard({ protocols, sessions, onOpen, onNew, onTemplate, onImport, onRun, onNextVersion, onDuplicate, onArchive, onRenameProject, onAnalytics, storageInfo, onChooseDataDirectory, onOpenDataFolder, onGuide, onStroopTemplate, onGonogoTemplate }) {
   const input = useRef(null);
   const projects = groupProjects(protocols);
   const workspaceReadiness = useMemo(() => summarizeWorkspaceReadiness(protocols, sessions, storageInfo), [protocols, sessions, storageInfo]);
@@ -106,7 +106,9 @@ export default function Dashboard({ protocols, sessions, onOpen, onNew, onTempla
           <span>{storageInfo?.selected ? 'Local data folder active' : 'Select a folder before formal collection'}</span>
         </div>
         <button className="primary" onClick={onNew}>＋ New protocol</button>
-        <button onClick={onTemplate}>Use emotion template</button>
+        <button onClick={onTemplate}>Emotion template</button>
+        {onStroopTemplate && <button onClick={onStroopTemplate}>Stroop task</button>}
+        {onGonogoTemplate && <button onClick={onGonogoTemplate}>Go/No-Go task</button>}
         <button onClick={() => input.current.click()}>Import protocol</button>
         <div className="dashboard-secondary-actions">
           <button onClick={() => onGuide?.('workflow')}>Tutorial</button>
@@ -153,7 +155,9 @@ export default function Dashboard({ protocols, sessions, onOpen, onNew, onTempla
           <p>Create a blank workflow or start from the emotion experiment template.</p>
           <div className="empty-actions">
             <button className="primary" onClick={onNew}>＋ New protocol</button>
-            <button onClick={onTemplate}>Use emotion template</button>
+            <button onClick={onTemplate}>Emotion template</button>
+            {onStroopTemplate && <button onClick={onStroopTemplate}>Stroop task</button>}
+            {onGonogoTemplate && <button onClick={onGonogoTemplate}>Go/No-Go task</button>}
           </div>
         </div>}
       </div>
