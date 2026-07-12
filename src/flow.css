@@ -643,6 +643,14 @@
   border-color: #d8e2dc;
 }
 
+/* Dark mode node hover */
+.dark-mode .clean-node:not(.junction):not(.note):hover {
+  box-shadow: 0 4px 14px #00000030, 0 0 0 1px var(--green)30;
+}
+.dark-mode .clean-node.note { background: #1e2219; border-color: #5a5424; }
+.dark-mode .clean-node.junction { background: #251a2c; border-color: #8e6ba0; }
+.dark-mode .junction-dot { background: #8e6ba0; }
+
 /* Dark mode overrides */
 .dark-mode .flow-overlay { background: #0f1713; }
 .dark-mode .flow-overlay-head { background: #131d18ee; border-color: var(--line); color: #e4eee8; box-shadow: 0 1px 10px #00000024; backdrop-filter: blur(10px); }
@@ -1055,58 +1063,56 @@
 
 /* Sticky notes */
 .clean-node.note {
-  border-radius: 3px 12px 3px 12px;
-  box-shadow: 2px 3px 8px #00000015;
-  width: auto;
-  max-width: 400px;
-  border: 0;
-  cursor: grab;
+  border-radius: 2px 8px 8px 2px;
+  box-shadow: 2px 2px 6px #00000012;
+  width: auto; max-width: 260px;
+  border: 1px solid #e6d972; border-left: 3px solid #f4c542;
+  background: #fffef5; cursor: grab;
 }
 .clean-node.note.selected {
-  box-shadow: 0 0 0 3px var(--green), 2px 3px 8px #00000015;
+  box-shadow: 0 0 0 2px var(--green), 2px 2px 6px #00000012;
 }
 .clean-node.note .sticky-content {
-  cursor: text;
-  user-select: text;
+  padding: 6px 10px; font-size: 12px; line-height: 1.4;
+  cursor: text; user-select: text;
+  min-height: 40px;
 }
 
-/* Junction nodes (edge routers) */
+/* Junction nodes (edge routers) — compact dot */
 .clean-node.junction {
-  width: 24px; min-width: 24px; max-width: 24px;
-  height: 24px; min-height: 24px; max-height: 24px;
-  border-radius: 50%;
-  border: 2px solid #ce93d8;
-  background: #f3e5f5;
-  padding: 0;
-  box-shadow: 0 2px 6px #00000015;
+  width: 20px; min-width: 20px; max-width: 20px;
+  height: 20px; min-height: 20px; max-height: 20px;
+  border-radius: 50%; padding: 0;
+  border: 2px solid #b39ddb; background: #ede7f6;
+  box-shadow: 0 1px 4px #00000010; overflow: visible;
 }
 .clean-node.junction.selected {
-  border-color: var(--green);
-  box-shadow: 0 0 0 3px #19745318, 0 2px 6px #00000015;
+  border-color: var(--green); background: var(--mint);
+  box-shadow: 0 0 0 2px #19745320;
 }
 .clean-node.junction .node-input {
-  left: -8px; top: 50%; transform: translateY(-50%);
-  width: 10px; height: 10px;
+  left: -7px; top: 50%; transform: translateY(-50%);
+  width: 9px; height: 9px;
 }
 .clean-node.junction .node-outputs {
-  position: absolute; right: -14px; top: 50%; transform: translateY(-50%);
+  position: absolute; right: -12px; top: 50%; transform: translateY(-50%);
   padding: 0; display: flex; gap: 2px;
 }
 .clean-node.junction .node-outputs button {
-  font-size: 8px; padding: 1px 3px; min-height: 16px;
+  font-size: 7px; padding: 1px 3px; min-height: 14px; border-radius: 99px;
 }
 .junction-dot {
-  width: 12px; height: 12px;
-  background: #ce93d8;
-  border-radius: 50%;
-  margin: 4px auto;
+  width: 6px; height: 6px; background: #b39ddb;
+  border-radius: 50%; margin: 0 auto;
 }
 
 /* Disabled nodes */
 .clean-node.disabled {
-  opacity: 0.45;
-  filter: grayscale(60%);
-  pointer-events: auto !important;
+  opacity: .4; filter: grayscale(50%);
+}
+/* Node hover elevation */
+.clean-node:not(.junction):not(.note):hover {
+  box-shadow: 0 4px 14px #0e1b1518, 0 0 0 1px var(--green)20;
 }
 
 /* Node search bar */
