@@ -626,7 +626,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
         <div className={`connection-hint ${focusMessage ? 'focus-warning' : ''}`}>
           {focusMessage ? <span>{focusMessage} {focusHighlightStepId && <button onClick={() => { setFocusHighlightStepId(null); setFocusMessage(''); }} style={{ fontSize: '.7rem', padding: '.15rem .5rem', marginLeft: '.5rem' }}>知道了</button>}</span> : dragConnection ? <>Connect <strong>{dragConnection.branch}</strong> → <button onClick={() => setDragConnection(null)}>Cancel</button></> : null}
         </div>
-        <label className="check-row" style={{ fontSize: '12px', whiteSpace: 'nowrap', gap: '4px', display: 'flex', alignItems: 'center', margin: 0 }}>
+        <label className="check-row">
           <input type="checkbox" checked={snapEnabled} onChange={e => { setSnapEnabled(e.target.checked); try { localStorage.setItem('physioflow.snap', e.target.checked ? '1' : '0'); } catch {} }} /> Snap
         </label>
         <button onClick={autoLayout}>Auto layout</button>
