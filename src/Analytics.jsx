@@ -15,13 +15,17 @@ export default function Analytics({ onBack, initialSessions = [], onGuide }) {
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState('timeline'); // timeline | windows | responses | compare
 
-  // Reload sessions on mount
+  // Load sessions — use initialSessions if provided, otherwise load from storage
   useEffect(() => {
+    if (initialSessions && initialSessions.length > 0) {
+      setSessions(initialSessions);
+      return;
+    }
     (async () => {
       const s = await loadSessions();
       setSessions(s);
     })().catch(console.warn);
-  }, []);
+  }, [initialSessions]);
 
   // Load session detail when selected
   useEffect(() => {

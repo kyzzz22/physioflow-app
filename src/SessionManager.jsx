@@ -78,16 +78,17 @@ export default function SessionManager() {
     try {
       const sessions = (await Promise.all(filteredSummaries.map(s => loadSession(s.session_id)))).filter(Boolean);
       const files = {};
+      let skipped = 0;
       for (let i = 0; i < sessions.length; i++) {
         const session = sessions[i];
-        if (!session.protocol_snapshot) continue;
+        if (!session.protocol_snapshot) { skipped++; continue; }
         const dir = `${session.participant_id}_${session.session_id}`;
         Object.entries(bundle(session, session.protocol_snapshot, session.events || [], session.responses || [])).forEach(([name, content]) => { files[`${dir}/${name}`] = content; });
-        setBatchProgress({ done: i + 1, total: sessions.length });
-        // Yield to allow React to render the progress update
+        setBatchProgress({ done: i + 1 - skipped, total: sessions.length - skipped });
         await new Promise(r => setTimeout(r, 0));
       }
       if (Object.keys(files).length) downloadBundle(files, 'physioflow_all_sessions');
+      else if (skipped > 0) setAlert({ title: 'Nothing to export', message: `${skipped} session(s) skipped because their protocol snapshot was missing.` });
       else setAlert({ title: 'Nothing to export', message: 'No selected session has a complete protocol snapshot.' });
     } finally {
       setLoading(false);

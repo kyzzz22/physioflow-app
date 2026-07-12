@@ -506,7 +506,7 @@ export default function RuntimeRunnerPage({ data, onDone }) {
       title={markersCollapsed ? '展开标记面板' : '收起标记面板'}
       aria-label={markersCollapsed ? 'Expand markers' : 'Collapse markers'}
     >
-      {markersCollapsed ? '▸' : '▸'} 标记
+      {markersCollapsed ? '▸' : '▾'} Markers
       {activeMarker && <span className="markers-toggle-dot" />}
     </button>
     {!markersCollapsed && <aside className="markers" role="complementary" aria-label="Event markers">
