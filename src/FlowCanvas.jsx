@@ -795,10 +795,14 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
           const hasRule2 = (srcNode.type === 'condition' || srcNode.type === 'loop') ? 14 : 0;
           const hasMeta2 = srcNode.type === 'event' ? 14 : 0;
           const estH = 28 + hasRule2 + hasMeta2 + 24;
-          const sx = (srcNode.x + (srcNode.type === 'junction' ? 10 : 180)) * zoom + pan.x;
-          const sy = (srcNode.y + (srcNode.type === 'junction' ? 10 : srcNode.type === 'note' ? noteH / 2 : estH - 10)) * zoom + pan.y;
-          const ex = dragConnection.clientX - cr.left;
-          const ey = dragConnection.clientY - cr.top;
+          const nodeW = srcNode.type === 'junction' ? 10 : srcNode.type === 'note' ? (srcNode.width || 180) : 180;
+          const portY = srcNode.type === 'junction' ? 10 : srcNode.type === 'note' ? noteH / 2 : estH - 10;
+          // Convert canvas-space to viewport-space using zoom + pan + canvas offset
+          const sx = (srcNode.x + nodeW) * zoom + pan.x + cr.left;
+          const sy = (srcNode.y + portY) * zoom + pan.y + cr.top;
+          // Target is already in viewport-space (clientX/clientY)
+          const ex = dragConnection.clientX;
+          const ey = dragConnection.clientY;
           const mx = (sx + ex) / 2;
           return <svg style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 100, width: '100%', height: '100%', overflow: 'visible' }}>
             <path d={`M${sx},${sy} C${mx},${sy} ${mx},${ey} ${ex},${ey}`} stroke="var(--green)" strokeWidth={2} fill="none" strokeDasharray="6 3" markerEnd="url(#arrow)" />
