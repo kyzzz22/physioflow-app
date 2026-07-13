@@ -4,17 +4,22 @@
   margin-top: .7rem;
   border: 1px solid #b9cdbf; background: #f7fbf7;
   border-radius: 8px; padding: .7rem;
+  max-height: 50vh; overflow-y: auto;
+  display: flex; flex-direction: column;
 }
-.questionnaire-designer > summary { cursor: pointer; color: var(--green); font-size: .75rem; font-weight: 700; }
-.questionnaire-name { display: grid; gap: .3rem; margin: .7rem 0; font-size: .72rem; font-weight: 700; }
+.questionnaire-designer > summary { cursor: pointer; color: var(--green); font-size: .75rem; font-weight: 700; flex-shrink: 0; }
+.questionnaire-name { display: grid; gap: .3rem; margin: .7rem 0; font-size: .72rem; font-weight: 700; flex-shrink: 0; position: sticky; top: 0; background: #f7fbf7; z-index: 1; padding-bottom: .5rem; }
+.q-settings-row { flex-shrink: 0; }
+.questionnaire-designer > button:last-child { flex-shrink: 0; }
 .questionnaire-designer input, .questionnaire-designer select, .questionnaire-designer textarea {
   border: 1px solid var(--line); border-radius: 6px; padding: .5rem; font: inherit;
 }
-.questionnaire-designer article { background: #fff; border: 1px solid #e0e5df; border-radius: 8px; padding: .7rem; margin: .6rem 0; }
+.questionnaire-designer article { background: #fff; border: 1px solid #e0e5df; border-radius: 8px; padding: .7rem; margin: .6rem 0; flex-shrink: 0; }
 .question-head { display: flex; align-items: center; gap: .6rem; }
 .question-head label { font-size: .72rem; }
 .scale-settings label { display: grid; gap: .25rem; font-size: .68rem; font-weight: 700; }
 .scale-settings { display: flex; gap: .5rem; margin-top: .5rem; }
+.dark-mode .questionnaire-name { background: #1a2420; }
 
 /* Questionnaire form (participant-facing) */
 .questionnaire-form { display: grid; gap: 1rem; text-align: left; width: 100%; }
