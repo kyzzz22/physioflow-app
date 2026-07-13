@@ -968,13 +968,16 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   </div>;
 }
 
-/** Full-screen preview — reuses RuntimeContent with actual trial layout */
+/** Full-screen preview — matches actual runtime participant view exactly */
 function NodePreviewModal({ step, trialLayout, onClose }) {
   const layout = trialLayout || {};
   const app = (step.appearance && typeof step.appearance === 'object') ? step.appearance : {};
   const bg = app.background ?? layout.background ?? '#fafbf8';
   const fg = app.color ?? layout.foreground ?? '#17221d';
   const align = app.alignment ?? layout.alignment ?? 'center';
+  const contentWidth = layout.content_width || 900;
+  const pad = layout.padding ?? 48;
+  const gap = layout.gap ?? 24;
 
   return <div className="node-preview-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
     <div className="node-preview-header">
@@ -985,19 +988,29 @@ function NodePreviewModal({ step, trialLayout, onClose }) {
       </div>
       <button onClick={onClose} title="Close preview (Esc)">×</button>
     </div>
-    <div className="node-preview-stage" style={{ background: bg, color: fg, textAlign: align }}>
-      <RuntimeContent
-        step={step}
-        session={{ participant_language: 'en' }}
-        language="en"
-        timing={{ current: { remaining: 0, started_at: 0, active: false } }}
-        onComplete={() => {}}
-        onQuestionnaireSubmit={() => {}}
-        onResponseSubmit={() => {}}
-        onMediaEvent={() => {}}
-        onQuestionnaireExternalEvent={() => {}}
-        preview
-      />
+    {/* Replicate exact runtime participant + trial-content structure */}
+    <div className="node-preview-stage" style={{ background: bg, color: fg, textAlign: align, padding: pad, gap }}>
+      <div className="trial-content" style={{ width: '100%', maxWidth: contentWidth, marginInline: 'auto', textAlign: align, gap }}>
+        {layout.show_step_type !== false && !['fixation','rest','timer'].includes(step.type) && (
+          <span className="eyebrow" style={{ display:'block',fontSize:'.65rem',fontWeight:700,letterSpacing:'.14em',textTransform:'uppercase',color:'var(--muted)',marginBottom:'.8rem' }}>{step.type}</span>
+        )}
+        {!['fixation','rest','timer'].includes(step.type) && (
+          <h1 style={{ fontFamily:"'Instrument Serif',Georgia,serif",fontSize:'clamp(1.6rem,4vw,2.6rem)',fontWeight:400,margin:'0 0 1.5rem',lineHeight:1.2,maxWidth:700 }}>{step.name}</h1>
+        )}
+        <RuntimeContent
+          step={step}
+          session={{ participant_language: 'en' }}
+          language="en"
+          timing={{ current: { remaining: 0, started_at: 0, active: false } }}
+          onComplete={() => {}}
+          onQuestionnaireSubmit={() => {}}
+          onResponseSubmit={() => {}}
+          onMediaEvent={() => {}}
+          onQuestionnaireExternalEvent={() => {}}
+          preview
+          fontSize={app.font_size || null}
+        />
+      </div>
     </div>
     <div className="node-preview-footer">
       <div>
