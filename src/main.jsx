@@ -76,3 +76,10 @@ createRoot(root).render(
     )
   )
 );
+
+// Register service worker for PWA offline support (web only)
+if ('serviceWorker' in navigator && !window.__TAURI_INTERNALS__) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}

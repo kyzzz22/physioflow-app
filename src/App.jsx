@@ -11,6 +11,7 @@ import SessionManager from './SessionManager';
 import { ConfirmDialog, AlertDialog, PromptDialog } from './Modal.jsx';
 import PreRunChecklist from './PreRunChecklist.jsx';
 import { STEP_DEFAULTS } from './constants.js';
+import Onboarding from './Onboarding.jsx';
 
 // Lazy-loaded for code splitting
 const Analytics = lazy(() => import('./Analytics.jsx'));
@@ -77,6 +78,9 @@ export default function App() {
   const dataLoaded = useRef(false);
   const undoThrottle = useRef(0);
 
+  // Onboarding
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const ONBOARDING_KEY = 'physioflow.onboarding-v1';
   // Load data from storage on mount
   useEffect(() => {
     (async () => {
@@ -89,18 +93,13 @@ export default function App() {
       setSessions(s);
       if (r) setRecoverable(r);
       setStorageInfo(await getStorageInfo());
+      // Show onboarding on first visit
       try {
-        if (!p.length && !s.length && localStorage.getItem(FIRST_RUN_GUIDE_KEY) !== '1') {
-          localStorage.setItem(FIRST_RUN_GUIDE_KEY, '1');
-          setGuideTab('workflow');
-          setGuideOpen(true);
+        if (!p.length && !s.length && localStorage.getItem(ONBOARDING_KEY) !== '1') {
+          localStorage.setItem(ONBOARDING_KEY, '1');
+          setOnboardingOpen(true);
         }
-      } catch {
-        if (!p.length && !s.length) {
-          setGuideTab('workflow');
-          setGuideOpen(true);
-        }
-      }
+      } catch { /* ignore */ }
       lastSaved.current = clone(p);
       dataLoaded.current = true;
     })().catch(console.warn);
@@ -505,6 +504,7 @@ export default function App() {
     {promptState && <PromptDialog {...promptState} />}
     {preRunCheck && <PreRunChecklist protocol={preRunCheck} storageInfo={storageInfo} onChooseDataDirectory={chooseDataDirectory} onClose={() => setPreRunCheck(null)} onContinue={handlePreRunContinue} onFix={focusPreRunIssue} />}
     {guideOpen && <Suspense fallback={null}><GuidePanel initialTab={guideTab} onClose={() => setGuideOpen(false)} /></Suspense>}
+    {onboardingOpen && <Onboarding onClose={() => setOnboardingOpen(false)} />}
   </>;
 }
 
