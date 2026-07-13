@@ -2,50 +2,62 @@
 
 All notable changes to PhysioFlow are documented in this file.
 
-## [0.4.0] — 2026-07-12
+## [0.4.0] — 2026-07-13
 
 ### Added
 
+#### Questionnaire overhaul
+- **Drag-and-drop reordering**: Questions can be reordered via drag handle.
+- **Conditional logic**: `show_if` field for skip/display logic (equals, not_equals, contains, greater_than, less_than).
+- **11 question presets**: SAM valence/arousal, Likert 5/7, NPS, VAS slider, single/multiple choice, short/long text, number — one-click insert.
+- **Auto-scoring**: `correct_answer` field with submit-time score calculation and export.
+- **VAS slider type**: Visual analog scale (range slider 0-100) with min/max labels.
+- **Random question order**: Questionnaire-level `shuffle_questions` + per-question option shuffle.
+- **Progress bar**: Green progress indicator with answered/total count.
+- **Batch CSV import**: Paste CSV (`type,en,options,min,max,answer`) to create multiple questions.
+
+#### Full-screen node preview with inline editing
+- **✎ Edit button**: Toggle between preview and edit mode. Edit name, content (zh/ja/en), response options, questionnaire, media source, duration, start mode, and analysis window flag — all in-place.
+- **Preview accuracy**: Matches actual runtime rendering exactly (trial layout colors, padding, content width, eyebrow, step name heading).
+
+#### Flow editor improvements
+- **Undo/Redo**: Ctrl+Z / Ctrl+Shift+Z for node operations (drag, delete, connect, property changes). 40-step history.
+- **Code splitting**: Analytics lazy-loaded (28KB separate chunk). Main bundle 552KB.
+- **Canvas toolbar**: Fixed 34px single-row bar. Collapsible left palette and right inspector.
+- **Flow snapshots**: Save/restore/rename/delete named flow states per trial.
+
+#### Template configuration
+- **Stroop task**: Configurable trial count, ITI jitter, practice block toggle.
+- **Go/No-Go task**: Configurable trial count, go ratio (50-90%), ITI jitter, practice block toggle.
+
 #### Simplified export
-- **`bundleSimple()`**: New simplified export produces 5 files (down from 10) with human-readable columns. Events use `time_sec` instead of `elapsed_monotonic_ms`, and `step_path` (e.g. "Block 1 / Trial 2 / Fixation") replaces 3 ID columns. Responses and analysis windows also simplified to 7-9 columns each.
-- Available as primary export button in runtime completion screen and session manager.
+- **`bundleSimple()`**: 5 files (down from 10) with human-readable columns. `time_sec`, `step_path`, 8-column events.
+- **BIDS v1.8.0 export**: `bidsBundle()` for neuroimaging pipelines.
 
 #### Improved i18n coverage
-- **230+ translation entries** added for zh (中文) and ja (日本語) across all UI surfaces: flow editor canvas bar, node palette, overflow menu, runtime operator bar, markers panel, session setup, export dialogs, dashboard stats, pre-run checklist, analytics tabs, and more.
+- **300+ translation entries** for zh (中文) and ja (日本語) across all UI surfaces.
 
 ### Changed
 
 #### UI/UX redesign
-- **Flow editor nodes**: Complete visual redesign — compact 178×55px cards with left color accent, inline rule display (e.g. `if zh = zh`, `repeat ≤ 3×`), centered pill-shaped output ports, hover elevation, and drag feedback.
-- **Canvas toolbar**: Single-row fixed-height (34px) bar with auto-wrapping on narrow screens. Overflow items hidden progressively.
-- **Collapsible panels**: Left palette and right inspector can be collapsed via toggle buttons. State persisted in localStorage.
-- **Collapsible markers**: Runtime marker panel defaults to collapsed. Floating toggle button always visible at bottom-right. Active interval recording shows pulsing indicator.
-- **Full-screen node preview**: Double-click or ▸ button on any event node opens full-screen preview. Uses actual trial layout colors (background, text, alignment). Press Esc or click background to close. Removed inline mini-preview from Inspector.
-- **Overflow menu**: Grouped sections with clear labels and icons in the ⋯ dropdown.
-
-#### Runtime participant interface
-- **Operator bar**: Redesigned — 48px dark bar (`#1a1a2e`), compact controls, clearer status display.
-- **Participant view**: Clean centered layout with responsive typography, thinner fixation cross (1.5px), smaller timer ring (140px), larger response buttons with 2px borders and hover states.
-- **Questionnaire form**: Card-based fieldset design with scale input hover/selected states, choice list checked state, and proper dark mode.
-- **Continue bar**: Removed gradient overlay that obscured content. Button now has standalone shadow.
-- **Pause overlay**: Glass-morphism effect with `backdrop-filter: blur(6px)`.
+- **Flow editor nodes**: Compact 178px cards with left color accent, inline rule display, pill-shaped output ports, hover elevation.
+- **Runtime participant interface**: Redesigned operator bar (48px), thinner fixation cross, smaller timer ring, larger response buttons, card-based questionnaire fieldsets, glass-morphism pause overlay.
+- **Markers sidebar**: Collapsible, floating toggle button always visible.
+- **Canvas bar**: Single-row fixed height, no wrapping.
 
 #### CSS architecture
-- **Single source of truth**: Node and canvas-bar CSS consolidated from `style.css` + `flow.css` into `style.css`. Removed 200+ lines of duplicate/conflicting rules.
-- **Removed duplicates**: `.timer-circle`, `.node-issue-dot`, `.rule-caption`, `.step-card`, `.badge`, `.block`, `.trial` — each now defined exactly once.
-- **Dark mode fixes**: Toast notifications now visible in dark mode (was white-on-white). Questionnaire form fields, scale inputs, choice lists, audio player all got dark mode support.
-- **CSS audit**: 55+ issues identified and resolved — duplicate selectors, `!important` overrides, hardcoded colors, missing dark-mode variants.
+- Node/canvas-bar CSS consolidated into single source of truth. Removed 200+ lines of duplicates.
+- Dark mode: Toast notifications, questionnaire form, audio player, scale inputs, choice lists all fixed.
 
 ### Fixed
-
-- **Canvas toolbar alignment**: Fixed height, no wrapping, proper vertical centering of all elements.
-- **Wheel zoom**: Works in fullscreen mode via document-level listener. Sidebars excluded from zoom.
-- **Markers toggle**: Z-index raised above continue bar; collapsed/expanded icon shows correct arrow.
-- **Analytics reload**: `initialSessions` prop no longer overwritten by useEffect on mount.
-- **Export-all progress**: Skipped sessions (missing protocol snapshot) now reported in progress count.
-- **Pre-run checklist**: Navigation accuracy improved; step-type badge resolves protocol indices; 15+ specific Chinese advice categories.
-- **ITI jitter validation**: Tolerates missing field on protocols created before v0.3.0 (defaults to 0).
-- **Node input port**: Positioned at top-left (13px) — no longer overlaps title text.
+- Node connection drag bug (React closure stale state + coordinate system mismatch).
+- Canvas bar alignment, wheel zoom in fullscreen, markers z-index.
+- ITI jitter validation tolerance for pre-v0.3.0 protocols.
+- Pre-run checklist navigation accuracy and false positive reduction.
+- Analytics initialSessions prop overwrite bug.
+- Export-all skipped session count.
+- Questionnaire designer sticky header prevents name field disappearing.
+- Preview now uses actual trial layout colors.
 
 ---
 

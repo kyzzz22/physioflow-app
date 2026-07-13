@@ -2,17 +2,19 @@
 
 Independent visual experiment workflow system for behavioral and physiological research. It provides a local-first protocol builder, visual trial flow editor, runtime runner, recovery support, session export, and analytics entry point.
 
-## What's new in v0.3.0
+## What's new in v0.4.0
 
-- **ITI jittering** with 4 distributions (fixed, uniform, normal, exponential) and randomization constraints (max-consecutive, no-immediate-repeat)
-- **Practice block** support with auto-exclusion from analysis windows
-- **Attention check** step type for catch trials with configurable pass/fail feedback and condition branching
-- **Performance-based branching**: runtime variables for accuracy, RT, and attention results usable in Condition nodes
-- **Stroop task** and **Go/No-Go task** built-in templates
-- **Screen calibration** step type and **visual angle calculator** utility
-- **Operator session notes** panel with timestamped quick notes
-- **BIDS v1.8.0** behavioral export (events.tsv, sidecar JSON, participants.tsv, dataset_description.json)
-- **Flow snapshot history**: save / restore / rename / delete named flow states per trial
+- **Questionnaire overhaul**: drag-and-drop reorder, conditional skip logic, 11 presets (SAM, Likert, NPS, VAS...), auto-scoring, VAS slider, random order, progress bar, CSV batch import
+- **Full-screen preview + inline editing**: double-click any node to preview as participant sees it; toggle ✎ Edit to modify content, questionnaire, media, timing directly
+- **Flow editor undo/redo**: Ctrl+Z / Ctrl+Shift+Z for all node operations
+- **Simplified export**: 5 files with clean human-readable columns (standard + BIDS formats)
+- **Stroop and Go/No-Go templates**: configurable trial count, go ratio, ITI jitter, practice block
+- **ITI jittering** with 4 distributions + randomization constraints (max-consecutive, no-immediate-repeat)
+- **Practice block** + **attention check** + **screen calibration** step types
+- **Performance-based branching**: runtime variables (accuracy, RT) usable in Condition nodes
+- **Visual angle calculator**: `pixelsPerDegree`, `calibrationReport`, etc.
+- **Flow snapshots**: save/restore flow states per trial
+- **300+ i18n entries**: zh (中文) / ja (日本語) across all UI surfaces
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full history.
 
