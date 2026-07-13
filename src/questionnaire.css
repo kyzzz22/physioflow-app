@@ -98,3 +98,82 @@
 .dark-mode .questionnaire-name input { background: #1a1a1c; border-color: var(--line); color: var(--ink); }
 .dark-mode .external-confirm-row { background: #252528d9; border-color: var(--line); }
 .dark-mode .external-questionnaire iframe { background: #fff; }
+
+/* ── Questionnaire v2: presets, drag, progress, VAS, conditional ── */
+.q-settings-row { display: flex; gap: .8rem; align-items: center; flex-wrap: wrap; margin-bottom: .6rem; padding-bottom: .6rem; border-bottom: 1px solid var(--line); }
+.q-settings-row label { font-size: .78rem; display: flex; align-items: center; gap: .3rem; }
+.q-settings-row input[type="text"] { padding: .3rem .4rem; border: 1px solid var(--line); border-radius: 4px; font-size: .78rem; width: 160px; }
+.q-check { font-size: .75rem; display: flex; align-items: center; gap: .2rem; }
+.q-check input { width: 14px; height: 14px; accent-color: var(--green); }
+
+.q-presets { margin-bottom: .5rem; }
+.q-presets > summary { font-size: .75rem; color: var(--green); cursor: pointer; }
+.q-preset-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: .3rem; padding: .4rem 0; }
+.q-preset-grid button { text-align: left; padding: .3rem .5rem; font-size: .7rem; border: 1px solid var(--line); border-radius: 4px; background: var(--paper); cursor: pointer; }
+.q-preset-grid button:hover { border-color: var(--green); background: var(--mint); }
+.q-preset-grid b { display: block; font-size: .68rem; }
+.q-preset-grid span { display: block; font-size: .6rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.q-import { margin-bottom: .5rem; }
+.q-import > summary { font-size: .75rem; color: var(--green); cursor: pointer; }
+.batch-import { display: flex; flex-direction: column; gap: .3rem; padding: .4rem 0; }
+.batch-import textarea { width: 100%; font-size: .7rem; font-family: monospace; padding: .3rem; border: 1px solid var(--line); border-radius: 4px; }
+.batch-import small { font-size: .6rem; color: var(--muted); }
+.batch-import button { align-self: flex-start; font-size: .7rem; padding: .25rem .6rem; }
+
+/* Drag & drop */
+.q-drag-handle { cursor: grab; font-size: 1rem; color: var(--muted); padding: 0 .3rem; user-select: none; }
+.q-drag-handle:active { cursor: grabbing; }
+.q-card { position: relative; border: 1px solid var(--line); border-radius: 6px; padding: .5rem; margin: .3rem 0; background: var(--paper); transition: border-color .12s; }
+.q-card.drag-over-top { border-top: 2px solid var(--green); }
+.q-card.drag-over-bottom { border-bottom: 2px solid var(--green); }
+.q-head { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; }
+.q-head select { font-size: .72rem; padding: .2rem; border: 1px solid var(--line); border-radius: 4px; }
+.q-remove { font-size: 1rem; border: 0; background: transparent; cursor: pointer; color: var(--muted); }
+.q-remove:hover { color: var(--danger); }
+
+.q-conditional { margin: .3rem 0; font-size: .7rem; }
+.q-conditional > summary { color: var(--muted); cursor: pointer; font-size: .68rem; }
+.q-cond-row { display: flex; gap: .3rem; align-items: center; flex-wrap: wrap; padding: .3rem 0; }
+.q-cond-row select, .q-cond-row input { font-size: .68rem; padding: .15rem .3rem; border: 1px solid var(--line); border-radius: 3px; }
+
+.q-lang-tabs { display: flex; gap: 2px; margin: .3rem 0; }
+.q-lang-btn { font-size: .65rem; padding: .15rem .4rem; border: 1px solid var(--line); border-radius: 4px 4px 0 0; border-bottom: 0; cursor: pointer; background: #eef1ec; color: #7b867f; font-weight: 400; }
+.q-lang-btn.active { background: var(--paper); color: var(--ink); font-weight: 700; }
+.q-prompt { width: 100%; font-size: .78rem; padding: .3rem; border: 1px solid var(--line); border-radius: 4px; resize: vertical; }
+
+.q-scale { display: flex; gap: .4rem; flex-wrap: wrap; margin: .3rem 0; font-size: .7rem; }
+.q-scale label { display: flex; flex-direction: column; gap: .1rem; }
+.q-scale input { width: 60px; padding: .15rem .3rem; border: 1px solid var(--line); border-radius: 3px; font-size: .7rem; }
+
+.q-options textarea { width: 100%; font-size: .75rem; border: 1px solid var(--line); border-radius: 4px; padding: .3rem; margin: .3rem 0; }
+.q-answer { display: flex; align-items: center; gap: .3rem; font-size: .7rem; margin: .3rem 0; }
+.q-answer span { color: var(--muted); white-space: nowrap; }
+.q-answer input { flex: 1; padding: .15rem .3rem; border: 1px solid var(--line); border-radius: 3px; font-size: .7rem; }
+.q-time { display: flex; align-items: center; gap: .3rem; font-size: .7rem; margin: .2rem 0; }
+.q-time span { color: var(--muted); white-space: nowrap; }
+.q-time input { width: 80px; padding: .15rem .3rem; border: 1px solid var(--line); border-radius: 3px; font-size: .7rem; }
+
+/* Progress bar */
+.q-progress { position: relative; height: 6px; background: var(--line); border-radius: 3px; margin-bottom: 1rem; }
+.q-progress-bar { height: 100%; background: var(--green); border-radius: 3px; transition: width .3s; }
+.q-progress span { position: absolute; right: 0; top: -18px; font-size: .7rem; color: var(--muted); }
+
+/* VAS slider */
+.vas-slider { padding: .5rem 0; }
+.vas-track { padding: 0 .5rem; }
+.vas-track input[type="range"] { width: 100%; accent-color: var(--green); }
+.vas-ticks { display: flex; justify-content: space-between; font-size: .7rem; color: var(--muted); margin-top: .2rem; }
+.vas-val { font-weight: 700; color: var(--green-strong); }
+
+/* Question timer & done check */
+.q-timer { color: var(--warning); font-weight: 700; font-size: .75rem; margin-left: .5rem; }
+.q-done { color: var(--green); margin-left: .5rem; font-weight: 700; }
+
+/* Dark mode */
+.dark-mode .q-card { background: #1a2420; border-color: var(--line); }
+.dark-mode .q-lang-btn { background: #1a2420; }
+.dark-mode .q-lang-btn.active { background: #111a16; }
+.dark-mode .q-preset-grid button { background: #1a2420; border-color: var(--line); }
+.dark-mode .q-preset-grid button:hover { background: #1a3328; }
+.dark-mode .batch-import textarea { background: #111a16; border-color: var(--line); color: var(--ink); }
