@@ -255,15 +255,15 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     }
   }, [trial, flow, onChange, updateFlow, cloneEventNode]);
 
-  const finishConnection = target => {
-    const connState = dragConnection?.source ? dragConnection : null;
-    if (!connState || connState.source === target) { setDragConnection(null); return; }
-    const sourceNode = flow.nodes.find(n => n.id === connState.source);
-    if (!sourceNode) { setDragConnection(null); return; }
+  // Direct click on input port (no drag)
+  const finishConnection = targetId => {
+    const current = dragConnRef.current || dragConnection;
+    if (!current?.source || current.source === targetId) return;
+    const sourceNode = flowRef.current.nodes.find(n => n.id === current.source);
+    if (!sourceNode) return;
     pushUndo();
-    const withoutSameBranch = flow.edges.filter(e => !(e.source === connState.source && e.branch === connState.branch));
-    updateFlow({ ...flow, edges: [...withoutSameBranch, { id: `edge_${crypto.randomUUID()}`, source: connState.source, target, branch: connState.branch }] });
-    setDragConnection(null);
+    const withoutSameBranch = flowRef.current.edges.filter(e => !(e.source === current.source && e.branch === current.branch));
+    updateFlow({ ...flowRef.current, edges: [...withoutSameBranch, { id: `edge_${crypto.randomUUID()}`, source: current.source, target: targetId, branch: current.branch }] });
   };
   const removeNode = useCallback(id => {
     pushUndo();
@@ -546,21 +546,40 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     window.addEventListener('pointerup', up);
   };
 
-  // Drag-to-connect from output ports
+  // Drag-to-connect ref to avoid React closure stale state
+  const dragConnRef = useRef(null);
+  useEffect(() => { dragConnRef.current = dragConnection; }, [dragConnection]);
+
   const beginConnDrag = (e, node, branch) => {
     e.stopPropagation(); e.preventDefault();
-    setDragConnection({ source: node.id, branch, clientX: e.clientX, clientY: e.clientY });
-    const move = ev => { setDragConnection(prev => prev ? { ...prev, clientX: ev.clientX, clientY: ev.clientY } : null); };
+    const conn = { source: node.id, branch, clientX: e.clientX, clientY: e.clientY };
+    setDragConnection(conn);
+    dragConnRef.current = conn;
+    const move = ev => {
+      const next = { ...dragConnRef.current, clientX: ev.clientX, clientY: ev.clientY };
+      setDragConnection(next);
+      dragConnRef.current = next;
+    };
     const up = ev => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+      const current = dragConnRef.current;
+      if (!current) { setDragConnection(null); dragConnRef.current = null; return; }
       const target = document.elementFromPoint(ev.clientX, ev.clientY);
       const targetNode = target?.closest('[data-node-id]');
       if (targetNode) {
         const targetId = targetNode.getAttribute('data-node-id');
-        if (targetId && targetId !== node.id) finishConnection(targetId);
+        if (targetId && targetId !== node.id) {
+          const sourceNode = flowRef.current.nodes.find(n => n.id === current.source);
+          if (sourceNode) {
+            pushUndo();
+            const withoutSameBranch = flowRef.current.edges.filter(e => !(e.source === current.source && e.branch === current.branch));
+            updateFlow({ ...flowRef.current, edges: [...withoutSameBranch, { id: `edge_${crypto.randomUUID()}`, source: current.source, target: targetId, branch: current.branch }] });
+          }
+        }
       }
       setDragConnection(null);
+      dragConnRef.current = null;
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -734,12 +753,16 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
               if (!a || !b) return null;
               const getPort = (node, isSource) => {
                 const noteH = node.height || 100;
-                const nodeW = 180; // avg node width
-                const inputPortY = 13; // matches .node-input { top: 13px }
-                const outputPortY = 46; // bottom output row area
+                const nodeW = 180;
+                const inputPortY = 13; // matches CSS .node-input { top: 13px }
+                // Estimate node height: title(~28px) + rule/meta(~14px) + outputs(~24px) = ~66px
+                const hasRule = (node.type === 'condition' || node.type === 'loop') ? 14 : 0;
+                const hasMeta = node.type === 'event' ? 14 : 0;
+                const estimatedH = 28 + hasRule + hasMeta + 24;
+                const outputPortY = estimatedH - 10; // near bottom of card
                 return isSource
-                  ? { x: node.x + (node.type === 'junction' ? 12 : nodeW), y: node.y + (node.type === 'junction' ? 12 : node.type === 'note' ? noteH / 2 : outputPortY) }
-                  : { x: node.x, y: node.y + (node.type === 'junction' ? 12 : node.type === 'note' ? noteH / 2 : inputPortY) };
+                  ? { x: node.x + (node.type === 'junction' ? 10 : nodeW), y: node.y + (node.type === 'junction' ? 10 : node.type === 'note' ? noteH / 2 : outputPortY) }
+                  : { x: node.x + (node.type === 'junction' ? 0 : -1), y: node.y + (node.type === 'junction' ? 10 : node.type === 'note' ? noteH / 2 : inputPortY) };
               };
               const p1 = getPort(a, true), p2 = getPort(b, false);
               const x1 = p1.x, y1 = p1.y, x2 = p2.x, y2 = p2.y, m = x1 + (x2 - x1) / 2;
@@ -769,8 +792,11 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
           const cr = canvasRef.current?.getBoundingClientRect();
           if (!cr) return null;
           const noteH = srcNode.height || 100;
-          const sx = (srcNode.x + (srcNode.type === 'junction' ? 12 : 180)) * zoom + pan.x;
-          const sy = (srcNode.y + (srcNode.type === 'junction' ? 12 : srcNode.type === 'note' ? noteH / 2 : 46)) * zoom + pan.y;
+          const hasRule2 = (srcNode.type === 'condition' || srcNode.type === 'loop') ? 14 : 0;
+          const hasMeta2 = srcNode.type === 'event' ? 14 : 0;
+          const estH = 28 + hasRule2 + hasMeta2 + 24;
+          const sx = (srcNode.x + (srcNode.type === 'junction' ? 10 : 180)) * zoom + pan.x;
+          const sy = (srcNode.y + (srcNode.type === 'junction' ? 10 : srcNode.type === 'note' ? noteH / 2 : estH - 10)) * zoom + pan.y;
           const ex = dragConnection.clientX - cr.left;
           const ey = dragConnection.clientY - cr.top;
           const mx = (sx + ex) / 2;
