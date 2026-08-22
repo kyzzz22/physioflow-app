@@ -75,6 +75,7 @@ export function createProtocolGraph(options = {}) {
     templates: [],
     subflowTemplates: [],
     componentPackages: [],
+    deviceConnectors: [],
     participantUi: { theme: {} },
     dataPolicy: { level: 'standard', retainRawEvents: true },
   };

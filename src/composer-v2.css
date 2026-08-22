@@ -122,5 +122,15 @@
 .component-package-catalog article button { padding: 5px; border: 1px solid var(--border, #dfe3e8); border-radius: 5px; background: var(--surface, #fff); color: inherit; }
 .package-approval > div { display: flex; gap: 4px; }
 .package-error { color: #a32e25 !important; }
+.device-connector-catalog { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border, #dfe3e8); }
+.device-connector-catalog > p { color: var(--muted, #667085); font-size: .68rem; line-height: 1.4; }
+.device-connector-catalog > button, .device-connector-import { display: flex; justify-content: center; box-sizing: border-box; width: 100%; margin: 5px 0; padding: 6px; border: 1px solid #16815d; border-radius: 6px; background: #16815d10; color: #126c4e; font-size: .64rem; cursor: pointer; }
+.device-connector-import input { display: none; }
+.device-connector-catalog article { display: grid; gap: 6px; margin: 7px 0; padding: 8px; border: 1px solid var(--border, #dfe3e8); border-radius: 7px; }
+.device-connector-catalog article b, .device-connector-catalog article small { display: block; }
+.device-connector-catalog article small, .device-connector-catalog article p, .device-connector-catalog article label { color: var(--muted, #667085); font-size: .62rem; }
+.device-connector-catalog article p { margin: 0; }
+.device-connector-catalog article label { display: flex; align-items: center; gap: 4px; }
+.device-connector-catalog article button { padding: 5px; border: 1px solid var(--border, #dfe3e8); border-radius: 5px; background: var(--surface, #fff); color: inherit; }
 .composer-v2.locked .composer-palette, .composer-v2.locked .composer-inspector .inspector-card, .composer-v2.locked .composer-node { pointer-events: none; opacity: .72; }
 .migration-review-warning { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; padding: 9px; border: 1px solid #e2ba7b; border-radius: 7px; background: #fff7e8; color: #7a4a00; font-size: .68rem; }

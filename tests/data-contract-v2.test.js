@@ -30,11 +30,14 @@ test('graph export includes raw records, normalized tables, manifests, dictionar
   const { protocol, session, events } = fixture();
   const responses = [{ responseId: 'response_1', sessionId: 'session_1', participantId: 'P,001', protocolId: protocol.protocolId, nodeId: 'node_x', componentType: 'input.text', name: 'comment', value: 'hello, world', timestampIso: '2026-08-22T00:00:01.000Z' }];
   const runtime = { status: 'completed' };
-  const files = buildGraphSessionFiles({ ...session, runtime_snapshot: runtime }, protocol, events, responses);
+  const device_events = [{ schemaVersion: '1.0.0', eventId: 'device_event_1', sequence: 1, sessionId: session.session_id, eventType: 'device_sample_received', timestampIso: '2026-08-22T00:00:00.500Z', timestampEpochMs: 1500, elapsedMonotonicMs: 500, connector: { id: 'org.example.sensor', version: '1.0.0', transport: 'serial' }, device: { deviceId: 'SENSOR-1' }, payload: { channelId: 'signal', value: 2.5, unit: 'mV' } }];
+  const files = buildGraphSessionFiles({ ...session, runtime_snapshot: runtime, device_events }, protocol, events, responses);
 
-  for (const name of ['events.jsonl', 'responses.jsonl', 'events.csv', 'responses.csv', 'data_dictionary.json', 'event_schema_registry.json', 'component_manifest.json', 'asset_manifest.json', 'quality_report.json', 'protocol_snapshot.json', 'runtime_snapshot.json', 'manifest.json']) assert.ok(files[name], name);
+  for (const name of ['events.jsonl', 'responses.jsonl', 'device_events.jsonl', 'events.csv', 'responses.csv', 'device_events.csv', 'data_dictionary.json', 'event_schema_registry.json', 'component_manifest.json', 'asset_manifest.json', 'quality_report.json', 'protocol_snapshot.json', 'runtime_snapshot.json', 'manifest.json']) assert.ok(files[name], name);
   assert.match(files['events.csv'], /"P,001"/);
   assert.match(files['responses.csv'], /hello, world/);
+  assert.match(files['device_events.csv'], /SENSOR-1/);
+  assert.equal(JSON.parse(files['manifest.json']).counts.deviceEvents, 1);
   assert.equal(JSON.parse(files['quality_report.json']).validity_status, 'valid');
 });
 

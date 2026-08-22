@@ -1,4 +1,5 @@
 import { PROTOCOL_GRAPH_SCHEMA_VERSION } from './protocolGraph.js';
+import { validateDeviceConnector } from '../devices/deviceConnector.js';
 
 const VARIABLE_TYPES = new Set(['string', 'number', 'boolean', 'enum', 'object', 'array', 'unknown']);
 const VARIABLE_SCOPES = new Set(['project', 'session', 'container', 'trial', 'component']);
@@ -67,6 +68,24 @@ export function validateProtocolGraph(protocol, registry) {
         if (element.type === 'Media' && element.props?.assetId && !approved.has('assets.read')) errors.push(issue('sdk.permission_asset_read', `${node.label} reads an asset without package permission`, `graph.nodes.${node.id}.config.ui`, { nodeId: node.id }));
       });
     });
+  }
+
+  const connectorKeys = new Set();
+  for (const [connectorIndex, connector] of (protocol.deviceConnectors || []).entries()) {
+    const path = `deviceConnectors.${connectorIndex}`;
+    const check = validateDeviceConnector(connector);
+    check.errors.forEach(error => errors.push(issue('device.connector_invalid', `${connector.connectorId || 'Device connector'}: ${error}`, path)));
+    const key = `${connector.connectorId}@${connector.version}`;
+    if (connectorKeys.has(key)) errors.push(issue('device.connector_duplicate', `Duplicate device connector ${key}`, path));
+    else connectorKeys.add(key);
+    const approved = new Set(connector.approvedPermissions || []);
+    for (const permission of connector.permissions || []) {
+      if (!approved.has(permission)) errors.push(issue('device.permission_unapproved', `Connector ${connector.connectorId} lacks approval for ${permission}`, `${path}.approvedPermissions`));
+    }
+  }
+  for (const node of nodes.filter(item => item.config?.deviceConnectorId)) {
+    const connector = (protocol.deviceConnectors || []).find(item => item.connectorId === node.config.deviceConnectorId && (!node.config.deviceConnectorVersion || item.version === node.config.deviceConnectorVersion));
+    if (!connector) errors.push(issue('device.connector_missing', `${node.label} references unavailable connector ${node.config.deviceConnectorId}`, `graph.nodes.${node.id}.config.deviceConnectorId`, { nodeId: node.id }));
   }
 
   const edgeIds = new Set();

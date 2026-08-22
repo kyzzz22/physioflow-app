@@ -16,12 +16,13 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 - Built a Condition + Rating subflow in Composer, selected concrete input/output data-port endpoints, published it as a reusable template, mapped both parameters to a typed session variable, and generated an isolated two-node instance with remapped boundaries and provenance.
 - Confirmed the first-run tour stays inside a 1280px viewport after clamping side-positioned cards to the visible area.
 - Installed the declarative Reaction Button SDK example from Composer Advanced mode, confirmed its package/version/permission record, found the component in the normal interaction palette, and inserted it into the same Protocol Graph with schema-driven participant UI.
+- Installed the simulated physiology connector from Composer Advanced mode and confirmed its versioned manifest, simulated transport, signal/marker channel types and approved connect/read/write capabilities.
 - Migrated the representative Emotion protocol from the Dashboard into Composer V2. The migration produced 22 nodes and 21 edges, preserved all 20 steps, reported 100% native mapping, and kept formal collection behind the explicit migration-review gate.
 - Re-ran the automated release gate after immutable-version, required-port, participant binding/action, lifecycle-event, response-time, and independent export-validator hardening.
 
 ## Acceptance evidence
 
-- Automated tests: 111 passing.
+- Automated tests: 115 passing.
 - Production build: passing.
 - Lint: zero errors; 19 warnings remain only in legacy transition files.
 - Representative migration tests: Emotion, Stroop, and Go/No-Go each meet the native coverage threshold.
@@ -36,6 +37,7 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 - Replay behavior: deterministic tests compare replayed variables, outputs, completed nodes and terminal status with the live Runtime V2 state; sequence gaps are rejected.
 - Reusable-subflow behavior: template instances receive isolated node/edge IDs, remapped parameter endpoints and variable mappings; Runtime V2 tests prove mapped input reads and output write-through.
 - Component SDK behavior: tests cover package/schema validation, explicit permission approval, rejection of executable control kinds, uninstall dependency protection, project registry dispatch, runtime execution, and variable-read enforcement.
+- Device connector behavior: tests cover permission-gated installation and I/O, immutable provenance events, typed sample/marker channels, failed connection attempts, successful recovery, and device-event export tables.
 
 ## Known transition scope
 

@@ -23,6 +23,7 @@ import {
 } from './core/index.js';
 import ParticipantUiBuilder from './ParticipantUiBuilder.jsx';
 import { createProjectComponentRegistry, exampleReactionButtonPackage, installComponentPackage, uninstallComponentPackage } from './sdk/index.js';
+import { exampleSimulatedConnector, installDeviceConnector, uninstallDeviceConnector } from './devices/index.js';
 
 const NODE_WIDTH = 188;
 const NODE_HEIGHT = 112;
@@ -224,6 +225,16 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
           catch (error) { setMessage(error.message); }
         }} onRemove={(packageId, version) => {
           try { commit(uninstallComponentPackage(protocol, packageId, version)); }
+          catch (error) { setMessage(error.message); }
+        }} />}
+        {editorMode === 'advanced' && <DeviceConnectorCatalog connectors={protocol.deviceConnectors || []} locked={locked} onInstallExample={() => {
+          try { const connector = exampleSimulatedConnector(); commit(installDeviceConnector(protocol, connector, { approvedPermissions: connector.permissions })); setMessage('Installed simulated physiology connector'); }
+          catch (error) { setMessage(error.message); }
+        }} onImport={connector => {
+          try { commit(installDeviceConnector(protocol, connector, { approvedPermissions: connector.permissions || [] })); setMessage(`Installed ${connector.name}`); }
+          catch (error) { setMessage(error.message); }
+        }} onRemove={(connectorId, version) => {
+          try { commit(uninstallDeviceConnector(protocol, connectorId, version)); }
           catch (error) { setMessage(error.message); }
         }} />}
         {editorMode !== 'quick' && <SubflowTemplateCatalog templates={protocol.subflowTemplates || []} variables={protocol.variables || []} locked={locked} onInstantiate={(templateId, parameterMappings) => {
@@ -435,6 +446,42 @@ function ComponentPackageCatalog({ packages, locked, onInstallExample, onImport,
       <div><b>{componentPackage.name}</b><small>{componentPackage.packageId}@{componentPackage.version} · {componentPackage.components.length} component(s)</small></div>
       <small>{componentPackage.permissions?.length ? `Permissions: ${componentPackage.permissions.join(', ')}` : 'No permissions'}</small>
       <button disabled={locked} onClick={() => onRemove(componentPackage.packageId, componentPackage.version)}>Uninstall</button>
+    </article>)}
+  </section>;
+}
+
+function DeviceConnectorCatalog({ connectors, locked, onInstallExample, onImport, onRemove }) {
+  const [pending, setPending] = useState(null);
+  const [approved, setApproved] = useState([]);
+  const [error, setError] = useState('');
+  const readConnector = async event => {
+    try {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      setPending(JSON.parse(await file.text()));
+      setApproved([]);
+      setError('');
+    } catch (nextError) { setError(nextError.message); setPending(null); }
+    event.target.value = '';
+  };
+  const permissions = pending?.permissions || [];
+  return <section className="device-connector-catalog">
+    <h3>Device connectors</h3>
+    <p>Versioned adapters expose typed I/O channels with explicit connect/read/write permissions and provenance events.</p>
+    <button disabled={locked || connectors.some(item => item.connectorId === 'org.physioflow.simulated-sensor')} onClick={onInstallExample}>Install simulated sensor</button>
+    <label className="device-connector-import">Import connector manifest<input disabled={locked} type="file" accept="application/json,.json" onChange={readConnector} /></label>
+    {error && <small className="package-error">{error}</small>}
+    {pending && <article className="package-approval">
+      <b>{pending.name || pending.connectorId}</b><small>{pending.connectorId}@{pending.version} · {pending.transport}</small>
+      <p>Approve every requested device capability:</p>
+      {permissions.map(permission => <label key={permission}><input type="checkbox" checked={approved.includes(permission)} onChange={event => setApproved(current => event.target.checked ? [...current, permission] : current.filter(item => item !== permission))} />{permission}</label>)}
+      <div><button disabled={permissions.some(permission => !approved.includes(permission))} onClick={() => { onImport(pending); setPending(null); setApproved([]); }}>Approve and install</button><button onClick={() => setPending(null)}>Cancel</button></div>
+    </article>}
+    {connectors.map(connector => <article key={`${connector.connectorId}@${connector.version}`}>
+      <div><b>{connector.name}</b><small>{connector.connectorId}@{connector.version} · {connector.transport}</small></div>
+      <small>{(connector.channels || []).map(channel => `${channel.direction} ${channel.id}:${channel.dataType}${channel.unit ? ` (${channel.unit})` : ''}`).join(' · ') || 'No channels'}</small>
+      <small>Permissions: {(connector.approvedPermissions || []).join(', ') || 'none'}</small>
+      <button disabled={locked} onClick={() => onRemove(connector.connectorId, connector.version)}>Uninstall</button>
     </article>)}
   </section>;
 }

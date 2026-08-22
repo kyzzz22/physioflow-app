@@ -49,6 +49,24 @@ export function normalizeGraphResponses(session, protocol, responses = []) {
   }));
 }
 
+export function normalizeDeviceEvents(session, deviceEvents = session.device_events || []) {
+  return deviceEvents.map(event => ({
+    event_id: event.eventId,
+    sequence: event.sequence,
+    session_id: event.sessionId || session.session_id || '',
+    connector_id: event.connector?.id || '',
+    connector_version: event.connector?.version || '',
+    transport: event.connector?.transport || '',
+    device_id: event.device?.deviceId || '',
+    event_type: event.eventType,
+    timestamp_iso: event.timestampIso,
+    timestamp_epoch_ms: event.timestampEpochMs,
+    elapsed_monotonic_ms: event.elapsedMonotonicMs,
+    payload_json: event.payload || {},
+    device_json: event.device || {},
+  }));
+}
+
 export function graphDataDictionary() {
   return {
     contractVersion: GRAPH_DATA_CONTRACT_VERSION,
@@ -64,6 +82,12 @@ export function graphDataDictionary() {
         description: 'One row per participant response value projected from component submission.',
         columns: ['response_id', 'session_id', 'participant_id', 'protocol_id', 'protocol_version', 'node_id', 'component_type', 'response_name', 'value_json', 'reaction_time_ms', 'timestamp_iso'],
       },
+      device_events: {
+        primaryKey: 'event_id',
+        ordering: 'sequence within connector session',
+        description: 'Immutable external-device lifecycle, sample, marker, failure and recovery events with connector/device provenance.',
+        columns: ['event_id', 'sequence', 'session_id', 'connector_id', 'connector_version', 'transport', 'device_id', 'event_type', 'timestamp_iso', 'timestamp_epoch_ms', 'elapsed_monotonic_ms', 'payload_json', 'device_json'],
+      },
     },
     clocks: {
       timestamp_epoch_ms: 'Wall-clock Unix milliseconds for cross-device alignment.',
@@ -75,6 +99,8 @@ export function graphDataDictionary() {
 export function buildGraphSessionFiles(session, protocol, events = session.events || [], responses = session.responses || []) {
   const eventRows = normalizeGraphEvents(session, events);
   const responseRows = normalizeGraphResponses(session, protocol, responses);
+  const deviceEvents = session.device_events || [];
+  const deviceEventRows = normalizeDeviceEvents(session, deviceEvents);
   const componentRegistry = createProjectComponentRegistry(protocol);
   const eventRegistry = createEventSchemaRegistry(componentRegistry);
   const quality = assessGraphSession({ session, protocol, events, responses, runtime: session.runtime_snapshot });
@@ -88,17 +114,19 @@ export function buildGraphSessionFiles(session, protocol, events = session.event
     protocolId: protocol.protocolId,
     protocolName: protocolNameOf(protocol),
     protocolVersion: protocolVersionOf(protocol),
-    counts: { events: events.length, responses: responses.length, nodes: protocol.graph.nodes.length, assets: (protocol.assets || []).length },
+    counts: { events: events.length, responses: responses.length, deviceEvents: deviceEvents.length, nodes: protocol.graph.nodes.length, assets: (protocol.assets || []).length },
   };
   return {
     'manifest.json': JSON.stringify(manifest, null, 2),
-    'session.json': JSON.stringify({ ...session, events: undefined, responses: undefined, protocol_snapshot: undefined }, null, 2),
+    'session.json': JSON.stringify({ ...session, events: undefined, responses: undefined, device_events: undefined, protocol_snapshot: undefined }, null, 2),
     'protocol_snapshot.json': JSON.stringify(protocol, null, 2),
     'runtime_snapshot.json': JSON.stringify(session.runtime_snapshot || null, null, 2),
     'events.jsonl': events.map(event => JSON.stringify(event)).join('\n') + (events.length ? '\n' : ''),
     'responses.jsonl': responses.map(response => JSON.stringify(response)).join('\n') + (responses.length ? '\n' : ''),
+    'device_events.jsonl': deviceEvents.map(event => JSON.stringify(event)).join('\n') + (deviceEvents.length ? '\n' : ''),
     'events.csv': csv(eventRows, graphDataDictionary().tables.events.columns),
     'responses.csv': csv(responseRows, graphDataDictionary().tables.responses.columns),
+    'device_events.csv': csv(deviceEventRows, graphDataDictionary().tables.device_events.columns),
     'data_dictionary.json': JSON.stringify(graphDataDictionary(), null, 2),
     'event_schema_registry.json': JSON.stringify(eventRegistry.list(), null, 2),
     'component_manifest.json': JSON.stringify(components, null, 2),
