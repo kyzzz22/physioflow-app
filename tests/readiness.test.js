@@ -2,6 +2,23 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { block, protocol, step, trial } from '../src/domain.js';
 import { assessProtocolReadiness, summarizeWorkspaceReadiness } from '../src/readiness.js';
+import { createCoreComponentRegistry, createProtocolGraph, insertNodeOnControlEdge } from '../src/core/index.js';
+
+test('Protocol Graph readiness uses nodes, connections, and graph validation', () => {
+  const blank = createProtocolGraph();
+  const edge = blank.graph.edges[0];
+  const screen = createCoreComponentRegistry().get('display.screen');
+  const configured = insertNodeOnControlEdge(blank, edge.id, screen.type, {
+    label: 'Instructions',
+    config: screen.defaultConfig,
+    layout: { x: 300, y: 180 },
+  }).protocol;
+  const result = assessProtocolReadiness(configured, { storageInfo: { selected: true } });
+
+  assert.equal(result.items.find(item => item.id === 'structure').passed, true);
+  assert.equal(result.items.find(item => item.id === 'validation').passed, true);
+  assert.equal(result.facts.steps, 1);
+});
 
 test('draft protocol readiness exposes blocking content and handoff warnings', () => {
   const p = protocol();

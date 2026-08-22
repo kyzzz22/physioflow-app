@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { applyThemeToDOM, resetThemeToDOM } from './theme.js';
-import { block, createNextProtocolVersion, duplicateProtocolAsProject, emotionTemplate, freezeProtocol, gonogoTemplate, stroopTemplate, unfreezeProtocol, protocol, STEP_TYPES, step, trial, validateProtocol, moveItem, stepContentIssues } from './domain';
+import { block, createNextProtocolVersion, duplicateProtocolAsProject, emotionTemplate, freezeProtocol, gonogoTemplate, stroopTemplate, unfreezeProtocol, STEP_TYPES, step, trial, validateProtocol, moveItem, stepContentIssues } from './domain';
 import { clearCurrentRun, getStorageInfo, loadCurrentRunAsync, loadProtocols, loadSessions, openDataDirectory, saveProtocols, selectDataDirectory } from './storage';
 import { saveAsset } from './fsStorage.js';
 import RunnerPage from './RuntimeRunnerPage';
@@ -13,6 +13,20 @@ import { ConfirmDialog, AlertDialog, PromptDialog } from './Modal.jsx';
 import PreRunChecklist from './PreRunChecklist.jsx';
 import { STEP_DEFAULTS } from './constants.js';
 import Onboarding from './Onboarding.jsx';
+import ComposerV2 from './ComposerV2.jsx';
+import {
+  archiveProtocol,
+  createNextGraphProtocolVersion,
+  createProtocolGraph,
+  duplicateGraphProtocolAsProject,
+  isGraphProtocol,
+  projectIdOf,
+  protocolArchivedAtOf,
+  protocolIdOf,
+  protocolNameOf,
+  protocolStatusOf,
+  renameProtocol,
+} from './core/index.js';
 
 // Lazy-loaded for code splitting
 const Analytics = lazy(() => import('./Analytics.jsx'));
@@ -143,11 +157,13 @@ export default function App() {
   useEffect(() => { viewRef.current = view; currentRef.current = current; }, [view, current]);
 
   // Apply protocol theme when loaded
+  const currentProtocolId = current && protocolIdOf(current);
+  const currentTheme = current?.theme;
   useEffect(() => {
-    if (current?.theme) { applyThemeToDOM(current.theme); }
+    if (currentTheme) { applyThemeToDOM(currentTheme); }
     else { resetThemeToDOM(); }
     return () => { resetThemeToDOM(); };
-  }, [current?.protocol_id]);
+  }, [currentProtocolId, currentTheme]);
 
   const pushUndo = useCallback((val, pushRedo = true) => {
     setUndoStack(prev => { const next = [...prev, val]; return next.length > MAX_UNDO ? next.slice(-MAX_UNDO) : next; });
@@ -217,8 +233,9 @@ export default function App() {
   };
 
   const handleSave = useCallback(async value => {
-    const index = protocols.findIndex(item => item.protocol_id === value.protocol_id);
-    const next = index < 0 ? [...protocols, value] : protocols.map(item => item.protocol_id === value.protocol_id ? value : item);
+    const valueId = protocolIdOf(value);
+    const index = protocols.findIndex(item => protocolIdOf(item) === valueId);
+    const next = index < 0 ? [...protocols, value] : protocols.map(item => protocolIdOf(item) === valueId ? value : item);
     try {
       await persist(next);
     } catch (error) {
@@ -262,13 +279,13 @@ export default function App() {
   const archive = value => {
     setDeleteConfirm({
       title: 'Archive project?',
-      message: `Archive project "${value.name}" and all of its versions?`,
+      message: `Archive project "${protocolNameOf(value)}" and all of its versions?`,
       confirmLabel: 'Archive',
       danger: false,
       onConfirm: async () => {
         const archivedAt = new Date().toISOString();
         try {
-          await persist(protocols.map(item => item.project_id === value.project_id ? { ...item, archived_at: archivedAt } : item));
+          await persist(protocols.map(item => projectIdOf(item) === projectIdOf(value) ? archiveProtocol(item, archivedAt) : item));
           setDeleteConfirm(null);
           showToast('Project archived');
         } catch (error) {
@@ -282,24 +299,25 @@ export default function App() {
   const renameProject = value => {
     setPrompt({
       title: 'Rename project',
-      message: `Enter a new name for "${value.name}"`,
+      message: `Enter a new name for "${protocolNameOf(value)}"`,
       placeholder: 'Project name',
-      defaultValue: value.name,
+      defaultValue: protocolNameOf(value),
       onSubmit: async name => {
         setPrompt(null);
-        if (!name || name === value.name) return;
-        const draft = protocols.find(item => item.project_id === value.project_id && item.status === 'draft' && !item.archived_at);
+        if (!name || name === protocolNameOf(value)) return;
+        const draft = protocols.find(item => projectIdOf(item) === projectIdOf(value) && protocolStatusOf(item) === 'draft' && !protocolArchivedAtOf(item));
         if (draft) {
-          const renamed = { ...draft, name, updated_at: new Date().toISOString() };
+          const renamed = renameProtocol(draft, name);
           try {
-            await persist(protocols.map(item => item.protocol_id === draft.protocol_id ? renamed : item));
-            if (current?.protocol_id === draft.protocol_id) setCurrent(renamed);
+            await persist(protocols.map(item => protocolIdOf(item) === protocolIdOf(draft) ? renamed : item));
+            if (current && protocolIdOf(current) === protocolIdOf(draft)) setCurrent(renamed);
           } catch (error) {
             showProtocolSaveError(error);
           }
         } else {
-          const next = createNextProtocolVersion(value);
-          next.name = name;
+          const next = isGraphProtocol(value) ? createNextGraphProtocolVersion(value) : createNextProtocolVersion(value);
+          if (isGraphProtocol(next)) next.metadata.name = name;
+          else next.name = name;
           addAndOpen(next);
         }
       },
@@ -354,6 +372,34 @@ export default function App() {
 
 
   if (view === 'builder' && current) {
+    if (isGraphProtocol(current)) {
+      return <>
+        <ComposerV2
+          protocol={current}
+          onChange={(next, shouldRecord = true) => {
+            if (shouldRecord) {
+              const now = Date.now();
+              if (now - undoThrottle.current > 300) pushUndo(clone(current), true);
+              undoThrottle.current = now;
+            }
+            setCurrent(next);
+            setHasUnsaved(true);
+          }}
+          onSave={handleSave}
+          onBack={handleBackFromBuilder}
+          onExport={() => saveFile(`${protocolNameOf(current)}.protocol-graph.json`, JSON.stringify(current, null, 2))}
+          onUndo={undo}
+          onRedo={redo}
+          canUndo={undoStack.length > 0}
+          canRedo={redoStack.length > 0}
+          hasUnsaved={hasUnsaved}
+          saveAnim={saveAnim}
+        />
+        {deleteConfirm && <ConfirmDialog {...deleteConfirm} />}
+        {alertState && <AlertDialog {...alertState} onClose={() => setAlert(null)} />}
+        {promptState && <PromptDialog {...promptState} />}
+      </>;
+    }
     if (viewMode === 'visual') {
       return <div className="visual-editor-shell">
         <FlowWorkspaceOverlay
@@ -475,14 +521,14 @@ export default function App() {
       protocols={protocols}
       sessions={sessions}
       onOpen={open}
-      onNew={() => addAndOpen(protocol())}
+      onNew={() => addAndOpen(createProtocolGraph())}
       onTemplate={() => addAndOpen(emotionTemplate())}
       onStroopTemplate={(cfg) => addAndOpen(stroopTemplate(cfg))}
       onGonogoTemplate={(cfg) => addAndOpen(gonogoTemplate(cfg))}
       onImport={addAndOpen}
       onRun={value => { setPreRunCheck(value); }}
-      onNextVersion={value => addAndOpen(createNextProtocolVersion(value))}
-      onDuplicate={value => addAndOpen(duplicateProtocolAsProject(value))}
+      onNextVersion={value => addAndOpen(isGraphProtocol(value) ? createNextGraphProtocolVersion(value) : createNextProtocolVersion(value))}
+      onDuplicate={value => addAndOpen(isGraphProtocol(value) ? duplicateGraphProtocolAsProject(value) : duplicateProtocolAsProject(value))}
       onArchive={archive}
       onRenameProject={renameProject}
       onAnalytics={() => setView('analytics')}

@@ -11,6 +11,7 @@ import './runner-extra.css';
 import './dashboard.css';
 import './analytics.css';
 import './sessions.css';
+import './composer-v2.css';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {

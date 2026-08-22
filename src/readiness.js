@@ -1,4 +1,15 @@
 import { stepContentIssues, validateProtocol } from './domain.js';
+import {
+  createCoreComponentRegistry,
+  isGraphProtocol,
+  protocolArchivedAtOf,
+  protocolConfigHashOf,
+  protocolIdOf,
+  protocolNameOf,
+  protocolStatusOf,
+  protocolVersionOf,
+  validateProtocolGraph,
+} from './core/index.js';
 
 const MEDIA_TYPES = new Set(['video', 'audio', 'image']);
 
@@ -15,19 +26,25 @@ function mediaHasSource(step, stimuli) {
 }
 
 function sessionMatchesProtocol(session, protocol) {
-  return session.protocol_id === protocol.protocol_id ||
-    (session.protocol_name === protocol.name && Number(session.protocol_version) === Number(protocol.version));
+  return session.protocol_id === protocolIdOf(protocol) ||
+    (session.protocol_name === protocolNameOf(protocol) && Number(session.protocol_version) === protocolVersionOf(protocol));
 }
 
 export function assessProtocolReadiness(protocol, { sessions = [], storageInfo = {} } = {}) {
-  const validation = validateProtocol(protocol);
+  const graphProtocol = isGraphProtocol(protocol);
+  const validation = graphProtocol ? validateProtocolGraph(protocol, createCoreComponentRegistry()) : validateProtocol(protocol);
   const stimuli = protocol?.stimuli || [];
   const questionnaires = protocol?.questionnaires || [];
-  const { blocks, trials, steps } = countHierarchy(protocol);
-  const mediaSteps = steps.filter(step => MEDIA_TYPES.has(step.type));
-  const missingMedia = mediaSteps.filter(step => !mediaHasSource(step, stimuli));
-  const analysisWindows = steps.filter(step => step.is_analysis_window);
-  const contentIssues = steps.flatMap(step => stepContentIssues(step, stimuli, questionnaires).map(issue => ({ ...issue, step })));
+  const hierarchy = graphProtocol
+    ? { blocks: 0, trials: 0, steps: protocol.graph.nodes.filter(node => !node.component.type.startsWith('core.')) }
+    : countHierarchy(protocol);
+  const { blocks, trials, steps } = hierarchy;
+  const mediaSteps = graphProtocol ? steps.filter(node => node.component.type === 'display.media') : steps.filter(step => MEDIA_TYPES.has(step.type));
+  const missingMedia = graphProtocol
+    ? mediaSteps.filter(node => !node.config?.sourceUrl && !node.config?.assetId)
+    : mediaSteps.filter(step => !mediaHasSource(step, stimuli));
+  const analysisWindows = graphProtocol ? steps.filter(node => node.config?.isAnalysisWindow) : steps.filter(step => step.is_analysis_window);
+  const contentIssues = graphProtocol ? [] : steps.flatMap(step => stepContentIssues(step, stimuli, questionnaires).map(issue => ({ ...issue, step })));
   const contentErrors = contentIssues.filter(issue => issue.kind === 'error');
   const contentWarnings = contentIssues.filter(issue => issue.kind === 'warn');
   const matchingSessions = sessions.filter(session => sessionMatchesProtocol(session, protocol));
@@ -39,10 +56,10 @@ export function assessProtocolReadiness(protocol, { sessions = [], storageInfo =
     {
       id: 'structure',
       label: 'Experiment structure',
-      passed: blocks > 0 && trials > 0 && steps.length > 0,
+      passed: graphProtocol ? steps.length > 0 : blocks > 0 && trials > 0 && steps.length > 0,
       severity: 'error',
-      detail: `${blocks} blocks, ${trials} trials, ${steps.length} steps.`,
-      action: 'Add at least one block, trial, and event node.',
+      detail: graphProtocol ? `${protocol.graph.nodes.length} nodes, ${protocol.graph.edges.length} connections.` : `${blocks} blocks, ${trials} trials, ${steps.length} steps.`,
+      action: graphProtocol ? 'Add at least one experiment component between Start and End.' : 'Add at least one block, trial, and event node.',
     },
     {
       id: 'validation',
@@ -50,7 +67,7 @@ export function assessProtocolReadiness(protocol, { sessions = [], storageInfo =
       passed: validation.errors.length === 0,
       severity: 'error',
       detail: validation.errors.length ? `${validation.errors.length} blocking issue(s).` : 'No blocking validation errors.',
-      action: validation.errors.slice(0, 3).join(' '),
+      action: validation.errors.slice(0, 3).map(error => error.message || error).join(' '),
     },
     {
       id: 'content',
@@ -79,9 +96,9 @@ export function assessProtocolReadiness(protocol, { sessions = [], storageInfo =
     {
       id: 'freeze',
       label: 'Frozen reproducible version',
-      passed: protocol.status === 'frozen' && Boolean(protocol.config_hash),
+      passed: protocolStatusOf(protocol) === 'frozen' && Boolean(protocolConfigHashOf(protocol)),
       severity: 'warning',
-      detail: protocol.status === 'frozen' ? `Hash ${String(protocol.config_hash || '').slice(0, 12)}...` : 'Current version is editable draft.',
+      detail: protocolStatusOf(protocol) === 'frozen' ? `Hash ${String(protocolConfigHashOf(protocol)).slice(0, 12)}...` : 'Current version is editable draft.',
       action: 'Freeze a validated version before formal collection.',
     },
     {
@@ -96,9 +113,9 @@ export function assessProtocolReadiness(protocol, { sessions = [], storageInfo =
       id: 'storage',
       label: 'Local data storage',
       passed: Boolean(storageInfo?.selected),
-      severity: protocol.status === 'frozen' ? 'error' : 'warning',
+      severity: protocolStatusOf(protocol) === 'frozen' ? 'error' : 'warning',
       detail: storageInfo?.selected ? `Folder: ${storageInfo.name || 'selected'}` : 'No local data folder selected.',
-      action: protocol.status === 'frozen'
+      action: protocolStatusOf(protocol) === 'frozen'
         ? 'Formal collection requires the desktop app or a selected local data folder.'
         : 'Use the desktop app or select a local folder before formal collection.',
     },
@@ -137,7 +154,7 @@ export function assessProtocolReadiness(protocol, { sessions = [], storageInfo =
 }
 
 export function summarizeWorkspaceReadiness(protocols, sessions, storageInfo) {
-  const active = (protocols || []).filter(protocol => protocol.status !== 'retired' && !protocol.archived_at);
+  const active = (protocols || []).filter(protocol => protocolStatusOf(protocol) !== 'retired' && !protocolArchivedAtOf(protocol));
   const assessments = active.map(protocol => assessProtocolReadiness(protocol, { sessions, storageInfo }));
   return {
     total: active.length,

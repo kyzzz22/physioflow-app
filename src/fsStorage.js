@@ -6,6 +6,7 @@ import { loadSessionDetail, saveSessionDetail, deleteSessionDetail, saveCurrentD
 import { loadAsset, saveAsset as idbSaveAsset, verifyProtocolAssets as verifyAssets } from './assetStore.js';
 import { bundle as exporterBundle } from './exporter.js';
 import { withSessionIntegrity } from './sessionReview.js';
+import { projectIdOf, protocolCreatedAtOf, protocolIdOf } from './core/protocolSelectors.js';
 import {
   activeWorkspace,
   clearWorkspaceHandle,
@@ -56,13 +57,15 @@ export async function saveSettings(settings) {
 
 // ── Projects ──
 export async function saveProject(project) {
+  const protocolId = protocolIdOf(project);
+  if (!protocolId) throw new Error('Cannot save a protocol without an ID');
   if (await hasWorkspace()) {
-    await writeText(`projects/${project.protocol_id}.json`, JSON.stringify(project, null, 2));
+    await writeText(`projects/${protocolId}.json`, JSON.stringify(project, null, 2));
     return;
   }
   try {
     const existing = JSON.parse(localStorage.getItem('physioflow.protocols.v1') || '[]');
-    const idx = existing.findIndex(p => p.protocol_id === project.protocol_id);
+    const idx = existing.findIndex(item => protocolIdOf(item) === protocolId);
     if (idx >= 0) existing[idx] = project; else existing.push(project);
     localStorage.setItem('physioflow.protocols.v1', JSON.stringify(existing));
   } catch (err) {
@@ -79,7 +82,7 @@ export async function loadProjects() {
       const raw = await readText(`projects/${name}`);
       if (raw) { try { projects.push(JSON.parse(raw)); } catch { /* skip corrupt file */ } }
     }
-    return projects.sort((left, right) => String(left.created_at || '').localeCompare(String(right.created_at || '')));
+    return projects.sort((left, right) => String(protocolCreatedAtOf(left)).localeCompare(String(protocolCreatedAtOf(right))));
   }
   try { return JSON.parse(localStorage.getItem('physioflow.protocols.v1')) || []; }
   catch { return []; }
@@ -88,19 +91,19 @@ export async function loadProjects() {
 export async function deleteProject(projectId) {
   if (await hasWorkspace()) {
     for (const project of await loadProjects()) {
-      if (project.project_id === projectId) await removeEntry(`projects/${project.protocol_id}.json`);
+      if (projectIdOf(project) === projectId) await removeEntry(`projects/${protocolIdOf(project)}.json`);
     }
     return;
   }
   try {
     const existing = JSON.parse(localStorage.getItem('physioflow.protocols.v1') || '[]');
-    localStorage.setItem('physioflow.protocols.v1', JSON.stringify(existing.filter(p => p.project_id !== projectId)));
+    localStorage.setItem('physioflow.protocols.v1', JSON.stringify(existing.filter(project => projectIdOf(project) !== projectId)));
   } catch { /* ignore */ }
 }
 
 export async function saveAllProjects(projects) {
   if (await hasWorkspace()) {
-    const keep = new Set(projects.map(project => `${project.protocol_id}.json`));
+    const keep = new Set(projects.map(project => `${protocolIdOf(project)}.json`));
     for (const name of await listFiles('projects')) {
       if (name.endsWith('.json') && !keep.has(name)) await removeEntry(`projects/${name}`);
     }

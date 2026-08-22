@@ -43,6 +43,7 @@ export class ComponentRegistry {
       category: 'custom',
       description: '',
       defaultConfig: {},
+      editorFields: [],
       events: [],
       dataFields: [],
       ...definition,
@@ -87,13 +88,24 @@ export function createCoreComponentRegistry() {
   registry.register({
     type: 'display.screen', version: '1.0.0', label: 'Screen', category: 'presentation',
     ports: [controlInput, controlOutput],
-    defaultConfig: { ui: { type: 'screen', children: [] }, completion: { mode: 'manual' } },
+    defaultConfig: { content: '', ui: { type: 'screen', children: [] }, completion: { mode: 'manual' } },
+    editorFields: [
+      { path: 'content', label: 'Screen content', type: 'textarea' },
+      { path: 'completion.mode', label: 'Completion', type: 'select', options: ['manual', 'fixed'] },
+      { path: 'completion.durationMs', label: 'Duration (ms)', type: 'number', min: 0, showWhen: { path: 'completion.mode', equals: 'fixed' } },
+    ],
     events: ['component_entered', 'component_completed'],
   });
   registry.register({
     type: 'display.media', version: '1.0.0', label: 'Media', category: 'presentation',
     ports: [controlInput, controlOutput],
     defaultConfig: { mediaType: 'image', assetId: null, completion: { mode: 'fixed', durationMs: 3000 } },
+    editorFields: [
+      { path: 'mediaType', label: 'Media type', type: 'select', options: ['image', 'audio', 'video'] },
+      { path: 'sourceUrl', label: 'Source URL', type: 'text' },
+      { path: 'assetId', label: 'Asset ID', type: 'text' },
+      { path: 'completion.durationMs', label: 'Duration (ms)', type: 'number', min: 0 },
+    ],
     events: ['component_entered', 'media_started', 'media_ended', 'component_completed'],
     dataFields: ['asset_id', 'media_type', 'actual_duration_ms'],
   });
@@ -105,6 +117,11 @@ export function createCoreComponentRegistry() {
       { id: 'value', kind: 'data', direction: 'output', dataType: 'number', required: true },
     ],
     defaultConfig: { min: 1, max: 7, required: true },
+    editorFields: [
+      { path: 'min', label: 'Minimum', type: 'number' },
+      { path: 'max', label: 'Maximum', type: 'number' },
+      { path: 'required', label: 'Required', type: 'boolean' },
+    ],
     events: ['component_entered', 'value_changed', 'response_submitted', 'component_completed'],
     dataFields: ['value', 'reaction_time_ms'],
   });
@@ -116,6 +133,11 @@ export function createCoreComponentRegistry() {
       { id: 'value', kind: 'data', direction: 'output', dataType: 'string' },
     ],
     defaultConfig: { required: false, multiline: false },
+    editorFields: [
+      { path: 'placeholder', label: 'Placeholder', type: 'text' },
+      { path: 'required', label: 'Required', type: 'boolean' },
+      { path: 'multiline', label: 'Multiline', type: 'boolean' },
+    ],
     events: ['component_entered', 'value_changed', 'response_submitted', 'component_completed'],
     dataFields: ['value', 'reaction_time_ms'],
   });
@@ -123,6 +145,7 @@ export function createCoreComponentRegistry() {
     type: 'timing.wait', version: '1.0.0', label: 'Wait', category: 'timing',
     ports: [controlInput, controlOutput],
     defaultConfig: { durationMs: 1000 },
+    editorFields: [{ path: 'durationMs', label: 'Duration (ms)', type: 'number', min: 0 }],
     events: ['component_entered', 'component_completed'],
     dataFields: ['planned_duration_ms', 'actual_duration_ms'],
   });
@@ -135,6 +158,10 @@ export function createCoreComponentRegistry() {
       { id: 'false', kind: 'control', direction: 'output' },
     ],
     defaultConfig: { operator: 'equals', expected: true },
+    editorFields: [
+      { path: 'operator', label: 'Operator', type: 'select', options: ['equals', 'not_equals', 'greater_than', 'less_than', 'truthy', 'falsy'] },
+      { path: 'expected', label: 'Expected value', type: 'text' },
+    ],
     events: ['condition_evaluated'],
   });
   registry.register({
@@ -145,6 +172,7 @@ export function createCoreComponentRegistry() {
       { id: 'exit', kind: 'control', direction: 'output' },
     ],
     defaultConfig: { maxIterations: 1 },
+    editorFields: [{ path: 'maxIterations', label: 'Maximum iterations', type: 'number', min: 1 }],
     events: ['loop_evaluated'],
   });
   registry.register({

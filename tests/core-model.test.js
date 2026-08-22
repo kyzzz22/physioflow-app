@@ -8,6 +8,8 @@ import {
   createNode,
   createProtocolGraph,
   createSequentialIdFactory,
+  createNextGraphProtocolVersion,
+  duplicateGraphProtocolAsProject,
   insertNodeOnControlEdge,
   removeNode,
   serializeProtocolGraph,
@@ -30,6 +32,20 @@ test('new protocol graph has one start, one end and a valid control edge', () =>
   assert.equal(protocol.graph.nodes.length, 2);
   assert.equal(protocol.graph.edges.length, 1);
   assert.equal(protocol.graph.entryNodeId, protocol.graph.nodes[0].id);
+});
+
+test('graph versions preserve projects while duplicates receive isolated project identities', () => {
+  const source = buildGraph();
+  const ids = createSequentialIdFactory();
+  const version = createNextGraphProtocolVersion(source, { idFactory: ids, now: '2026-08-23T00:00:00.000Z' });
+  const duplicate = duplicateGraphProtocolAsProject(source, { idFactory: ids, now: '2026-08-23T00:00:00.000Z' });
+
+  assert.equal(version.projectId, source.projectId);
+  assert.notEqual(version.protocolId, source.protocolId);
+  assert.equal(version.version.number, 2);
+  assert.equal(duplicate.version.number, 1);
+  assert.notEqual(duplicate.projectId, source.projectId);
+  assert.match(duplicate.metadata.name, /Copy$/);
 });
 
 test('component definitions reject duplicate and invalid ports', () => {

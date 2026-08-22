@@ -5,10 +5,34 @@ import { verifyProtocolAssets } from './assetStore.js';
 import { ConfirmDialog, AlertDialog } from './Modal.jsx';
 import { assessProtocolReadiness, summarizeWorkspaceReadiness } from './readiness.js';
 import TemplateButton from './TemplateConfig.jsx';
+import {
+  createCoreComponentRegistry,
+  createNextGraphProtocolVersion,
+  duplicateGraphProtocolAsProject,
+  isGraphProtocol,
+  projectIdOf,
+  protocolArchivedAtOf,
+  protocolConfigHashOf,
+  protocolIdOf,
+  protocolNameOf,
+  protocolStatusOf,
+  protocolVersionLabelOf,
+  protocolVersionOf,
+  validateProtocolGraph,
+} from './core/index.js';
 
-const groupProjects = protocols => Object.values(protocols.filter(item => item.status !== 'retired' && !item.archived_at).reduce((groups, item) => { (groups[item.project_id] ??= []).push(item); return groups; }, {})).map(versions => versions.sort((left, right) => Number(right.version) - Number(left.version)));
+const groupProjects = protocols => Object.values(protocols
+  .filter(item => protocolStatusOf(item) !== 'retired' && !protocolArchivedAtOf(item))
+  .reduce((groups, item) => { (groups[projectIdOf(item)] ??= []).push(item); return groups; }, {}))
+  .map(versions => versions.sort((left, right) => protocolVersionOf(right) - protocolVersionOf(left)));
 
 function estimateDuration(protocol) {
+  if (isGraphProtocol(protocol)) {
+    return protocol.graph.nodes.reduce((total, node) => {
+      const duration = node.config?.completion?.durationMs ?? node.config?.durationMs ?? 0;
+      return total + (Number(duration) || 0);
+    }, 0);
+  }
   return protocol.blocks.reduce((sum, b) => {
     const br = Math.max(0, Number(b.repeat_count ?? 1));
     return sum + br * b.trials.reduce((ts, t) => {
@@ -50,14 +74,20 @@ export default function Dashboard({ protocols, sessions, onOpen, onNew, onTempla
 
   const importFile = async file => {
     try {
-      const candidate = JSON.parse(await file.text()), check = validateProtocol(candidate);
-      if (!check.valid) throw new Error(check.errors.slice(0, 8).join('\n'));
-      if (candidate.status === 'frozen') {
+      const candidate = JSON.parse(await file.text());
+      const graphCandidate = isGraphProtocol(candidate);
+      const check = graphCandidate
+        ? validateProtocolGraph(candidate, createCoreComponentRegistry())
+        : validateProtocol(candidate);
+      if (!check.valid) throw new Error(check.errors.slice(0, 8).map(error => error.message || error).join('\n'));
+      if (!graphCandidate && candidate.status === 'frozen') {
         if (!candidate.config_hash) throw new Error('Frozen protocol has no config_hash.');
         const actualHash = await hashProtocol(candidate);
         if (actualHash !== candidate.config_hash) throw new Error(`Frozen protocol hash mismatch.\nExpected ${candidate.config_hash}\nActual ${actualHash}`);
       }
-      const assets = await verifyProtocolAssets(candidate);
+      const assets = graphCandidate
+        ? { valid: !(candidate.assets || []).some(asset => asset.required && !asset.sourceUrl && !asset.assetId), issues: (candidate.assets || []).filter(asset => asset.required && !asset.sourceUrl && !asset.assetId).map(asset => ({ message: `Missing required asset ${asset.name || asset.id}` })) }
+        : await verifyProtocolAssets(candidate);
       let forceDraft = false;
       if (!assets.valid) {
         const proceed = await new Promise(resolve => {
@@ -66,18 +96,31 @@ export default function Dashboard({ protocols, sessions, onOpen, onNew, onTempla
         if (!proceed) return;
         forceDraft = true;
       }
-      const related = protocols.filter(item => item.project_id === candidate.project_id).sort((a, b) => Number(b.version) - Number(a.version));
+      const related = protocols.filter(item => projectIdOf(item) === projectIdOf(candidate)).sort((a, b) => protocolVersionOf(b) - protocolVersionOf(a));
       let imported = structuredClone(candidate);
       if (related.length) {
-        const comparison = protocolDiff(related[0], candidate);
+        const comparison = graphCandidate
+          ? { identical: JSON.stringify(related[0].graph) === JSON.stringify(candidate.graph), changes: ['Protocol Graph configuration differs'] }
+          : protocolDiff(related[0], candidate);
         const asVersion = await new Promise(resolve => {
           setConfirm({ title: 'Existing project', message: `A project with this project_id already exists.\n\nDifferences from latest version:\n${comparison.identical ? 'No content differences' : comparison.changes.join('\n') || 'Detailed configuration changed'}\n\nOK: import as the next version\nCancel: import as a new project`, confirmLabel: 'Import as version', danger: false, onConfirm: () => { setConfirm(null); resolve(true); }, onCancel: () => { setConfirm(null); resolve(false); } });
         });
-        if (asVersion) { imported = createNextProtocolVersion(candidate); imported.project_id = related[0].project_id; }
-        else imported = duplicateProtocolAsProject(candidate);
+        if (asVersion) {
+          imported = graphCandidate ? createNextGraphProtocolVersion(candidate) : createNextProtocolVersion(candidate);
+          if (graphCandidate) imported.projectId = projectIdOf(related[0]);
+          else imported.project_id = projectIdOf(related[0]);
+        } else imported = graphCandidate ? duplicateGraphProtocolAsProject(candidate) : duplicateProtocolAsProject(candidate);
       }
-      else if (protocols.some(item => item.protocol_id === candidate.protocol_id)) imported = duplicateProtocolAsProject(candidate);
-      if (forceDraft) { imported.status = 'draft'; imported.frozen_at = null; imported.config_hash = null; }
+      else if (protocols.some(item => protocolIdOf(item) === protocolIdOf(candidate))) imported = graphCandidate ? duplicateGraphProtocolAsProject(candidate) : duplicateProtocolAsProject(candidate);
+      if (forceDraft) {
+        if (graphCandidate) {
+          imported.version = { ...imported.version, status: 'draft' };
+          imported.audit = { ...imported.audit, frozenAt: null };
+          delete imported.freeze;
+        } else {
+          imported.status = 'draft'; imported.frozen_at = null; imported.config_hash = null;
+        }
+      }
       onImport(imported);
     } catch (error) {
       setAlert({ title: 'Import failed', message: error.message });
@@ -96,7 +139,7 @@ export default function Dashboard({ protocols, sessions, onOpen, onNew, onTempla
         <p>Design protocols, run sessions, review integrity, and export analysis-ready data from one local-first workspace.</p>
         <div className="dashboard-stats" aria-label="Workspace summary">
           <span><b>{projects.length}</b> active projects</span>
-          <span><b>{protocols.filter(item => item.status === 'frozen').length}</b> frozen versions</span>
+          <span><b>{protocols.filter(item => protocolStatusOf(item) === 'frozen').length}</b> frozen versions</span>
           <span><b>{sessions.length}</b> sessions</span>
           <span><b>{workspaceReadiness.ready}</b> ready</span>
         </div>
@@ -146,10 +189,10 @@ export default function Dashboard({ protocols, sessions, onOpen, onNew, onTempla
     <section>
       <div className="section-title">
         <h2>Projects</h2>
-        <span>{projects.length} active · {protocols.filter(item => item.status === 'frozen').length} frozen versions</span>
+        <span>{projects.length} active · {protocols.filter(item => protocolStatusOf(item) === 'frozen').length} frozen versions</span>
       </div>
       <div className="protocol-grid">
-        {projects.map(versions => <ProjectCard key={versions[0].project_id} versions={versions} sessions={sessions} storageInfo={storageInfo} onOpen={onOpen} onRun={onRun} onNextVersion={onNextVersion} onDuplicate={onDuplicate} onArchive={onArchive} onRenameProject={onRenameProject} />)}
+        {projects.map(versions => <ProjectCard key={projectIdOf(versions[0])} versions={versions} sessions={sessions} storageInfo={storageInfo} onOpen={onOpen} onRun={onRun} onNextVersion={onNextVersion} onDuplicate={onDuplicate} onArchive={onArchive} onRenameProject={onRenameProject} />)}
         {!projects.length && <div className="empty">
           <div className="empty-icon">🧪</div>
           <h3 className="empty-title">No projects yet</h3>
@@ -192,21 +235,27 @@ export default function Dashboard({ protocols, sessions, onOpen, onNew, onTempla
 }
 
 function ProjectCard({ versions, sessions, storageInfo, onOpen, onRun, onNextVersion, onDuplicate, onArchive, onRenameProject }) {
-  const latest = versions[0], draft = versions.find(item => item.status === 'draft');
+  const latest = versions[0], draft = versions.find(item => protocolStatusOf(item) === 'draft');
   const activeProtocol = draft || latest;
   const readiness = assessProtocolReadiness(activeProtocol, { sessions, storageInfo });
-  const stepTypes = new Set(latest.blocks.flatMap(b => b.trials.flatMap(t => t.steps.map(s => s.type))));
-  const questionnaireCount = latest.blocks.reduce((c, b) => c + b.trials.reduce((tc, t) => tc + t.steps.filter(s => s.type === 'questionnaire').length, 0), 0);
+  const graphProtocol = isGraphProtocol(latest);
+  const stepTypes = new Set(graphProtocol
+    ? latest.graph.nodes.map(node => node.component.type).filter(type => !type.startsWith('core.'))
+    : latest.blocks.flatMap(b => b.trials.flatMap(t => t.steps.map(s => s.type))));
+  const questionnaireCount = graphProtocol ? 0 : latest.blocks.reduce((c, b) => c + b.trials.reduce((tc, t) => tc + t.steps.filter(s => s.type === 'questionnaire').length, 0), 0);
   const totalMs = estimateDuration(latest);
-  const missingMedia = latest.blocks.some(b => b.trials.some(t => t.steps.some(s => ['video', 'audio', 'image'].includes(s.type) && !s.source_url && !s.asset_id && !(latest.stimuli || []).some(r => r.stimulus_id === s.stimulus_id && (r.source_url || r.asset_id)))));
+  const missingMedia = graphProtocol
+    ? latest.graph.nodes.some(node => node.component.type === 'display.media' && !node.config?.assetId && !node.config?.sourceUrl)
+    : latest.blocks.some(b => b.trials.some(t => t.steps.some(s => ['video', 'audio', 'image'].includes(s.type) && !s.source_url && !s.asset_id && !(latest.stimuli || []).some(r => r.stimulus_id === s.stimulus_id && (r.source_url || r.asset_id)))));
+  const status = protocolStatusOf(latest);
   return <article className="protocol-card project-card">
     <div className="protocol-card-top">
-      <span className={`badge ${latest.status}`}>{latest.status}</span>
+      <span className={`badge ${status}`}>{status}</span>
       <span className={`readiness-pill ${readiness.status}`}>{readiness.score}% · {readiness.status}</span>
     </div>
     <button className="card-main" onClick={() => onOpen(activeProtocol)}>
-      <h3>{latest.name}</h3>
-      <p>{latest.blocks.length} blocks · {latest.blocks.reduce((total, b) => total + b.trials.length, 0)} trials</p>
+      <h3>{protocolNameOf(latest)}</h3>
+      <p>{graphProtocol ? `${latest.graph.nodes.length} nodes · ${latest.graph.edges.length} connections` : `${latest.blocks.length} blocks · ${latest.blocks.reduce((total, b) => total + b.trials.length, 0)} trials`}</p>
       <div className="protocol-summary">
         {[...stepTypes].slice(0, 5).map(t => <span key={t}>{t}</span>)}
         {questionnaireCount > 0 && <span>☷ {questionnaireCount} Q</span>}
@@ -214,7 +263,7 @@ function ProjectCard({ versions, sessions, storageInfo, onOpen, onRun, onNextVer
         {missingMedia && <span style={{ background: '#ffe9e6', color: '#922b24' }}>⚠ missing media</span>}
         {stepTypes.size > 5 && <span>+{stepTypes.size - 5} more</span>}
       </div>
-      <small>Latest v{latest.version} · {latest.version_name}</small>
+      <small>{graphProtocol && <span className="composer-v2-tag">Composer V2 · </span>}Latest v{protocolVersionOf(latest)} · {protocolVersionLabelOf(latest)}</small>
     </button>
     <details className="readiness-details">
       <summary>Lab readiness checklist</summary>
@@ -230,14 +279,17 @@ function ProjectCard({ versions, sessions, storageInfo, onOpen, onRun, onNextVer
     </details>
     <div className="card-actions">
       {draft ? <button className="primary" onClick={() => onOpen(draft)}>Edit draft</button> : <button onClick={() => onNextVersion(latest)}>New version</button>}
-      {latest.status === 'frozen' && <button className="primary" onClick={() => onRun(latest)}>Run latest</button>}
+      {status === 'frozen' && <button className="primary" onClick={() => onRun(latest)}>Run latest</button>}
       <button onClick={() => onRenameProject(latest)}>Rename</button>
       <button onClick={() => onDuplicate(latest)}>Duplicate project</button>
       <button onClick={() => onArchive(latest)}>Archive project</button>
     </div>
     <details className="version-history">
       <summary>Version history</summary>
-      {versions.map(item => <div key={item.protocol_id}><span className={`badge ${item.status}`}>{item.status}</span><b>v{item.version}</b><span>{item.version_name}</span>{item.config_hash && <code>{item.config_hash.slice(0, 10)}…</code>}<button onClick={() => onOpen(item)}>{item.status === 'frozen' ? 'View' : 'Edit'}</button>{item.status === 'frozen' && <button onClick={() => onRun(item)}>Run</button>}</div>)}
+      {versions.map(item => {
+        const itemStatus = protocolStatusOf(item), hash = protocolConfigHashOf(item);
+        return <div key={protocolIdOf(item)}><span className={`badge ${itemStatus}`}>{itemStatus}</span><b>v{protocolVersionOf(item)}</b><span>{protocolVersionLabelOf(item)}</span>{hash && <code>{hash.slice(0, 10)}…</code>}<button onClick={() => onOpen(item)}>{itemStatus === 'frozen' ? 'View' : 'Edit'}</button>{itemStatus === 'frozen' && <button onClick={() => onRun(item)}>Run</button>}</div>;
+      })}
     </details>
   </article>;
 }
