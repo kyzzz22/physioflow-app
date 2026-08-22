@@ -11,12 +11,14 @@ import {
   createNode,
   createProtocolGraph,
   createSequentialIdFactory,
+  createSubflowTemplate,
   createNextGraphProtocolVersion,
   duplicateGraphProtocolAsProject,
   duplicateNode,
   freezeProtocolGraph,
   hashProtocolGraph,
   insertNodeOnControlEdge,
+  instantiateSubflowTemplate,
   participantUiTemplate,
   removeNode,
   removeVariable,
@@ -220,11 +222,14 @@ test('graph validation rejects missing and multiply grouped nodes', () => {
 });
 
 test('parameterized subflow boundaries and contracts are validated', () => {
-  const first = addNode(buildGraph(), 'display.screen', { id: 'subflow_entry' }).protocol;
+  const first = addNode(buildGraph(), 'logic.condition', { id: 'subflow_entry' }).protocol;
   const second = addNode(first, 'input.rating', { id: 'subflow_exit' }).protocol;
   const created = createNodeGroup(second, ['subflow_entry', 'subflow_exit'], {
     id: 'subflow_1', name: 'Rating subflow', kind: 'subflow', entryNodeId: 'subflow_entry', exitNodeIds: ['subflow_exit'],
-    parameters: [{ name: 'prompt', type: 'string', direction: 'input' }, { name: 'score', type: 'number', direction: 'output' }],
+    parameters: [
+      { name: 'criterion', type: 'number', direction: 'input', target: { nodeId: 'subflow_entry', portId: 'value' } },
+      { name: 'score', type: 'number', direction: 'output', source: { nodeId: 'subflow_exit', portId: 'value' } },
+    ],
   });
   let check = validateProtocolGraph(created.protocol, createCoreComponentRegistry());
   assert.ok(!check.errors.some(error => error.code.startsWith('subflow.')));
@@ -235,6 +240,41 @@ test('parameterized subflow boundaries and contracts are validated', () => {
   assert.ok(check.errors.some(error => error.code === 'subflow.parameter_name_invalid'));
   assert.ok(check.errors.some(error => error.code === 'subflow.parameter_type_invalid'));
   assert.ok(check.errors.some(error => error.code === 'subflow.parameter_direction_invalid'));
+});
+
+test('reusable subflow templates create isolated mapped graph instances', () => {
+  let protocol = addVariable(buildGraph(), { name: 'criterion', type: 'number', scope: 'session', defaultValue: 5 });
+  protocol = addVariable(protocol, { name: 'score', type: 'number', scope: 'session', defaultValue: 0 });
+  protocol = addNode(protocol, 'logic.condition', { id: 'template_condition' }).protocol;
+  protocol = addNode(protocol, 'input.rating', { id: 'template_rating' }).protocol;
+  protocol = connect(protocol, 'control', { nodeId: 'template_condition', portId: 'true' }, { nodeId: 'template_rating', portId: 'in' }, { id: 'template_edge' }).protocol;
+  protocol = createNodeGroup(protocol, ['template_condition', 'template_rating'], {
+    id: 'source_subflow', name: 'Reusable rating', kind: 'subflow', entryNodeId: 'template_condition', exitNodeIds: ['template_rating'],
+    parameters: [
+      { name: 'criterion', type: 'number', direction: 'input', target: { nodeId: 'template_condition', portId: 'value' } },
+      { name: 'score', type: 'number', direction: 'output', source: { nodeId: 'template_rating', portId: 'value' } },
+    ],
+  }).protocol;
+  const published = createSubflowTemplate(protocol, 'source_subflow', { id: 'rating_template', now: '2026-08-22T01:00:00.000Z' });
+  let nextId = 0;
+  const instance = instantiateSubflowTemplate(published.protocol, 'rating_template', {
+    idFactory: prefix => `${prefix}_instance_${++nextId}`,
+    parameterMappings: { criterion: 'criterion', score: 'score' },
+    position: { x: 900, y: 300 },
+  });
+
+  assert.equal(instance.nodes.length, 2);
+  assert.equal(instance.edges.length, 1);
+  assert.notEqual(instance.group.entryNodeId, 'template_condition');
+  assert.deepEqual(instance.group.parameterMappings, { criterion: 'criterion', score: 'score' });
+  assert.ok(instance.group.nodeIds.includes(instance.group.parameters[0].target.nodeId));
+  assert.ok(instance.group.nodeIds.includes(instance.group.parameters[1].source.nodeId));
+  assert.equal(instance.protocol.subflowTemplates[0].id, 'rating_template');
+
+  const broken = structuredClone(instance.protocol);
+  broken.graph.groups.find(group => group.id === instance.group.id).parameterMappings = {};
+  const validation = validateProtocolGraph(broken, createCoreComponentRegistry());
+  assert.ok(validation.errors.some(error => error.code === 'subflow.parameter_mapping_missing'));
 });
 
 test('validation reports unknown components and missing edge endpoints', () => {

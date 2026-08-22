@@ -40,6 +40,11 @@ export function removeNode(protocol, nodeId, options = {}) {
     nodeIds: group.nodeIds.filter(id => id !== nodeId),
     entryNodeId: group.entryNodeId === nodeId ? null : group.entryNodeId,
     exitNodeIds: (group.exitNodeIds || []).filter(id => id !== nodeId),
+    parameters: (group.parameters || []).map(parameter => ({
+      ...parameter,
+      target: parameter.target?.nodeId === nodeId ? null : parameter.target,
+      source: parameter.source?.nodeId === nodeId ? null : parameter.source,
+    })),
   }));
   return touch(next, options.now);
 }

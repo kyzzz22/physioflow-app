@@ -4,6 +4,7 @@ import {
   addNode,
   connect,
   createCoreComponentRegistry,
+  createNodeGroup,
   createProtocolGraph,
   createSequentialIdFactory,
 } from '../src/core/index.js';
@@ -100,6 +101,49 @@ test('event replay rejects sequence gaps instead of inventing state', () => {
   const protocol = linearProtocol();
   const started = startRuntime(runtimeFor(protocol), protocol, createCoreComponentRegistry(), services());
   assert.throws(() => createRuntimeReplay(protocol, [started.events[1]]), /expected 1, found 2/);
+});
+
+test('subflow output parameters write through to mapped protocol variables', () => {
+  const protocol = linearProtocol();
+  const screen = protocol.graph.nodes.find(node => node.id === 'screen_1');
+  screen.component = { type: 'input.rating', version: '1.0.0' };
+  screen.config = { min: 1, max: 7, required: true };
+  protocol.variables = [{ name: 'score', type: 'number', scope: 'session', defaultValue: 0 }];
+  const grouped = createNodeGroup(protocol, ['screen_1'], {
+    id: 'rating_instance', name: 'Rating instance', kind: 'subflow', entryNodeId: 'screen_1', exitNodeIds: ['screen_1'],
+    parameters: [{ name: 'score', type: 'number', direction: 'output', source: { nodeId: 'screen_1', portId: 'value' } }],
+    metadata: { templateId: 'rating_template', templateVersion: 1 },
+  }).protocol;
+  grouped.graph.groups[0].parameterMappings = { score: 'score' };
+  const registry = createCoreComponentRegistry();
+  const svc = services();
+  const started = startRuntime(runtimeFor(grouped), grouped, registry, svc);
+  const completed = completeCurrentNode(started.state, grouped, registry, svc, { outputs: { value: 6 } });
+  assert.equal(completed.state.variables.score, 6);
+  assert.equal(completed.events[0].payload.variables.score, 6);
+});
+
+test('subflow input parameters resolve mapped variables at runtime', () => {
+  const protocol = createProtocolGraph({ idFactory: createSequentialIdFactory(), name: 'Mapped condition', now: '2026-08-22T00:00:00.000Z' });
+  const start = protocol.graph.nodes.find(node => node.component.type === 'core.start');
+  const endA = protocol.graph.nodes.find(node => node.component.type === 'core.end');
+  protocol.graph.edges = [];
+  let next = addNode(protocol, 'logic.condition', { id: 'mapped_condition', config: { operator: 'greater_than', expected: 5 } }).protocol;
+  next = addNode(next, 'core.end', { id: 'mapped_end_b', label: 'End B' }).protocol;
+  next = connect(next, 'control', { nodeId: start.id, portId: 'next' }, { nodeId: 'mapped_condition', portId: 'in' }).protocol;
+  next = connect(next, 'control', { nodeId: 'mapped_condition', portId: 'true' }, { nodeId: endA.id, portId: 'in' }).protocol;
+  next = connect(next, 'control', { nodeId: 'mapped_condition', portId: 'false' }, { nodeId: 'mapped_end_b', portId: 'in' }).protocol;
+  next.variables = [{ name: 'criterion', type: 'number', scope: 'session', defaultValue: 0 }];
+  next = createNodeGroup(next, ['mapped_condition'], {
+    id: 'condition_instance', name: 'Condition instance', kind: 'subflow', entryNodeId: 'mapped_condition', exitNodeIds: ['mapped_condition'],
+    parameters: [{ name: 'criterion', type: 'number', direction: 'input', target: { nodeId: 'mapped_condition', portId: 'value' } }],
+    metadata: { templateId: 'condition_template', templateVersion: 1 },
+  }).protocol;
+  next.graph.groups[0].parameterMappings = { criterion: 'criterion' };
+  const result = startRuntime(runtimeFor(next, { criterion: 8 }), next, createCoreComponentRegistry(), services());
+  assert.equal(result.state.status, 'completed');
+  assert.equal(result.events.find(event => event.eventType === 'condition_evaluated').payload.actual, 8);
+  assert.equal(result.events.at(-1).nodeId, endA.id);
 });
 
 test('a registered participant component runs without a runtime type branch', () => {

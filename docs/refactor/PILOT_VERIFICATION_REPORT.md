@@ -13,14 +13,16 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 - Duplicated a Screen inline and confirmed the graph rewired from 3 nodes / 2 connections to 4 nodes / 3 connections while preserving a valid participant UI configuration.
 - Promoted a persisted node group to a subflow, selected its entry and exit boundaries, added a typed input parameter, and confirmed the controls survived the live Composer update.
 - Opened the saved Rating session in Session Review, moved backward from the terminal event, and confirmed the replay changed from completed/End to running/component-completed/Rating with reconstructed variables and outputs.
+- Built a Condition + Rating subflow in Composer, selected concrete input/output data-port endpoints, published it as a reusable template, mapped both parameters to a typed session variable, and generated an isolated two-node instance with remapped boundaries and provenance.
+- Confirmed the first-run tour stays inside a 1280px viewport after clamping side-positioned cards to the visible area.
 - Migrated the representative Emotion protocol from the Dashboard into Composer V2. The migration produced 22 nodes and 21 edges, preserved all 20 steps, reported 100% native mapping, and kept formal collection behind the explicit migration-review gate.
 - Re-ran the automated release gate after immutable-version, required-port, participant binding/action, lifecycle-event, response-time, and independent export-validator hardening.
 
 ## Acceptance evidence
 
-- Automated tests: 104 passing.
+- Automated tests: 107 passing.
 - Production build: passing.
-- Lint: zero errors; 20 warnings remain only in legacy transition files.
+- Lint: zero errors; 19 warnings remain only in legacy transition files.
 - Representative migration tests: Emotion, Stroop, and Go/No-Go each meet the native coverage threshold.
 - Frozen graph behavior: a frozen protocol retains its hash and status; editing creates a distinct next-version draft.
 - Data behavior: Runtime V2 records contiguous event sequences, value changes, UI actions, response submission, media lifecycle events, response reaction time, snapshots, raw records, normalized tables, manifests, a dictionary, and a quality report.
@@ -31,6 +33,7 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 - Automated end-to-end gate: composed a Screen and Rating graph, validated and froze it, ran through snapshot/restore, and verified the completed export and quality report.
 - Performance gate: the 500-node validation/edit fixture and 10,000-event export fixture both pass their enforced thresholds.
 - Replay behavior: deterministic tests compare replayed variables, outputs, completed nodes and terminal status with the live Runtime V2 state; sequence gaps are rejected.
+- Reusable-subflow behavior: template instances receive isolated node/edge IDs, remapped parameter endpoints and variable mappings; Runtime V2 tests prove mapped input reads and output write-through.
 
 ## Known transition scope
 

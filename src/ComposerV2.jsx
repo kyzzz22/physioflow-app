@@ -6,13 +6,16 @@ import {
   connect,
   createCoreComponentRegistry,
   createNodeGroup,
+  createSubflowTemplate,
   disconnect,
   duplicateNode,
   insertNodeOnControlEdge,
+  instantiateSubflowTemplate,
   moveNodes,
   protocolNameOf,
   removeVariable,
   removeNodeGroup,
+  removeSubflowTemplate,
   removeNode,
   updateVariable,
   updateNodeGroup,
@@ -209,7 +212,17 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
           try { commit(removeVariable(protocol, name)); }
           catch (error) { setMessage(error.message); }
         }} />}
-        {editorMode !== 'quick' && <GroupCatalog groups={protocol.graph.groups || []} nodes={protocol.graph.nodes} locked={locked} onUpdate={(groupId, changes) => commit(updateNodeGroup(protocol, groupId, changes))} onRemove={groupId => commit(removeNodeGroup(protocol, groupId))} />}
+        {editorMode !== 'quick' && <GroupCatalog groups={protocol.graph.groups || []} nodes={protocol.graph.nodes} locked={locked} onUpdate={(groupId, changes) => commit(updateNodeGroup(protocol, groupId, changes))} onRemove={groupId => commit(removeNodeGroup(protocol, groupId))} onPublish={groupId => {
+          try { const result = createSubflowTemplate(protocol, groupId); commit(result.protocol); setMessage(`Published reusable subflow ${result.template.name}`); }
+          catch (error) { setMessage(error.message); }
+        }} />}
+        {editorMode !== 'quick' && <SubflowTemplateCatalog templates={protocol.subflowTemplates || []} variables={protocol.variables || []} locked={locked} onInstantiate={(templateId, parameterMappings) => {
+          try { const result = instantiateSubflowTemplate(protocol, templateId, { parameterMappings, position: { x: 320, y: 180 + (protocol.graph.groups?.length || 0) * 170 } }); commit(result.protocol); setSelectedNodeId(result.group.entryNodeId); setMessage(`Created ${result.group.name}`); }
+          catch (error) { setMessage(error.message); }
+        }} onRemove={templateId => {
+          try { commit(removeSubflowTemplate(protocol, templateId)); }
+          catch (error) { setMessage(error.message); }
+        }} />}
       </aside>
       <section className="composer-canvas-wrap">
         <div className="composer-canvas-toolbar">
@@ -299,7 +312,24 @@ function NodeInspector({ node, definition, variables, groups, mode, onUpdate, on
   </div>;
 }
 
-function GroupCatalog({ groups, nodes, locked, onUpdate, onRemove }) {
+function groupDataPorts(group, nodes, direction) {
+  return group.nodeIds.flatMap(nodeId => {
+    const node = nodes.find(item => item.id === nodeId);
+    const definition = node && registry.get(node.component.type, node.component.version);
+    return (definition?.ports || []).filter(port => port.kind === 'data' && port.direction === direction).map(port => ({ nodeId, portId: port.id, dataType: port.dataType, label: `${node.label} · ${port.label || port.id}` }));
+  });
+}
+
+function endpointValue(endpoint) {
+  return endpoint ? `${endpoint.nodeId}::${endpoint.portId}` : '';
+}
+
+function parseEndpoint(value) {
+  const [nodeId, portId] = value.split('::');
+  return nodeId && portId ? { nodeId, portId } : null;
+}
+
+function GroupCatalog({ groups, nodes, locked, onUpdate, onRemove, onPublish }) {
   return <section className="group-catalog">
     <h3>Groups</h3>
     <p>Visual containers organize related nodes without creating a second execution model.</p>
@@ -314,16 +344,51 @@ function GroupCatalog({ groups, nodes, locked, onUpdate, onRemove }) {
       {group.kind === 'subflow' && <div className="subflow-settings">
         <label>Entry<select disabled={locked} aria-label={`${group.name} subflow entry`} value={group.entryNodeId || ''} onChange={event => onUpdate(group.id, { entryNodeId: event.target.value })}>{group.nodeIds.map(nodeId => <option key={nodeId} value={nodeId}>{nodes.find(node => node.id === nodeId)?.label || nodeId}</option>)}</select></label>
         <fieldset className="subflow-exits"><legend>Exits</legend>{group.nodeIds.map(nodeId => <label key={nodeId}><input disabled={locked} type="checkbox" checked={(group.exitNodeIds || []).includes(nodeId)} onChange={event => onUpdate(group.id, { exitNodeIds: event.target.checked ? [...(group.exitNodeIds || []), nodeId] : (group.exitNodeIds || []).filter(id => id !== nodeId) })} />{nodes.find(node => node.id === nodeId)?.label || nodeId}</label>)}</fieldset>
-        {(group.parameters || []).map((parameter, index) => <div className="subflow-parameter" key={index}>
+        {(group.parameters || []).map((parameter, index) => {
+          const ports = groupDataPorts(group, nodes, parameter.direction);
+          const endpointName = parameter.direction === 'output' ? 'source' : 'target';
+          return <div className="subflow-parameter" key={index}>
           <input disabled={locked} aria-label={`${group.name} parameter ${index + 1} name`} value={parameter.name} onChange={event => onUpdate(group.id, { parameters: group.parameters.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item) })} />
           <select disabled={locked} aria-label={`${group.name} parameter ${index + 1} type`} value={parameter.type} onChange={event => onUpdate(group.id, { parameters: group.parameters.map((item, itemIndex) => itemIndex === index ? { ...item, type: event.target.value } : item) })}>{['string', 'number', 'boolean', 'enum', 'object', 'array', 'unknown'].map(type => <option key={type}>{type}</option>)}</select>
-          <select disabled={locked} aria-label={`${group.name} parameter ${index + 1} direction`} value={parameter.direction} onChange={event => onUpdate(group.id, { parameters: group.parameters.map((item, itemIndex) => itemIndex === index ? { ...item, direction: event.target.value } : item) })}><option value="input">input</option><option value="output">output</option></select>
+          <select disabled={locked} aria-label={`${group.name} parameter ${index + 1} direction`} value={parameter.direction} onChange={event => {
+            const direction = event.target.value;
+            const firstPort = groupDataPorts(group, nodes, direction)[0];
+            onUpdate(group.id, { parameters: group.parameters.map((item, itemIndex) => itemIndex === index ? { ...item, direction, type: firstPort?.dataType || item.type, target: direction === 'input' && firstPort ? { nodeId: firstPort.nodeId, portId: firstPort.portId } : undefined, source: direction === 'output' && firstPort ? { nodeId: firstPort.nodeId, portId: firstPort.portId } : undefined } : item) });
+          }}><option value="input">input</option><option value="output">output</option></select>
+          <select disabled={locked || !ports.length} aria-label={`${group.name} parameter ${index + 1} endpoint`} value={endpointValue(parameter[endpointName])} onChange={event => onUpdate(group.id, { parameters: group.parameters.map((item, itemIndex) => itemIndex === index ? { ...item, [endpointName]: parseEndpoint(event.target.value) } : item) })}><option value="">Select port</option>{ports.map(port => <option key={`${port.nodeId}:${port.portId}`} value={endpointValue(port)}>{port.label}</option>)}</select>
           <button disabled={locked} aria-label={`Delete parameter ${parameter.name}`} onClick={() => onUpdate(group.id, { parameters: group.parameters.filter((_, itemIndex) => itemIndex !== index) })}>×</button>
-        </div>)}
-        <button disabled={locked} onClick={() => onUpdate(group.id, { parameters: [...(group.parameters || []), { name: `parameter_${(group.parameters || []).length + 1}`, type: 'string', direction: 'input' }] })}>Add parameter</button>
+        </div>})}
+        <button disabled={locked || (!groupDataPorts(group, nodes, 'input').length && !groupDataPorts(group, nodes, 'output').length)} onClick={() => {
+          const direction = groupDataPorts(group, nodes, 'input').length ? 'input' : 'output';
+          const port = groupDataPorts(group, nodes, direction)[0];
+          const endpointName = direction === 'output' ? 'source' : 'target';
+          onUpdate(group.id, { parameters: [...(group.parameters || []), { name: `parameter_${(group.parameters || []).length + 1}`, type: port.dataType || 'unknown', direction, [endpointName]: { nodeId: port.nodeId, portId: port.portId } }] });
+        }}>Add parameter</button>
+        <button disabled={locked} onClick={() => onPublish(group.id)}>Publish reusable template</button>
       </div>}
       <button disabled={locked} aria-label={`Delete group ${group.name}`} onClick={() => onRemove(group.id)}>×</button>
     </article>)}
+  </section>;
+}
+
+function SubflowTemplateCatalog({ templates, variables, locked, onInstantiate, onRemove }) {
+  const [mappings, setMappings] = useState({});
+  if (!templates.length) return null;
+  return <section className="subflow-template-catalog">
+    <h3>Reusable subflows</h3>
+    <p>Instances are expanded into the same executable graph and keep their template provenance.</p>
+    {templates.map(template => {
+      const compatible = parameter => variables.filter(variable => parameter.type === 'unknown' || variable.type === 'unknown' || variable.type === parameter.type);
+      const currentMappings = mappings[template.id] || {};
+      const resolvedMappings = Object.fromEntries((template.parameters || []).map(parameter => [parameter.name, currentMappings[parameter.name] || compatible(parameter)[0]?.name || '']));
+      const ready = (template.parameters || []).every(parameter => resolvedMappings[parameter.name]);
+      return <article key={template.id}>
+        <div><b>{template.name}</b><small>v{template.version} · {template.nodes.length} nodes</small></div>
+        {(template.parameters || []).map(parameter => <label key={parameter.name}>{parameter.direction} {parameter.name}<select disabled={locked} aria-label={`${template.name} ${parameter.name} variable mapping`} value={resolvedMappings[parameter.name]} onChange={event => setMappings(current => ({ ...current, [template.id]: { ...(current[template.id] || {}), [parameter.name]: event.target.value } }))}><option value="">Select variable</option>{compatible(parameter).map(variable => <option key={variable.name}>{variable.name}</option>)}</select></label>)}
+        {!ready && Boolean(template.parameters?.length) && <small>Add compatible protocol variables before instantiating.</small>}
+        <div className="subflow-template-actions"><button disabled={locked || !ready} onClick={() => onInstantiate(template.id, resolvedMappings)}>Create instance</button><button disabled={locked} onClick={() => onRemove(template.id)}>Delete template</button></div>
+      </article>;
+    })}
   </section>;
 }
 

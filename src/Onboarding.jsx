@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 const STEPS = [
   {
@@ -39,6 +39,7 @@ export default function Onboarding({ onClose }) {
 
   const current = STEPS[step];
   const isLast = step === STEPS.length - 1;
+  const next = useCallback(() => { if (isLast) onClose(); else setStep(value => value + 1); }, [isLast, onClose]);
 
   useEffect(() => {
     const updatePos = () => {
@@ -53,7 +54,11 @@ export default function Onboarding({ onClose }) {
       };
       const p = positions[current.position] || positions.right;
       const isSide = current.position === 'right' || current.position === 'left';
-      setPos({ ...p, isSide });
+      const cardWidth = Math.min(380, window.innerWidth - 24);
+      const cardHeight = 210;
+      setPos(isSide
+        ? { isSide, left: Math.max(12, Math.min(p.left, window.innerWidth - cardWidth - 12)), top: Math.max(cardHeight / 2 + 12, Math.min(p.top, window.innerHeight - cardHeight / 2 - 12)) }
+        : { isSide, left: Math.max(cardWidth / 2 + 12, Math.min(p.left, window.innerWidth - cardWidth / 2 - 12)), top: Math.max(12, Math.min(p.top, window.innerHeight - cardHeight - 12)) });
     };
     updatePos();
     window.addEventListener('resize', updatePos);
@@ -64,9 +69,7 @@ export default function Onboarding({ onClose }) {
     const handler = e => { if (e.key === 'Escape') onClose(); if (e.key === 'ArrowRight') next(); if (e.key === 'ArrowLeft' && step > 0) setStep(s => s - 1); };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [step, onClose]);
-
-  const next = () => { if (isLast) onClose(); else setStep(s => s + 1); };
+  }, [next, onClose, step]);
 
   return <>
     <div style={{ position:'fixed',inset:0,background:'#00000050',zIndex:9999 }} onClick={onClose} />

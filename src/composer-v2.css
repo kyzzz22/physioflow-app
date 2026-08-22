@@ -99,7 +99,16 @@
 .subflow-exits label { display: flex; align-items: center; gap: 3px; }
 .subflow-exits input { width: auto; margin: 0; padding: 0; }
 .subflow-settings > button { position: static; grid-column: auto !important; grid-row: auto !important; padding: 5px !important; border: 1px solid #6c63ff !important; border-radius: 5px; color: #5249d7 !important; }
-.subflow-parameter { display: grid; grid-template-columns: 1fr 70px 70px 20px; gap: 3px; }
-.subflow-parameter button { grid-column: 4 !important; grid-row: 1 !important; }
+.subflow-parameter { display: grid; grid-template-columns: minmax(74px, 1fr) 64px 62px minmax(90px, 1.2fr) 20px; gap: 3px; }
+.subflow-parameter button { grid-column: 5 !important; grid-row: 1 !important; }
+.subflow-template-catalog { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border, #dfe3e8); }
+.subflow-template-catalog > p { color: var(--muted, #667085); font-size: .68rem; line-height: 1.4; }
+.subflow-template-catalog article { display: grid; gap: 7px; margin: 7px 0; padding: 8px; border: 1px solid var(--border, #dfe3e8); border-radius: 7px; }
+.subflow-template-catalog article b, .subflow-template-catalog article small { display: block; }
+.subflow-template-catalog article small, .subflow-template-catalog label { color: var(--muted, #667085); font-size: .62rem; }
+.subflow-template-catalog label { display: grid; grid-template-columns: 1fr minmax(90px, 1.2fr); align-items: center; gap: 4px; }
+.subflow-template-catalog select { min-width: 0; padding: 5px; border: 1px solid var(--border, #dfe3e8); border-radius: 5px; background: var(--surface, #fff); color: inherit; font-size: .65rem; }
+.subflow-template-actions { display: flex; gap: 5px; }
+.subflow-template-actions button { padding: 5px; border: 1px solid #6c63ff; border-radius: 5px; background: #6c63ff12; color: #5249d7; font-size: .62rem; }
 .composer-v2.locked .composer-palette, .composer-v2.locked .composer-inspector .inspector-card, .composer-v2.locked .composer-node { pointer-events: none; opacity: .72; }
 .migration-review-warning { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; padding: 9px; border: 1px solid #e2ba7b; border-radius: 7px; background: #fff7e8; color: #7a4a00; font-size: .68rem; }

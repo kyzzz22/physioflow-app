@@ -50,10 +50,16 @@ export function assignNodeToGroup(protocol, nodeId, groupId, options = {}) {
   if (!protocol.graph.nodes.some(node => node.id === nodeId)) throw new Error(`Node ${nodeId} does not exist`);
   const next = structuredClone(protocol);
   if (groupId && !(next.graph.groups || []).some(group => group.id === groupId)) throw new Error(`Group ${groupId} does not exist`);
-  next.graph.groups = (next.graph.groups || []).map(group => ({
-    ...group,
-    nodeIds: group.id === groupId ? [...new Set([...group.nodeIds, nodeId])] : group.nodeIds.filter(id => id !== nodeId),
-  }));
+  next.graph.groups = (next.graph.groups || []).map(group => {
+    const removing = group.id !== groupId && group.nodeIds.includes(nodeId);
+    return {
+      ...group,
+      nodeIds: group.id === groupId ? [...new Set([...group.nodeIds, nodeId])] : group.nodeIds.filter(id => id !== nodeId),
+      entryNodeId: removing && group.entryNodeId === nodeId ? null : group.entryNodeId,
+      exitNodeIds: removing ? (group.exitNodeIds || []).filter(id => id !== nodeId) : group.exitNodeIds,
+      parameters: removing ? (group.parameters || []).map(parameter => ({ ...parameter, target: parameter.target?.nodeId === nodeId ? null : parameter.target, source: parameter.source?.nodeId === nodeId ? null : parameter.source })) : group.parameters,
+    };
+  });
   return touch(next, options.now);
 }
 

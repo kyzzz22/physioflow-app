@@ -12,7 +12,7 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 | Protocol Graph is the executable source of truth | Versioned graph schema, immutable graph commands, canonical serialization, graph validation, Runtime V2 consumption |
 | Visual composition | Palette, node canvas, control/data ports, connection validation, move, delete, inline duplicate, undo/redo |
 | Node grouping | Protocol-level group schema/commands, single-membership validation, safe node removal/duplication and live canvas containers |
-| Subflow boundary contracts | A group can be promoted to a subflow with one member entry, one or more member exits, typed input/output parameters, validation and Composer authoring controls |
+| Reusable parameterized subflows | Member entry/multi-exit contracts, typed input/output port endpoints, reusable template publication, isolated graph expansion, variable mappings, provenance, validation and Runtime V2 read/write semantics |
 | Progressive editing | Quick, Design, and Advanced views operate on the same protocol object |
 | Typed variables and conditions | Variable catalog, scope/type/default/source/export policy, safe rename/delete, condition variable picker, missing/type checks |
 | Graph-native randomization | Seeded Random split, explicit A/B ports, deterministic state, decision event and replay-equivalent test |
@@ -30,7 +30,6 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 
 | Item | Status | Acceptance evidence still required |
 | --- | --- | --- |
-| Reusable subflow instances | Partial | Boundary and parameter contracts are implemented; parameter-to-variable mapping, reusable instance semantics and migration still require implementation |
 | Extensible custom control handlers | Partial | Safe handler registration beyond the built-in start/end/condition/loop/random control kinds |
 | Component SDK and project component library | Stage 7 | Versioned SDK contract, sandbox/permissions, example external component |
 | External device connectors | Stage 7 | Storage/I/O ports, permission model, failure/recovery and provenance events |
@@ -38,4 +37,4 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 | Formal usability study | Requires human participants | Timed novice/expert tasks and sign-off against the plan metrics |
 | Remote upload | Locally blocked | GitHub HTTPS/SSH authentication and remote branch verification |
 
-The next implementation order is: reusable subflow instance semantics, component SDK/library, then external-device connectors and self-hosted browser CI. Human usability evidence and authenticated remote upload require external state beyond source changes.
+The next implementation order is: component SDK/project library, external-device connectors, then self-hosted browser CI. Human usability evidence and authenticated remote upload require external state beyond source changes.

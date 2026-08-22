@@ -16,6 +16,15 @@ function incomingDataEdge(protocol, nodeId, portId) {
   return (protocol.graph?.edges || []).find(edge => edge.kind === 'data' && edge.target.nodeId === nodeId && edge.target.portId === portId);
 }
 
+function subflowParameterVariable(protocol, nodeId, direction, portId) {
+  for (const group of protocol.graph?.groups || []) {
+    if (group.kind !== 'subflow' || !group.nodeIds?.includes(nodeId)) continue;
+    const parameter = (group.parameters || []).find(item => item.direction === direction && (direction === 'input' ? item.target : item.source)?.nodeId === nodeId && (direction === 'input' ? item.target : item.source)?.portId === portId);
+    if (parameter && group.parameterMappings?.[parameter.name]) return group.parameterMappings[parameter.name];
+  }
+  return null;
+}
+
 function appendEvent(state, protocol, type, services, options = {}) {
   const event = createRuntimeEvent(state, protocol, type, services, options);
   return {
@@ -90,6 +99,8 @@ function resolveNodeInput(protocol, node, portId, state) {
   if (Object.prototype.hasOwnProperty.call(node.bindings || {}, portId)) {
     return resolveBinding(node.bindings[portId], state);
   }
+  const mappedVariable = subflowParameterVariable(protocol, node.id, 'input', portId);
+  if (mappedVariable) return state.variables[mappedVariable];
   const edge = incomingDataEdge(protocol, node.id, portId);
   if (!edge) return undefined;
   return state.outputs[edge.source.nodeId]?.[edge.source.portId];
@@ -206,6 +217,10 @@ export function completeCurrentNode(runtime, protocol, registry, services, resul
   if (!node) return failRuntime(runtime, protocol, services, `Node ${runtime.currentNodeId} does not exist`, null, []);
   const outputs = structuredClone(result.outputs || {});
   const variableChanges = structuredClone(result.variables || {});
+  for (const [portId, value] of Object.entries(outputs)) {
+    const mappedVariable = subflowParameterVariable(protocol, node.id, 'output', portId);
+    if (mappedVariable) variableChanges[mappedVariable] = structuredClone(value);
+  }
   const variables = { ...runtime.variables, ...variableChanges };
   let state = {
     ...runtime,

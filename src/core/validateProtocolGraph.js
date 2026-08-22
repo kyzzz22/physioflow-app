@@ -108,16 +108,30 @@ export function validateProtocolGraph(protocol, registry) {
         else parameterNames.add(parameter.name);
         if (!VARIABLE_TYPES.has(parameter?.type)) errors.push(issue('subflow.parameter_type_invalid', `Invalid subflow parameter type ${parameter?.type}`, `${parameterPath}.type`));
         if (!['input', 'output'].includes(parameter?.direction)) errors.push(issue('subflow.parameter_direction_invalid', `Invalid subflow parameter direction ${parameter?.direction}`, `${parameterPath}.direction`));
+        const endpointName = parameter?.direction === 'output' ? 'source' : 'target';
+        const endpoint = parameter?.[endpointName];
+        if (!endpoint?.nodeId || !endpoint?.portId || !group.nodeIds?.includes(endpoint.nodeId)) {
+          errors.push(issue('subflow.parameter_endpoint_invalid', `Subflow parameter ${parameter?.name || parameterIndex + 1} needs a member ${endpointName} endpoint`, `${parameterPath}.${endpointName}`));
+        } else {
+          const endpointNode = nodeById.get(endpoint.nodeId);
+          const port = registry?.get(endpointNode?.component?.type, endpointNode?.component?.version)?.ports.find(item => item.id === endpoint.portId);
+          if (!port || port.kind !== 'data' || port.direction !== parameter.direction) errors.push(issue('subflow.parameter_port_invalid', `Subflow parameter ${parameter.name} must use a ${parameter.direction} data port`, `${parameterPath}.${endpointName}`));
+          else if (parameter.type !== 'unknown' && port.dataType !== 'unknown' && parameter.type !== port.dataType) errors.push(issue('subflow.parameter_port_type_mismatch', `Subflow parameter ${parameter.name} (${parameter.type}) does not match ${endpoint.portId} (${port.dataType})`, `${parameterPath}.type`));
+        }
       }
     }
   }
+
+  const subflowMappedInputs = new Set((protocol.graph?.groups || []).flatMap(group => (group.parameters || [])
+    .filter(parameter => parameter.direction === 'input' && group.parameterMappings?.[parameter.name] && parameter.target?.nodeId && parameter.target?.portId)
+    .map(parameter => `${parameter.target.nodeId}:${parameter.target.portId}`)));
 
   for (const node of nodes) {
     const definition = registry?.get(node.component?.type, node.component?.version);
     if (!definition) continue;
     for (const port of definition.ports.filter(port => port.direction === 'input' && port.required)) {
       const connected = edges.some(edge => edge.target?.nodeId === node.id && edge.target?.portId === port.id);
-      const bound = Object.prototype.hasOwnProperty.call(node.bindings || {}, port.id);
+      const bound = Object.prototype.hasOwnProperty.call(node.bindings || {}, port.id) || subflowMappedInputs.has(`${node.id}:${port.id}`);
       if (!connected && !bound) errors.push(issue('port.required_unbound', `Required port ${port.id} is not connected or bound`, `graph.nodes.${node.id}.bindings.${port.id}`, { nodeId: node.id }));
     }
     for (const port of definition.ports.filter(port => port.direction === 'output' && port.kind === 'control' && port.required)) {
@@ -135,6 +149,48 @@ export function validateProtocolGraph(protocol, registry) {
     else { variableNames.add(variable.name); variableByName.set(variable.name, variable); }
     if (!VARIABLE_TYPES.has(variable?.type)) errors.push(issue('variable.type_invalid', `Invalid variable type ${variable?.type}`, `${path}.type`));
     if (!VARIABLE_SCOPES.has(variable?.scope)) errors.push(issue('variable.scope_invalid', `Invalid variable scope ${variable?.scope}`, `${path}.scope`));
+  }
+
+  for (const [groupIndex, group] of (protocol.graph?.groups || []).entries()) {
+    if (group.kind !== 'subflow' || !group.metadata?.templateId) continue;
+    const parameterNames = new Set((group.parameters || []).map(parameter => parameter.name));
+    for (const parameter of group.parameters || []) {
+      const variableName = group.parameterMappings?.[parameter.name];
+      const variable = variableByName.get(variableName);
+      const path = `graph.groups.${groupIndex}.parameterMappings.${parameter.name}`;
+      if (!variableName || !variable) errors.push(issue('subflow.parameter_mapping_missing', `Subflow parameter ${parameter.name} needs a declared variable mapping`, path));
+      else if (parameter.type !== 'unknown' && variable.type !== 'unknown' && parameter.type !== variable.type) errors.push(issue('subflow.parameter_mapping_type_mismatch', `Subflow parameter ${parameter.name} (${parameter.type}) cannot map to ${variable.name} (${variable.type})`, path));
+    }
+    for (const name of Object.keys(group.parameterMappings || {})) {
+      if (!parameterNames.has(name)) warnings.push(issue('subflow.parameter_mapping_unused', `Subflow mapping ${name} has no parameter`, `graph.groups.${groupIndex}.parameterMappings.${name}`));
+    }
+  }
+
+  const templateIds = new Set();
+  for (const [templateIndex, template] of (protocol.subflowTemplates || []).entries()) {
+    const path = `subflowTemplates.${templateIndex}`;
+    if (!template?.id || templateIds.has(template.id)) errors.push(issue('subflow.template_id_invalid', 'Subflow template IDs must be present and unique', `${path}.id`));
+    else templateIds.add(template.id);
+    const templateNodeById = new Map((template.nodes || []).map(node => [node.id, node]));
+    const templateNodes = new Set(templateNodeById.keys());
+    if (!templateNodes.size) errors.push(issue('subflow.template_empty', `Subflow template ${template?.name || template?.id} has no nodes`, `${path}.nodes`));
+    if (!templateNodes.has(template?.entryNodeId)) errors.push(issue('subflow.template_entry_invalid', `Subflow template ${template?.name || template?.id} has an invalid entry`, `${path}.entryNodeId`));
+    if (!(template?.exitNodeIds || []).length || template.exitNodeIds.some(nodeId => !templateNodes.has(nodeId))) errors.push(issue('subflow.template_exit_invalid', `Subflow template ${template?.name || template?.id} has invalid exits`, `${path}.exitNodeIds`));
+    for (const edge of template?.edges || []) {
+      if (!templateNodes.has(edge.source?.nodeId) || !templateNodes.has(edge.target?.nodeId)) errors.push(issue('subflow.template_edge_invalid', `Subflow template ${template?.name || template?.id} has an external edge`, `${path}.edges`));
+    }
+    const parameterNames = new Set();
+    for (const [parameterIndex, parameter] of (template?.parameters || []).entries()) {
+      const parameterPath = `${path}.parameters.${parameterIndex}`;
+      if (!parameter?.name?.match(/^[A-Za-z_][A-Za-z0-9_]*$/) || parameterNames.has(parameter.name)) errors.push(issue('subflow.template_parameter_name_invalid', 'Template parameter names must be valid and unique', `${parameterPath}.name`));
+      else parameterNames.add(parameter.name);
+      if (!VARIABLE_TYPES.has(parameter?.type) || !['input', 'output'].includes(parameter?.direction)) errors.push(issue('subflow.template_parameter_contract_invalid', `Template parameter ${parameter?.name || parameterIndex + 1} has an invalid contract`, parameterPath));
+      const endpointName = parameter?.direction === 'output' ? 'source' : 'target';
+      const endpoint = parameter?.[endpointName];
+      const endpointNode = templateNodeById.get(endpoint?.nodeId);
+      const port = endpointNode && registry?.get(endpointNode.component?.type, endpointNode.component?.version)?.ports.find(item => item.id === endpoint?.portId);
+      if (!endpointNode || !port || port.kind !== 'data' || port.direction !== parameter.direction) errors.push(issue('subflow.template_parameter_endpoint_invalid', `Template parameter ${parameter?.name || parameterIndex + 1} has an invalid ${endpointName}`, `${parameterPath}.${endpointName}`));
+    }
   }
 
   for (const node of nodes) {
