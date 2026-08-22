@@ -140,7 +140,7 @@ export function createCoreComponentRegistry() {
   registry.register({
     type: 'logic.loop', version: '1.0.0', label: 'Loop', category: 'control',
     ports: [
-      controlInput,
+      { ...controlInput, multiple: true },
       { id: 'body', kind: 'control', direction: 'output' },
       { id: 'exit', kind: 'control', direction: 'output' },
     ],
