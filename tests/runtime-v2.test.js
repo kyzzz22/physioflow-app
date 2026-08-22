@@ -11,6 +11,7 @@ import {
   completeCurrentNode,
   createRuntimeState,
   pauseRuntime,
+  recordRuntimeEvent,
   restoreRuntime,
   resumeRuntime,
   retryCurrentNode,
@@ -74,6 +75,19 @@ test('runtime executes a linear graph with deterministic event envelopes', () =>
   assert.equal(completed.state.status, 'completed');
   assert.deepEqual(completed.events.map(event => event.eventType), ['component_completed', 'protocol_completed']);
   assert.equal(completed.state.outputs.screen_1.acknowledged, true);
+});
+
+test('custom participant events share the deterministic runtime sequence', () => {
+  const protocol = linearProtocol();
+  const registry = createCoreComponentRegistry();
+  const svc = services();
+  const started = startRuntime(runtimeFor(protocol), protocol, registry, svc);
+  const changed = recordRuntimeEvent(started.state, protocol, svc, 'value_changed', { payload: { name: 'value', value: 4 } });
+  const submitted = recordRuntimeEvent(changed.state, protocol, svc, 'response_submitted', { payload: { fields: ['value'] } });
+  const completed = completeCurrentNode(submitted.state, protocol, registry, svc, { outputs: { value: 4 } });
+  const events = [...started.events, ...changed.events, ...submitted.events, ...completed.events];
+  assert.deepEqual(events.map(event => event.sequence), [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(events.map(event => event.eventType), ['protocol_started', 'component_entered', 'value_changed', 'response_submitted', 'component_completed', 'protocol_completed']);
 });
 
 test('condition follows a variable binding and records its evaluated inputs', () => {

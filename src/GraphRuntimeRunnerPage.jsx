@@ -5,6 +5,7 @@ import {
   completeCurrentNode,
   createRuntimeState,
   pauseRuntime,
+  recordRuntimeEvent,
   restoreRuntime,
   resumeRuntime,
   retryCurrentNode,
@@ -25,28 +26,37 @@ function runtimeServices() {
   };
 }
 
+function findUiElement(element, type) {
+  if (element?.type === type) return element;
+  for (const child of element?.children || []) {
+    const found = findUiElement(child, type);
+    if (found) return found;
+  }
+  return null;
+}
+
 function schemaForNode(node) {
   if (node.component.type === 'display.screen') return node.config?.ui || participantUiTemplate('instruction');
   if (node.component.type === 'input.questionnaire') return node.config?.ui || participantUiTemplate('form');
   if (node.component.type === 'display.media') {
-    const schema = participantUiTemplate('media');
-    const media = schema.root.children.find(element => element.type === 'Media');
-    media.props = { ...media.props, mediaType: node.config?.mediaType || 'image', sourceUrl: node.config?.sourceUrl || '', assetId: node.config?.assetId || null };
+    const schema = structuredClone(node.config?.ui || participantUiTemplate('media'));
+    const media = findUiElement(schema.root, 'Media');
+    if (media) media.props = { ...media.props, mediaType: node.config?.mediaType || 'image', sourceUrl: node.config?.sourceUrl || '', assetId: node.config?.assetId || null };
     return schema;
   }
   if (node.component.type === 'input.rating') {
-    const schema = participantUiTemplate('form');
-    const input = schema.root.children.find(element => element.type === 'Input');
-    input.props = { ...input.props, name: 'value', label: node.label, min: node.config?.min ?? 1, max: node.config?.max ?? 7, required: node.config?.required !== false };
+    const schema = structuredClone(node.config?.ui || participantUiTemplate('form'));
+    const input = findUiElement(schema.root, 'Input');
+    if (input) input.props = { ...input.props, name: 'value', label: node.label, min: node.config?.min ?? 1, max: node.config?.max ?? 7, required: node.config?.required !== false };
     return schema;
   }
   if (node.component.type === 'input.text') {
-    const schema = participantUiTemplate('form');
-    const input = schema.root.children.find(element => element.type === 'Input');
-    input.props = { ...input.props, name: 'value', label: node.label, inputType: node.config?.multiline ? 'textarea' : 'text', placeholder: node.config?.placeholder || '', required: Boolean(node.config?.required) };
+    const schema = structuredClone(node.config?.ui || participantUiTemplate('form'));
+    const input = findUiElement(schema.root, 'Input');
+    if (input) input.props = { ...input.props, name: 'value', label: node.label, inputType: node.config?.multiline ? 'textarea' : 'text', placeholder: node.config?.placeholder || '', required: Boolean(node.config?.required) };
     return schema;
   }
-  const schema = participantUiTemplate('instruction');
+  const schema = structuredClone(node.config?.ui || participantUiTemplate('instruction'));
   schema.root.children = [
     createUiElement('Text', { props: { text: node.label, variant: 'heading' } }),
     createUiElement('Progress', { props: { value: 0, max: Math.max(1, Number(node.config?.durationMs || 1000)), label: 'Please wait…' }, bindings: { value: 'timer.elapsedMs' } }),
@@ -66,6 +76,8 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
   const [started, setStarted] = useState(Boolean(data.restore?.runtime?.status && data.restore.runtime.status !== 'ready'));
   const [saved, setSaved] = useState(false);
   const finishing = useRef(false);
+  const runtimeRef = useRef(initialState);
+  const nodeEnteredAt = useRef(performance.now());
   const nodes = useMemo(() => new Map(protocol.graph.nodes.map(node => [node.id, node])), [protocol]);
   const currentNode = runtime.currentNodeId ? nodes.get(runtime.currentNodeId) : null;
   const executableCount = protocol.graph.nodes.filter(node => !node.component.type.startsWith('core.') && !node.component.type.startsWith('logic.')).length;
@@ -73,35 +85,54 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
   const exportFiles = runtime.status === 'completed' ? buildGraphSessionFiles({ ...data.session, status: 'completed', runtime_snapshot: runtime, events, responses }, protocol, events, responses) : null;
 
   const apply = result => {
+    runtimeRef.current = result.state;
     setRuntime(result.state);
     if (result.events?.length) setEvents(current => [...current, ...result.events]);
   };
 
   const begin = () => {
     setStarted(true);
-    apply(startRuntime(runtime, protocol, registry, services.current));
+    apply(startRuntime(runtimeRef.current, protocol, registry, services.current));
   };
 
   const complete = result => {
+    const activeRuntime = runtimeRef.current;
+    const activeNode = activeRuntime.currentNodeId ? nodes.get(activeRuntime.currentNodeId) : null;
+    if (!activeNode || activeRuntime.status !== 'waiting') return;
     const values = result?.values || {};
     const rows = Object.entries(values).map(([name, value]) => ({
       responseId: `response_${crypto.randomUUID()}`,
       sessionId: data.session.session_id,
       participantId: data.session.participant_id,
       protocolId: protocol.protocolId,
-      nodeId: currentNode.id,
-      componentType: currentNode.component.type,
+      nodeId: activeNode.id,
+      componentType: activeNode.component.type,
       name,
       value,
+      reactionTimeMs: Math.max(0, Math.round(performance.now() - nodeEnteredAt.current)),
       timestampIso: new Date().toISOString(),
     }));
     if (rows.length) setResponses(current => [...current, ...rows]);
-    apply(completeCurrentNode(runtime, protocol, registry, services.current, { outputs: result?.outputs || values, variables: result?.variables || values }));
+    const submitted = rows.length
+      ? recordRuntimeEvent(activeRuntime, protocol, services.current, 'response_submitted', { payload: { fields: rows.map(row => row.name), values, reactionTimeMs: rows[0].reactionTimeMs } })
+      : { state: activeRuntime, events: [] };
+    const completed = completeCurrentNode(submitted.state, protocol, registry, services.current, { outputs: result?.outputs || values, variables: result?.variables || values });
+    apply({ state: completed.state, events: [...submitted.events, ...completed.events] });
   };
 
+  const record = (eventType, payload) => apply(recordRuntimeEvent(runtimeRef.current, protocol, services.current, eventType, { payload }));
+
   useEffect(() => {
-    if (!started || !currentNode || currentNode.component.type !== 'timing.wait' || runtime.status !== 'waiting') return undefined;
-    const timer = setTimeout(() => complete({}), Math.max(0, Number(currentNode.config?.durationMs ?? 1000)));
+    if (currentNode?.id) nodeEnteredAt.current = performance.now();
+  }, [currentNode?.id]);
+
+  useEffect(() => {
+    if (!started || !currentNode || runtime.status !== 'waiting') return undefined;
+    const duration = currentNode.component.type === 'timing.wait'
+      ? currentNode.config?.durationMs
+      : currentNode.config?.completion?.mode === 'fixed' ? currentNode.config.completion.durationMs : null;
+    if (duration === null || duration === undefined) return undefined;
+    const timer = setTimeout(() => complete({}), Math.max(0, Number(duration)));
     return () => clearTimeout(timer);
   }, [currentNode?.id, runtime.status, started]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -138,13 +169,16 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
 
   return <main className="graph-runner">
     <div className="graph-operator" role="toolbar"><div><b>{protocolNameOf(protocol)}</b><span>{currentNode.label} · {currentNode.component.type}</span></div><div>{progress.current}/{progress.total} completed</div><div>
-      <button onClick={() => apply(runtime.status === 'paused' ? resumeRuntime(runtime, protocol, services.current) : pauseRuntime(runtime, protocol, services.current))}>{runtime.status === 'paused' ? 'Resume' : 'Pause'}</button>
-      <button disabled={runtime.status !== 'waiting'} onClick={() => apply(retryCurrentNode(runtime, protocol, services.current, 'operator retry'))}>Retry</button>
-      <button disabled={runtime.status !== 'waiting'} onClick={() => apply(skipCurrentNode(runtime, protocol, registry, services.current, 'operator skip'))}>Skip</button>
+      <button onClick={() => apply(runtime.status === 'paused' ? resumeRuntime(runtimeRef.current, protocol, services.current) : pauseRuntime(runtimeRef.current, protocol, services.current))}>{runtime.status === 'paused' ? 'Resume' : 'Pause'}</button>
+      <button disabled={runtime.status !== 'waiting'} onClick={() => apply(retryCurrentNode(runtimeRef.current, protocol, services.current, 'operator retry'))}>Retry</button>
+      <button disabled={runtime.status !== 'waiting'} onClick={() => apply(skipCurrentNode(runtimeRef.current, protocol, registry, services.current, 'operator skip'))}>Skip</button>
     </div></div>
     <section className="graph-participant" aria-label="Participant view">
       {runtime.status === 'paused' && <div className="pause-overlay">Paused</div>}
-      <ParticipantRenderer schema={schemaForNode(currentNode)} disabled={runtime.status === 'paused'} context={{ participant: data.session, variables: runtime.variables, outputs: runtime.outputs, progress, timer: { elapsedMs: 0 } }} onSubmit={complete} />
+      <ParticipantRenderer key={currentNode.id} schema={schemaForNode(currentNode)} disabled={runtime.status === 'paused'} context={{ participant: data.session, variables: runtime.variables, outputs: runtime.outputs, progress, timer: { elapsedMs: 0 } }} onSubmit={complete} onValueChange={payload => record('value_changed', payload)} onAction={action => record('ui_action', action)} onMediaEvent={(eventType, payload) => {
+        record(eventType, payload);
+        if (eventType === 'media_ended' && currentNode.config?.completion?.mode === 'media-ended') complete({});
+      }} />
     </section>
   </main>;
 }

@@ -9,7 +9,7 @@ import {
   protocolNameOf,
   removeNode,
   updateNode,
-  validateProtocolGraph,
+  validateProtocolGraphConfiguration,
 } from './core/index.js';
 import ParticipantUiBuilder from './ParticipantUiBuilder.jsx';
 
@@ -48,14 +48,14 @@ function edgePath(source, target) {
   return `M ${source.x} ${source.y} C ${source.x + bend} ${source.y}, ${target.x - bend} ${target.y}, ${target.x} ${target.y}`;
 }
 
-export default function ComposerV2({ protocol, onChange, onSave, onBack, onExport, onPreview, onFreeze, onUnfreeze, onUndo, onRedo, canUndo, canRedo, hasUnsaved, saveAnim }) {
+export default function ComposerV2({ protocol, onChange, onSave, onBack, onExport, onPreview, onFreeze, onCreateDraft, onUndo, onRedo, canUndo, canRedo, hasUnsaved, saveAnim }) {
   const [selectedNodeId, setSelectedNodeId] = useState(protocol.graph.entryNodeId);
   const [selectedEdgeId, setSelectedEdgeId] = useState(null);
   const [pendingPort, setPendingPort] = useState(null);
   const [message, setMessage] = useState('');
   const canvasRef = useRef(null);
   const dragRef = useRef(null);
-  const validation = useMemo(() => validateProtocolGraph(protocol, registry), [protocol]);
+  const validation = useMemo(() => validateProtocolGraphConfiguration(protocol, registry), [protocol]);
   const selectedNode = protocol.graph.nodes.find(node => node.id === selectedNodeId) || null;
   const selectedEdge = protocol.graph.edges.find(edge => edge.id === selectedEdgeId) || null;
 
@@ -152,7 +152,7 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
         <button disabled={!canRedo} onClick={onRedo}>↪ Redo</button>
         <button disabled={!validation.valid} onClick={onPreview}>Preview run</button>
         {migrationReviewRequired && !locked && <button onClick={() => commit({ ...protocol, legacy: { ...protocol.legacy, migrationReport: { ...protocol.legacy.migrationReport, formalRunAllowed: true, reviewedAt: new Date().toISOString() } } })}>Mark migration reviewed</button>}
-        {locked ? <button onClick={onUnfreeze}>Unfreeze draft</button> : <button disabled={!validation.valid || migrationReviewRequired} onClick={onFreeze}>Freeze version</button>}
+        {locked ? <button onClick={onCreateDraft}>Create editable version</button> : <button disabled={!validation.valid || migrationReviewRequired} onClick={onFreeze}>Freeze version</button>}
         <button onClick={onExport}>Export</button>
         <button className={saveAnim ? 'saved' : ''} onClick={() => onSave(protocol)}>{saveAnim ? '✓ Saved' : 'Save'}</button>
         <button onClick={onBack}>← Projects</button>
@@ -231,7 +231,7 @@ function NodeInspector({ node, definition, onUpdate }) {
               : <input type={field.type} min={field.min} value={value ?? ''} onChange={event => change(event.target.value)} />}
       </label>;
     })}
-    {node.component.type === 'display.screen' && <ParticipantUiBuilder schema={node.config.ui} onChange={ui => onUpdate({ config: { ...node.config, ui } })} />}
+    {node.config?.ui && <ParticipantUiBuilder schema={node.config.ui} onChange={ui => onUpdate({ config: { ...node.config, ui } })} />}
     <details className="component-events"><summary>Recorded events ({definition?.events?.length || 0})</summary>{(definition?.events || []).map(eventType => <code key={eventType}>{eventType}</code>)}</details>
     <details><summary>Node ID</summary><code>{node.id}</code></details>
   </div>;

@@ -4,7 +4,7 @@ export { PROTOCOL_GRAPH_SCHEMA_VERSION, createEdge, createNode, createProtocolGr
 export { validateProtocolGraph } from './validateProtocolGraph.js';
 export { addNode, connect, disconnect, insertNodeOnControlEdge, moveNodes, removeNode, replaceConnection, updateNode } from './graphCommands.js';
 export { parseProtocolGraph, serializeProtocolGraph } from './serialization.js';
-export { freezeProtocolGraph, hashProtocolGraph, unfreezeProtocolGraph } from './freezeProtocolGraph.js';
+export { freezeProtocolGraph, hashProtocolGraph, validateProtocolGraphConfiguration, validateProtocolGraphForFreeze } from './freezeProtocolGraph.js';
 export {
   appendUiElement,
   createParticipantScreen,

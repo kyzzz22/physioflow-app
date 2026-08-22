@@ -32,7 +32,9 @@ export default function ParticipantUiBuilder({ schema, onChange }) {
   const elements = flatten(normalized.root);
   const selected = elements.find(item => item.element.id === selectedId)?.element || normalized.root;
   const validation = validateParticipantUi(normalized);
+  const updateElement = updater => onChange(mapUiElement(normalized, selected.id, updater));
   const updateProps = patch => onChange(mapUiElement(normalized, selected.id, element => ({ ...element, props: { ...element.props, ...patch } })));
+  const bindingTarget = { Text: 'text', Media: 'sourceUrl', Progress: 'value' }[selected.type];
   const add = type => {
     const parent = ['Screen', 'Layout'].includes(selected.type) ? selected : normalized.root;
     const element = createUiElement(type, { props: defaults[type], actions: type === 'Button' ? [{ event: 'click', action: 'submit' }] : [] });
@@ -51,6 +53,11 @@ export default function ParticipantUiBuilder({ schema, onChange }) {
       </div>
       <div className="ui-add-row">{Object.keys(defaults).map(type => <button key={type} onClick={() => add(type)}>＋ {type}</button>)}</div>
       <UiPropertyEditor element={selected} onUpdate={updateProps} />
+      {bindingTarget && <label className="ui-binding-field">Runtime binding for {bindingTarget}<input value={selected.bindings?.[bindingTarget] || ''} placeholder="e.g. variables.score" onChange={event => updateElement(element => ({ ...element, bindings: { ...element.bindings, [bindingTarget]: event.target.value } }))} /></label>}
+      {selected.type === 'Button' && <div className="ui-property-grid">
+        <label>Click action<select value={selected.actions?.[0]?.action || 'submit'} onChange={event => updateElement(element => ({ ...element, actions: [{ ...(element.actions?.[0] || { event: 'click' }), action: event.target.value }] }))}><option value="submit">submit</option><option value="next">next</option><option value="setVariable">setVariable</option></select></label>
+        {selected.actions?.[0]?.action === 'setVariable' && <><label>Variable name<input value={selected.actions[0].name || ''} onChange={event => updateElement(element => ({ ...element, actions: [{ ...element.actions[0], name: event.target.value }] }))} /></label><label>Value<input value={selected.actions[0].value ?? ''} onChange={event => updateElement(element => ({ ...element, actions: [{ ...element.actions[0], value: event.target.value }] }))} /></label></>}
+      </div>}
       {selected.id !== normalized.root.id && <button className="danger" onClick={() => { onChange(removeUiElement(normalized, selected.id)); setSelectedId(normalized.root.id); }}>Remove UI element</button>}
     </>}
     <small className={validation.valid ? 'ui-valid' : 'ui-invalid'}>{validation.valid ? `${elements.length} elements · schema valid` : validation.errors[0]?.message}</small>

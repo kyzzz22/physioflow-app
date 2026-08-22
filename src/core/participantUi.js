@@ -69,6 +69,7 @@ export function validateParticipantUi(schema) {
     if (element?.type === 'Media' && !element.props?.sourceUrl && !element.props?.assetId) warnings.push({ code: 'ui.media_source_missing', message: 'Media has no source yet', path: `${path}.props`, elementId: element.id });
     for (const [index, action] of (element?.actions || []).entries()) {
       if (!['submit', 'setVariable', 'next'].includes(action.action)) errors.push({ code: 'ui.action_unknown', message: `Unknown UI action ${action.action}`, path: `${path}.actions.${index}`, elementId: element.id });
+      if (action.action === 'setVariable' && !action.name?.trim()) errors.push({ code: 'ui.action_variable_missing', message: 'setVariable action needs a variable name', path: `${path}.actions.${index}.name`, elementId: element.id });
     }
     (element?.children || []).forEach((child, index) => visit(child, `${path}.children.${index}`));
   };

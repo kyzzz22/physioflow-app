@@ -13,11 +13,12 @@ import {
   freezeProtocolGraph,
   hashProtocolGraph,
   insertNodeOnControlEdge,
+  participantUiTemplate,
   removeNode,
   serializeProtocolGraph,
   validateComponentDefinition,
   validateProtocolGraph,
-  unfreezeProtocolGraph,
+  validateProtocolGraphConfiguration,
 } from '../src/core/index.js';
 import { inspectLegacyProtocolV1, migrateLegacyProtocolV1 } from '../src/legacy/migrateProtocolV1.js';
 
@@ -51,7 +52,7 @@ test('graph versions preserve projects while duplicates receive isolated project
   assert.match(duplicate.metadata.name, /Copy$/);
 });
 
-test('Protocol Graph freeze creates a reproducible hash and unfreeze restores a draft', async () => {
+test('Protocol Graph freeze is immutable and a new version creates an editable draft', async () => {
   const protocol = buildGraph();
   const registry = createCoreComponentRegistry();
   const frozen = await freezeProtocolGraph(protocol, registry, { now: '2026-08-22T01:00:00.000Z' });
@@ -61,15 +62,41 @@ test('Protocol Graph freeze creates a reproducible hash and unfreeze restores a 
   assert.equal(frozen.version.status, 'frozen');
   assert.equal(frozen.freeze.configHash.length, 64);
   assert.equal(await hashProtocolGraph(archivedMetadataChange), frozen.freeze.configHash);
-  const draft = unfreezeProtocolGraph(frozen, { now: '2026-08-24T00:00:00.000Z' });
+  const draft = createNextGraphProtocolVersion(frozen, { idFactory: createSequentialIdFactory(), now: '2026-08-24T00:00:00.000Z' });
+  assert.equal(frozen.version.status, 'frozen');
+  assert.ok(frozen.freeze);
   assert.equal(draft.version.status, 'draft');
   assert.equal(draft.freeze, undefined);
+  assert.notEqual(draft.protocolId, frozen.protocolId);
 });
 
 test('unreviewed migrated graph cannot be frozen for formal collection', async () => {
   const protocol = buildGraph();
   protocol.legacy = { migrationReport: { formalRunAllowed: false, issues: [] } };
-  await assert.rejects(() => freezeProtocolGraph(protocol, createCoreComponentRegistry()), /Review and acknowledge/);
+  await assert.rejects(() => freezeProtocolGraph(protocol, createCoreComponentRegistry()), /Migration review/);
+});
+
+test('formal configuration validation rejects incomplete participant components', async () => {
+  const source = buildGraph();
+  const media = insertNodeOnControlEdge(source, source.graph.edges[0].id, 'display.media', { idFactory: createSequentialIdFactory(50) }).protocol;
+  const check = validateProtocolGraphConfiguration(media, createCoreComponentRegistry());
+  assert.equal(check.valid, false);
+  assert.ok(check.errors.some(error => error.code === 'config.media_source_missing'));
+  await assert.rejects(() => freezeProtocolGraph(media, createCoreComponentRegistry()), /media URL or asset/);
+
+  const rating = insertNodeOnControlEdge(source, source.graph.edges[0].id, 'input.rating', { idFactory: createSequentialIdFactory(60), config: { min: 1, max: 7, ui: participantUiTemplate('form') } }).protocol;
+  const ratingNode = rating.graph.nodes.find(node => node.component.type === 'input.rating');
+  ratingNode.config.ui.root.children = ratingNode.config.ui.root.children.filter(element => element.type !== 'Button');
+  const incompleteUi = validateProtocolGraphConfiguration(rating, createCoreComponentRegistry());
+  assert.ok(incompleteUi.errors.some(error => error.code === 'config.completion_action_missing'));
+});
+
+test('condition branches must both be connected before a graph is runnable', () => {
+  const source = buildGraph();
+  const condition = insertNodeOnControlEdge(source, source.graph.edges[0].id, 'logic.condition', { idFactory: createSequentialIdFactory(70) }).protocol;
+  const check = validateProtocolGraph(condition, createCoreComponentRegistry());
+  assert.equal(check.valid, false);
+  assert.ok(check.errors.some(error => error.code === 'port.required_unconnected' && error.path.endsWith('.false')));
 });
 
 test('component definitions reject duplicate and invalid ports', () => {
@@ -156,7 +183,7 @@ test('required data ports can be satisfied by a variable binding', () => {
   }).protocol;
   condition.variables.push({ name: 'score', type: 'number', scope: 'session', defaultValue: 0 });
   const result = validateProtocolGraph(condition, createCoreComponentRegistry());
-  assert.ok(!result.errors.some(error => error.code === 'port.required_unbound'));
+  assert.ok(!result.errors.some(error => error.code === 'port.required_unbound' && error.path.endsWith('.value')));
 });
 
 test('protocol graph serialization is canonical', () => {

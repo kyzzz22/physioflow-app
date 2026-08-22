@@ -1,5 +1,15 @@
+import { participantUiTemplate } from './participantUi.js';
+
 const PORT_KINDS = new Set(['control', 'data']);
 const PORT_DIRECTIONS = new Set(['input', 'output']);
+
+function waitParticipantUi() {
+  const schema = participantUiTemplate('instruction');
+  schema.root.children = schema.root.children.filter(element => element.type !== 'Button');
+  const heading = schema.root.children.find(element => element.type === 'Text');
+  if (heading) heading.props.text = 'Please wait';
+  return schema;
+}
 
 function normalizePort(port) {
   return {
@@ -70,8 +80,8 @@ export class ComponentRegistry {
   }
 }
 
-const controlInput = { id: 'in', kind: 'control', direction: 'input' };
-const controlOutput = { id: 'next', kind: 'control', direction: 'output' };
+const controlInput = { id: 'in', kind: 'control', direction: 'input', required: true };
+const controlOutput = { id: 'next', kind: 'control', direction: 'output', required: true };
 
 export function createCoreComponentRegistry() {
   const registry = new ComponentRegistry();
@@ -99,14 +109,14 @@ export function createCoreComponentRegistry() {
   registry.register({
     type: 'display.media', version: '1.0.0', label: 'Media', category: 'presentation',
     ports: [controlInput, controlOutput],
-    defaultConfig: { mediaType: 'image', assetId: null, completion: { mode: 'fixed', durationMs: 3000 } },
+    defaultConfig: { mediaType: 'image', assetId: null, ui: participantUiTemplate('media'), completion: { mode: 'fixed', durationMs: 3000 } },
     editorFields: [
       { path: 'mediaType', label: 'Media type', type: 'select', options: ['image', 'audio', 'video'] },
       { path: 'sourceUrl', label: 'Source URL', type: 'text' },
       { path: 'assetId', label: 'Asset ID', type: 'text' },
       { path: 'completion.durationMs', label: 'Duration (ms)', type: 'number', min: 0 },
     ],
-    events: ['component_entered', 'media_started', 'media_ended', 'component_completed'],
+    events: ['component_entered', 'media_loaded', 'media_started', 'media_ended', 'media_error', 'component_completed'],
     dataFields: ['asset_id', 'media_type', 'actual_duration_ms'],
   });
   registry.register({
@@ -116,7 +126,7 @@ export function createCoreComponentRegistry() {
       controlOutput,
       { id: 'value', kind: 'data', direction: 'output', dataType: 'number', required: true },
     ],
-    defaultConfig: { min: 1, max: 7, required: true },
+    defaultConfig: { min: 1, max: 7, required: true, ui: participantUiTemplate('form') },
     editorFields: [
       { path: 'min', label: 'Minimum', type: 'number' },
       { path: 'max', label: 'Maximum', type: 'number' },
@@ -132,7 +142,7 @@ export function createCoreComponentRegistry() {
       controlOutput,
       { id: 'value', kind: 'data', direction: 'output', dataType: 'string' },
     ],
-    defaultConfig: { required: false, multiline: false },
+    defaultConfig: { required: false, multiline: false, ui: participantUiTemplate('form') },
     editorFields: [
       { path: 'placeholder', label: 'Placeholder', type: 'text' },
       { path: 'required', label: 'Required', type: 'boolean' },
@@ -144,14 +154,14 @@ export function createCoreComponentRegistry() {
   registry.register({
     type: 'input.questionnaire', version: '1.0.0', label: 'Questionnaire', category: 'interaction',
     ports: [controlInput, controlOutput],
-    defaultConfig: { questionnaire: null, ui: null },
+    defaultConfig: { questionnaire: null, ui: participantUiTemplate('form') },
     events: ['component_entered', 'value_changed', 'response_submitted', 'component_completed'],
     dataFields: ['question_id', 'value', 'reaction_time_ms'],
   });
   registry.register({
     type: 'timing.wait', version: '1.0.0', label: 'Wait', category: 'timing',
     ports: [controlInput, controlOutput],
-    defaultConfig: { durationMs: 1000 },
+    defaultConfig: { durationMs: 1000, ui: waitParticipantUi() },
     editorFields: [{ path: 'durationMs', label: 'Duration (ms)', type: 'number', min: 0 }],
     events: ['component_entered', 'component_completed'],
     dataFields: ['planned_duration_ms', 'actual_duration_ms'],
@@ -161,8 +171,8 @@ export function createCoreComponentRegistry() {
     ports: [
       controlInput,
       { id: 'value', kind: 'data', direction: 'input', dataType: 'unknown', required: true },
-      { id: 'true', kind: 'control', direction: 'output' },
-      { id: 'false', kind: 'control', direction: 'output' },
+      { id: 'true', kind: 'control', direction: 'output', required: true },
+      { id: 'false', kind: 'control', direction: 'output', required: true },
     ],
     defaultConfig: { operator: 'equals', expected: true },
     editorFields: [
@@ -175,8 +185,8 @@ export function createCoreComponentRegistry() {
     type: 'logic.loop', version: '1.0.0', label: 'Loop', category: 'control',
     ports: [
       { ...controlInput, multiple: true },
-      { id: 'body', kind: 'control', direction: 'output' },
-      { id: 'exit', kind: 'control', direction: 'output' },
+      { id: 'body', kind: 'control', direction: 'output', required: true },
+      { id: 'exit', kind: 'control', direction: 'output', required: true },
     ],
     defaultConfig: { maxIterations: 1 },
     editorFields: [{ path: 'maxIterations', label: 'Maximum iterations', type: 'number', min: 1 }],
@@ -190,4 +200,3 @@ export function createCoreComponentRegistry() {
   });
   return registry;
 }
-import { participantUiTemplate } from './participantUi.js';

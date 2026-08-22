@@ -92,6 +92,31 @@ function questionnaireUi(step, context, idFactory) {
   return createParticipantScreen({ idFactory, children });
 }
 
+function mediaUi(step, idFactory) {
+  const schema = createParticipantScreen({ idFactory, children: [
+    createUiElement('Text', { idFactory, props: { text: step.name || 'Stimulus', variant: 'heading' } }),
+    createUiElement('Media', { idFactory, props: { mediaType: step.type, sourceUrl: step.source_url || '', assetId: step.asset_id || step.stimulus_id || null, alt: step.name || 'Stimulus', fit: 'contain' } }),
+    createUiElement('Button', { idFactory, props: { label: 'Continue', variant: 'primary' }, actions: [{ event: 'click', action: 'submit' }] }),
+  ] });
+  return schema;
+}
+
+function ratingUi(step, idFactory) {
+  const options = step.response_options || [];
+  return createParticipantScreen({ idFactory, children: [
+    createUiElement('Text', { idFactory, props: { text: step.name || 'Response', variant: 'heading' } }),
+    createUiElement('Input', { idFactory, props: { name: 'value', inputType: 'rating', label: step.name || 'Rating', min: 1, max: Math.max(2, options.length || 7), required: step.response_required !== false } }),
+    createUiElement('Button', { idFactory, props: { label: 'Submit response', variant: 'primary' }, actions: [{ event: 'click', action: 'submit' }] }),
+  ] });
+}
+
+function waitUi(step, idFactory) {
+  return createParticipantScreen({ idFactory, children: [
+    createUiElement('Text', { idFactory, props: { text: step.name || 'Please wait', variant: 'heading' } }),
+    createUiElement('Progress', { idFactory, props: { value: 0, max: Math.max(1, Number(step.planned_duration_ms || 0)), label: '' }, bindings: { value: 'timer.elapsedMs' } }),
+  ] });
+}
+
 function migrateStep(step, context, idFactory, x, y) {
   const componentType = EXACT_COMPONENT_MAP[step.type] || 'legacy.step';
   let config;
@@ -101,11 +126,12 @@ function migrateStep(step, context, idFactory, x, y) {
       assetId: step.asset_id || step.stimulus_id || null,
       sourceMode: step.source_mode || 'none',
       sourceUrl: step.source_url || '',
+      ui: mediaUi(step, idFactory),
       completion: { mode: step.duration_mode || 'manual', durationMs: Number(step.planned_duration_ms || 0) },
       legacyStep: structuredClone(step),
     };
   } else if (componentType === 'timing.wait') {
-    config = { durationMs: Number(step.planned_duration_ms || 0), legacyType: step.type, legacyStep: structuredClone(step) };
+    config = { durationMs: Number(step.planned_duration_ms || 0), ui: waitUi(step, idFactory), legacyType: step.type, legacyStep: structuredClone(step) };
   } else if (componentType === 'display.screen') {
     config = {
       ui: instructionUi(step, idFactory),
@@ -117,6 +143,7 @@ function migrateStep(step, context, idFactory, x, y) {
       required: step.response_required !== false,
       variable: step.response_variable || 'response',
       options: structuredClone(step.response_options || []),
+      ui: ratingUi(step, idFactory),
       legacyStep: structuredClone(step),
     };
   } else if (componentType === 'input.questionnaire') {
@@ -155,8 +182,8 @@ export function migrateLegacyProtocolV1(source, options = {}) {
   });
   protocol.metadata.tags = ['migrated-v1'];
   protocol.version = {
-    number: Number(source.version || 1),
-    label: `${source.version_name || `Version ${source.version || 1}`} (migrated)`,
+    number: Number(source.version || 1) + 1,
+    label: `${source.version_name || `Version ${source.version || 1}`} migration draft`,
     status: 'draft',
   };
   protocol.assets = structuredClone(source.stimuli || []);

@@ -4,6 +4,7 @@ const RUNTIME_EVENTS = [
   'protocol_started', 'protocol_completed', 'component_entered', 'component_completed',
   'component_skipped', 'component_retried', 'condition_evaluated', 'loop_evaluated',
   'session_paused', 'session_resumed', 'runtime_failed',
+  'ui_action', 'media_loaded', 'media_error', 'value_changed', 'response_submitted',
 ];
 
 export class EventSchemaRegistry {

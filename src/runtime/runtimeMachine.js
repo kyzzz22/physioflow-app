@@ -191,6 +191,12 @@ export function completeCurrentNode(runtime, protocol, registry, services, resul
   return advanceAutomatic(state, protocol, registry, services, target, [emitted.event]);
 }
 
+export function recordRuntimeEvent(runtime, protocol, services, eventType, options = {}) {
+  const node = options.node || (runtime.currentNodeId ? nodeMap(protocol).get(runtime.currentNodeId) : null);
+  const emitted = appendEvent(runtime, protocol, eventType, services, { ...options, node });
+  return { state: emitted.state, events: [emitted.event] };
+}
+
 export function skipCurrentNode(runtime, protocol, registry, services, reason = '') {
   if (runtime.status !== 'waiting' || !runtime.currentNodeId) throw new Error('Runtime is not waiting on a component');
   const node = nodeMap(protocol).get(runtime.currentNodeId);

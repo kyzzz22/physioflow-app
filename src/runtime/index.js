@@ -4,6 +4,7 @@ export {
   completeCurrentNode,
   createRuntimeState,
   pauseRuntime,
+  recordRuntimeEvent,
   restoreRuntime,
   resumeRuntime,
   retryCurrentNode,

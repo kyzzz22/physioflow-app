@@ -90,6 +90,10 @@ export function validateProtocolGraph(protocol, registry) {
       const bound = Object.prototype.hasOwnProperty.call(node.bindings || {}, port.id);
       if (!connected && !bound) errors.push(issue('port.required_unbound', `Required port ${port.id} is not connected or bound`, `graph.nodes.${node.id}.bindings.${port.id}`, { nodeId: node.id }));
     }
+    for (const port of definition.ports.filter(port => port.direction === 'output' && port.kind === 'control' && port.required)) {
+      const connected = edges.some(edge => edge.source?.nodeId === node.id && edge.source?.portId === port.id);
+      if (!connected) errors.push(issue('port.required_unconnected', `Required output ${port.id} is not connected`, `graph.nodes.${node.id}.ports.${port.id}`, { nodeId: node.id }));
+    }
   }
 
   const variableNames = new Set();

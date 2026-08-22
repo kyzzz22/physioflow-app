@@ -30,7 +30,6 @@ import {
   protocolNameOf,
   protocolStatusOf,
   renameProtocol,
-  unfreezeProtocolGraph,
   validateProtocolGraph,
 } from './core/index.js';
 import { migrateLegacyProtocolV1 } from './legacy/migrateProtocolV1.js';
@@ -416,11 +415,7 @@ export default function App() {
               if (await handleSave(frozen)) showToast('Protocol Graph frozen');
             } catch (error) { setAlert({ title: 'Cannot freeze', message: error.message }); }
           }}
-          onUnfreeze={async () => {
-            const draft = unfreezeProtocolGraph(current);
-            setCurrent(draft);
-            if (await handleSave(draft)) showToast('Editable draft restored');
-          }}
+          onCreateDraft={() => addAndOpen(createNextGraphProtocolVersion(current))}
           onUndo={undo}
           onRedo={redo}
           canUndo={undoStack.length > 0}

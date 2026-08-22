@@ -66,6 +66,8 @@
 .ui-builder-preview .participant-ui-screen { padding: 16px !important; }
 .ui-builder-preview h1 { font-size: 1.3rem; }
 .ui-valid { color: #26734d; }.ui-invalid { color: #a32e25; }
+.ui-binding-field { display: flex; flex-direction: column; gap: 5px; margin: 8px 0; color: var(--muted, #667085); font-size: .65rem; font-weight: 600; }
+.ui-binding-field input { padding: 7px; border: 1px solid var(--border, #dfe3e8); border-radius: 6px; background: var(--surface, #fff); color: inherit; }
 .component-events code { display: block; margin: 4px 0; padding: 4px 6px; border-radius: 4px; background: #66708512; }
 .composer-v2.locked .composer-palette, .composer-v2.locked .composer-inspector .inspector-card, .composer-v2.locked .composer-node { pointer-events: none; opacity: .72; }
 .migration-review-warning { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; padding: 9px; border: 1px solid #e2ba7b; border-radius: 7px; background: #fff7e8; color: #7a4a00; font-size: .68rem; }
