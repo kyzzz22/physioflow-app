@@ -23,7 +23,7 @@ const profileDirectory = mkdtempSync(join(tmpdir(), 'physioflow-e2e-'));
 const children = [];
 const cleanup = () => {
   children.forEach(child => { if (!child.killed) child.kill('SIGKILL'); });
-  rmSync(profileDirectory, { recursive: true, force: true });
+  rmSync(profileDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 };
 process.on('exit', cleanup);
 process.on('SIGINT', () => { cleanup(); process.exit(130); });
