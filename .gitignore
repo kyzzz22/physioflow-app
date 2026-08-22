@@ -4,6 +4,7 @@ node_modules/
 # Build output
 dist/
 release-web/
+release-desktop/
 
 # Rust / Tauri
 src-tauri/target/
@@ -31,3 +32,4 @@ npm-debug.log*
 
 # Editor
 .vscode/settings.json
+.vscode/launch.json

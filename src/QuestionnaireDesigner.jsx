@@ -3,9 +3,9 @@ import { uid } from './domain';
 
 export const QUESTION_TYPES = ['likert','single_choice','multiple_choice','vas_slider','sam_valence','sam_arousal','number','short_text','long_text'];
 export const COMPARISON_OPS = ['equals','not_equals','contains','greater_than','less_than'];
-const LANGS = [['zh','中文'],['ja','日本語'],['en','English']];
+export const LANGS = [['zh','中文'],['ja','日本語'],['en','English']];
 
-const newQuestion = () => ({
+export const newQuestion = () => ({
   question_id: uid('question'), type: 'likert', required: true,
   prompt_i18n: { zh: '', ja: '', en: '' },
   options_i18n: { zh: ['选项 1','选项 2'], ja: ['選択肢 1','選択肢 2'], en: ['Option 1','Option 2'] },
@@ -18,7 +18,7 @@ const newQuestion = () => ({
 export function createQuestionnaire() { return { questionnaire_id: uid('questionnaire'), name: 'Questionnaire', questions: [newQuestion()], shuffle_questions: false, show_progress: true }; }
 
 // ── Presets ──
-const PRESETS = {
+export const PRESETS = {
   sam_valence: () => ({ question_id: uid('question'), type:'sam_valence', required: true, prompt_i18n:{zh:'此刻您的愉悦程度如何？',ja:'現在の快・不快の程度を教えてください。',en:'How pleasant do you feel right now?'}, scale_min:1, scale_max:9 }),
   sam_arousal: () => ({ question_id: uid('question'), type:'sam_arousal', required: true, prompt_i18n:{zh:'此刻您的唤醒程度如何？',ja:'現在の覚醒度を教えてください。',en:'How aroused do you feel right now?'}, scale_min:1, scale_max:9 }),
   likert5: () => ({ question_id: uid('question'), type:'likert', required: true, prompt_i18n:{zh:'请评价',ja:'評価してください',en:'Please rate'}, scale_min:1, scale_max:5, min_label_i18n:{zh:'非常不同意',ja:'全く同意しない',en:'Strongly disagree'}, max_label_i18n:{zh:'非常同意',ja:'強く同意する',en:'Strongly agree'} }),
@@ -99,7 +99,7 @@ export default function QuestionnaireDesigner({ value, onChange, disabled }) {
 }
 
 // ── Batch import ──
-function BatchImport({ disabled, onImport }) {
+export function BatchImport({ disabled, onImport }) {
   const [text, setText] = useState('');
   const parse = () => {
     const lines = text.trim().split('\n').filter(Boolean);

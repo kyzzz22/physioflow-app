@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { applyThemeToDOM, resetThemeToDOM } from './theme.js';
 import { block, createNextProtocolVersion, duplicateProtocolAsProject, emotionTemplate, freezeProtocol, gonogoTemplate, stroopTemplate, unfreezeProtocol, protocol, STEP_TYPES, step, trial, validateProtocol, moveItem, stepContentIssues } from './domain';
 import { clearCurrentRun, getStorageInfo, loadCurrentRunAsync, loadProtocols, loadSessions, openDataDirectory, saveProtocols, selectDataDirectory } from './storage';
 import { saveAsset } from './fsStorage.js';
@@ -21,7 +22,6 @@ const LoadingFallback = () => <div style={{ position:'fixed',inset:0,zIndex:2000
 
 const clone = x => structuredClone(x);
 const MAX_UNDO = 60;
-const FIRST_RUN_GUIDE_KEY = 'physioflow.guide-seen.v1';
 const stepDefaultExtras = defaults => Object.fromEntries(Object.entries(defaults).filter(([key]) => !['name', 'duration_mode', 'planned_duration_ms', 'recovery_behavior'].includes(key)));
 const responseOptionsText = options => (options || []).map(option => {
   const label = option.label_i18n?.en || option.label_i18n?.zh || option.label_i18n?.ja || option.value || '';
@@ -141,6 +141,13 @@ export default function App() {
   const viewRef = useRef(view);
   const currentRef = useRef(current);
   useEffect(() => { viewRef.current = view; currentRef.current = current; }, [view, current]);
+
+  // Apply protocol theme when loaded
+  useEffect(() => {
+    if (current?.theme) { applyThemeToDOM(current.theme); }
+    else { resetThemeToDOM(); }
+    return () => { resetThemeToDOM(); };
+  }, [current?.protocol_id]);
 
   const pushUndo = useCallback((val, pushRedo = true) => {
     setUndoStack(prev => { const next = [...prev, val]; return next.length > MAX_UNDO ? next.slice(-MAX_UNDO) : next; });
@@ -904,6 +911,7 @@ function TrialAppearance({ trial: t, set, locked, previewKey: _pk }) {
         <label>Alignment<select value={l.alignment || 'center'} disabled={locked} onChange={e => set('alignment', e.target.value)}><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>
         <label>Padding<input type="number" min="0" value={l.padding ?? 48} disabled={locked} onChange={e => set('padding', Number(e.target.value))} /></label>
         <label>Spacing<input type="number" min="0" value={l.gap ?? 24} disabled={locked} onChange={e => set('gap', Number(e.target.value))} /></label>
+        <label>Border radius<input type="number" min={0} max={48} value={l.border_radius ?? 12} disabled={locked} onChange={e => set('border_radius', Number(e.target.value))} /></label>
         <label><input type="checkbox" checked={l.show_progress !== false} disabled={locked} onChange={e => set('show_progress', e.target.checked)} /> Progress</label>
         <label><input type="checkbox" checked={l.show_step_type !== false} disabled={locked} onChange={e => set('show_step_type', e.target.checked)} /> Step label</label>
       </div>

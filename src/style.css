@@ -316,10 +316,15 @@ code { font-size: .84rem; color: var(--muted); }
   display: flex; align-items: center; justify-content: center; margin: 0 auto;
 }
 .fixation-h, .fixation-v { position: absolute; background: #555; border-radius: 1px; }
-.fixation-h { width: 100%; height: 1.5px; }
-.fixation-v { width: 1.5px; height: 100%; }
+.fixation-h { width: 100%; height: 1.5px; top: calc(50% - .75px); left: 0; }
+.fixation-v { width: 1.5px; height: 100%; top: 0; left: calc(50% - .75px); }
+.fixation-dot { position: absolute; border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+.fixation-diamond { position: absolute; border: 2px solid #555; transform: translate(-50%, -50%) rotate(45deg); top: 50%; left: 50%; }
+.fixation-pulse { animation: fixation-pulse 1.5s ease-in-out infinite; }
+@keyframes fixation-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
 .rest-icon { font-size: 2.2rem; width: auto; height: auto; }
 .dark-mode .fixation-h, .dark-mode .fixation-v { background: #777; }
+.dark-mode .fixation-diamond { border-color: #777; }
 
 /* Instruction text */
 .instruction {

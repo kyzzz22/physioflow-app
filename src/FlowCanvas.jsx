@@ -4,7 +4,7 @@ import { normalizeFlow, validateFlow } from './flowEngine';
 import { Inspector } from './Inspector';
 import { PALETTE } from './constants.js';
 import RuntimeContent from './RuntimeContent';
-import QuestionnaireDesigner from './QuestionnaireDesigner';
+import QuestionnaireWorkspace from './QuestionnaireWorkspace';
 
 const nodeIcons = { start: 'START', end: 'END', condition: 'IF', loop: 'LOOP', event: 'STEP', note: '✎', junction: '●' };
 const branchesFor = node => node.type === 'note' ? [] : node.type === 'condition' ? ['true', 'false'] : node.type === 'loop' ? ['body', 'exit'] : ['next'];
@@ -41,6 +41,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   const [paletteCollapsed, setPaletteCollapsed] = useState(() => { try { return localStorage.getItem('physioflow.paletteCollapsed') === '1'; } catch { return false; } });
   const [inspectorCollapsed, setInspectorCollapsed] = useState(() => { try { return localStorage.getItem('physioflow.inspectorCollapsed') === '1'; } catch { return false; } });
   const [previewNode, setPreviewNode] = useState(null);
+  const [questionnaireWorkspace, setQuestionnaireWorkspace] = useState(null);
   const handledFocus = useRef(null);
   const canvasRef = useRef(null);
   const panDragRef = useRef(null);
@@ -211,6 +212,10 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   }, [trial.steps, trial.layout, stimuli, questionnaires]);
 
   const closePreview = useCallback(() => setPreviewNode(null), []);
+
+  const openQuestionnaireWorkspace = useCallback((questionnaire, onSave) => {
+    setQuestionnaireWorkspace({ data: questionnaire, onSave });
+  }, []);
 
   // Close preview on Escape
   useEffect(() => {
@@ -985,6 +990,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
       flow={flow}
       updateFlow={updateFlow}
       onPreview={selectedNode?.type === 'event' && trial.steps.find(s => s.step_id === selectedNode.step_id) ? () => openPreview(selectedNode) : null}
+      onOpenQuestionnaireWorkspace={openQuestionnaireWorkspace}
     />}
     <button
       className="panel-toggle inspector-toggle"
@@ -995,12 +1001,28 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
 
     {/* ── Full-screen step preview modal ── */}
     {previewNode && <NodePreviewModal step={previewNode.step} trialLayout={previewNode.trialLayout} onClose={closePreview}
-      onUpdate={values => previewNode.node.step_id && updateStep(previewNode.node.step_id, values)} />}
+      onUpdate={values => previewNode.node.step_id && updateStep(previewNode.node.step_id, values)}
+      onOpenQuestionnaireWorkspace={openQuestionnaireWorkspace} />}
+
+    {/* ── Full-screen questionnaire workspace ── */}
+    {questionnaireWorkspace && (
+      <QuestionnaireWorkspace
+        value={questionnaireWorkspace.data}
+        onChange={(q) => setQuestionnaireWorkspace(prev => prev ? { ...prev, data: q } : null)}
+        onClose={() => {
+          if (questionnaireWorkspace.onSave && questionnaireWorkspace.data) {
+            questionnaireWorkspace.onSave(questionnaireWorkspace.data);
+          }
+          setQuestionnaireWorkspace(null);
+        }}
+        disabled={disabled}
+      />
+    )}
   </div>;
 }
 
 /** Full-screen preview + inline editing */
-function NodePreviewModal({ step, trialLayout, onClose, onUpdate }) {
+function NodePreviewModal({ step, trialLayout, onClose, onUpdate, onOpenQuestionnaireWorkspace }) {
   const [editMode, setEditMode] = useState(false);
   const [editing, setEditing] = useState(structuredClone(step));
   const layout = trialLayout || {};
@@ -1094,8 +1116,13 @@ function NodePreviewModal({ step, trialLayout, onClose, onUpdate }) {
 
           {/* Questionnaire */}
           {step.type === 'questionnaire' && (editing.questionnaire_mode || 'internal') === 'internal' && (
-            <QuestionnaireDesigner value={editing.questionnaire} disabled={false}
-              onChange={q => applyEdit('questionnaire', q)} />
+            <div style={{ marginBottom: '.8rem' }}>
+              <button type="button" className="primary" style={{ width: '100%' }}
+                onClick={() => onOpenQuestionnaireWorkspace?.(editing.questionnaire, q => applyEdit('questionnaire', q))}>
+                Open full questionnaire editor ↗<br />
+                <small style={{ fontWeight: 400, opacity: .8 }}>{(editing.questionnaire?.questions?.length || 0)} question{((editing.questionnaire?.questions?.length || 0)) !== 1 ? 's' : ''}</small>
+              </button>
+            </div>
           )}
 
           {/* Media source */}

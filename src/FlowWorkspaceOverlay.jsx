@@ -3,6 +3,7 @@ import FlowCanvas from './FlowCanvas';
 import ResourceLibrary from './ResourceLibrary';
 import HierarchyManager from './HierarchyManager';
 import QuestionnaireLibrary from './QuestionnaireLibrary';
+import ThemeSettings from './ThemeSettings';
 import { stepContentIssues } from './domain';
 import { LanguageToggle, DarkModeToggle } from './i18n';
 
@@ -11,6 +12,7 @@ export default function FlowWorkspaceOverlay({ protocol, onChange, onSave, onBac
   const [hierarchyOpen, setHierarchyOpen] = useState(false);
   const [questionnaireOpen, setQuestionnaireOpen] = useState(false);
   const [overflowOpen, setOverflowOpen] = useState(false);
+  const [themeOpen, setThemeOpen] = useState(false);
   const [protoName, setProtoName] = useState(protocol.name);
   const trials = useMemo(() => protocol.blocks.flatMap((block, bi) => block.trials.map((trial, ti) => ({ block, blockIndex: bi, trial, trialIndex: ti }))), [protocol]);
   const [selectedId, setSelectedId] = useState(trials[0]?.trial.trial_id || '');
@@ -136,6 +138,7 @@ export default function FlowWorkspaceOverlay({ protocol, onChange, onSave, onBac
                 {onExport && <button onClick={() => { onExport(); setOverflowOpen(false); }}>💾 Export JSON</button>}
                 {protocol.status !== 'frozen' && onFreeze && <button onClick={() => { onFreeze(); setOverflowOpen(false); }}>🔒 Freeze version</button>}
                 {protocol.status === 'frozen' && onUnfreeze && <button onClick={() => { onUnfreeze(); setOverflowOpen(false); }}>🔓 Unfreeze version</button>}
+                <button onClick={() => { setThemeOpen(true); setOverflowOpen(false); }}>🎨 Theme &amp; style</button>
                 {onSwitchText && <button onClick={() => { onSwitchText(); setOverflowOpen(false); }}>⚙ Advanced settings</button>}
               </div>
             </>}
@@ -152,5 +155,6 @@ export default function FlowWorkspaceOverlay({ protocol, onChange, onSave, onBac
     {hierarchyOpen && <HierarchyManager protocol={protocol} onChange={onChange} onClose={() => setHierarchyOpen(false)} onSelect={setSelectedId} />}
     {libraryOpen && <ResourceLibrary protocol={protocol} onChange={onChange} onClose={() => setLibraryOpen(false)} />}
     {questionnaireOpen && <QuestionnaireLibrary protocol={protocol} onChange={onChange} onClose={() => setQuestionnaireOpen(false)} />}
+    {themeOpen && <ThemeSettings value={protocol.theme} disabled={protocol.status === 'frozen'} onChange={(theme) => { onChange({ ...protocol, theme, updated_at: new Date().toISOString() }); }} onClose={() => setThemeOpen(false)} />}
   </>;
 }

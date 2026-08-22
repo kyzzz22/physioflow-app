@@ -9,6 +9,7 @@ import { LanguageToggle } from './i18n';
 import { captureRunnerState, recoverySchedule } from './runnerState.js';
 import { ConfirmDialog, PromptDialog } from './Modal.jsx';
 import { withSessionIntegrity } from './sessionReview.js';
+import { applyThemeToDOM, resetThemeToDOM } from './theme.js';
 
 const contextOf = item => item ? ({ block_id: item.block.block_id, block_order: item.blockOrder + 1, block_repeat: (item.blockRepeat ?? 0) + 1, trial_id: item.trial.trial_id, trial_order: item.trialOrder + 1, trial_repeat: (item.trialRepeat ?? 0) + 1, step_id: item.step.step_id, step_order: item.trial.steps.findIndex(s => s.step_id === item.step.step_id) + 1, node_id: item.node?.id || '', condition: item.trial.condition, stimulus_id: item.step.stimulus_id || '' }) : {};
 // Browser compatibility check
@@ -68,6 +69,12 @@ export default function RuntimeRunnerPage({ data, onDone }) {
     document.documentElement.classList.toggle('dark-mode', darkMode);
     return () => document.documentElement.classList.remove('dark-mode');
   }, [darkMode]);
+
+  // Apply protocol theme at runtime
+  useEffect(() => {
+    if (protocol.theme) applyThemeToDOM(protocol.theme);
+    return () => resetThemeToDOM();
+  }, [protocol.protocol_id]);
 
   const log = (type, context = {}, metadata = {}) => {
     const event = logger.current.append(type, context, metadata);

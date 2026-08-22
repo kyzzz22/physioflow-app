@@ -85,6 +85,11 @@ export default function RuntimeContent({ step, session, language, timing: _timin
 
   // ── Fixation ──
   if (step.type === 'fixation') {
+    const fcfg = step.fixation_config || {};
+    const shape = fcfg.shape || 'cross';
+    const fSize = fcfg.size || (preview ? 48 : 80);
+    const fColor = fcfg.color || '#555';
+    const animated = fcfg.animated;
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: preview ? '.5rem' : '1.5rem' }}>
         <div style={{ position: 'relative', width: ringSvgSize, height: ringSvgSize, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -94,8 +99,10 @@ export default function RuntimeContent({ step, session, language, timing: _timin
               <circle ref={ringCircleRef} cx={ringSvgSize / 2} cy={ringSvgSize / 2} r={ringR} fill="none" stroke="var(--green)" strokeWidth="3" strokeDasharray={ringC} strokeDashoffset="0" strokeLinecap="round" />
             </svg>
           )}
-          <div className="fixation" style={{ width: preview ? 48 : 80, height: preview ? 48 : 80, position: 'relative', zIndex: 1 }}>
-            <span className="fixation-h" /><span className="fixation-v" />
+          <div className={`fixation${animated ? ' fixation-pulse' : ''}`} style={{ width: fSize, height: fSize, position: 'relative', zIndex: 1 }}>
+            {shape === 'cross' && <><span className="fixation-h" style={{ background: fColor }} /><span className="fixation-v" style={{ background: fColor }} /></>}
+            {shape === 'dot' && <span className="fixation-dot" style={{ width: fSize * 0.3, height: fSize * 0.3, background: fColor }} />}
+            {shape === 'diamond' && <span className="fixation-diamond" style={{ width: fSize * 0.4, height: fSize * 0.4, borderColor: fColor }} />}
           </div>
         </div>
         {!preview && <small style={{ color: 'var(--muted)', fontSize: '.8rem' }}>{seconds}s</small>}
