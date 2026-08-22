@@ -82,6 +82,22 @@ export function validateProtocolGraph(protocol, registry) {
     }
   }
 
+  const groupIds = new Set();
+  const groupedNodes = new Map();
+  for (const [index, group] of (protocol.graph?.groups || []).entries()) {
+    const path = `graph.groups.${index}`;
+    if (!group?.id) errors.push(issue('group.id_missing', 'Group ID is required', `${path}.id`));
+    else if (groupIds.has(group.id)) errors.push(issue('group.id_duplicate', `Duplicate group ID ${group.id}`, `${path}.id`));
+    else groupIds.add(group.id);
+    if (!group?.name?.trim()) errors.push(issue('group.name_missing', 'Group name is required', `${path}.name`));
+    if (!(group?.nodeIds || []).length) warnings.push(issue('group.empty', `Group ${group?.name || group?.id || index} is empty`, `${path}.nodeIds`));
+    for (const nodeId of group?.nodeIds || []) {
+      if (!nodeById.has(nodeId)) errors.push(issue('group.node_missing', `Group references unknown node ${nodeId}`, `${path}.nodeIds`));
+      if (groupedNodes.has(nodeId)) errors.push(issue('group.node_multiple', `Node ${nodeId} belongs to multiple groups`, `${path}.nodeIds`, { nodeId }));
+      else groupedNodes.set(nodeId, group.id);
+    }
+  }
+
   for (const node of nodes) {
     const definition = registry?.get(node.component?.type, node.component?.version);
     if (!definition) continue;

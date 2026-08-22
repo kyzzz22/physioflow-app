@@ -2,16 +2,20 @@ import { useMemo, useRef, useState } from 'react';
 import {
   addVariable,
   addNode,
+  assignNodeToGroup,
   connect,
   createCoreComponentRegistry,
+  createNodeGroup,
   disconnect,
   duplicateNode,
   insertNodeOnControlEdge,
   moveNodes,
   protocolNameOf,
   removeVariable,
+  removeNodeGroup,
   removeNode,
   updateVariable,
+  updateNodeGroup,
   updateNode,
   validateProtocolGraphConfiguration,
 } from './core/index.js';
@@ -50,6 +54,16 @@ function portPosition(node, port, definition) {
 function edgePath(source, target) {
   const bend = Math.max(54, Math.abs(target.x - source.x) * 0.45);
   return `M ${source.x} ${source.y} C ${source.x + bend} ${source.y}, ${target.x - bend} ${target.y}, ${target.x} ${target.y}`;
+}
+
+function groupBounds(group, nodes) {
+  const members = nodes.filter(node => group.nodeIds.includes(node.id));
+  if (!members.length) return null;
+  const left = Math.min(...members.map(node => node.layout.x)) - 34;
+  const top = Math.min(...members.map(node => node.layout.y)) - 42;
+  const right = Math.max(...members.map(node => node.layout.x + NODE_WIDTH)) + 34;
+  const bottom = Math.max(...members.map(node => node.layout.y + NODE_HEIGHT)) + 34;
+  return { left, top, width: right - left, height: bottom - top };
 }
 
 export default function ComposerV2({ protocol, onChange, onSave, onBack, onExport, onPreview, onFreeze, onCreateDraft, onUndo, onRedo, canUndo, canRedo, hasUnsaved, saveAnim }) {
@@ -195,6 +209,7 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
           try { commit(removeVariable(protocol, name)); }
           catch (error) { setMessage(error.message); }
         }} />}
+        {editorMode !== 'quick' && <GroupCatalog groups={protocol.graph.groups || []} locked={locked} onUpdate={(groupId, changes) => commit(updateNodeGroup(protocol, groupId, changes))} onRemove={groupId => commit(removeNodeGroup(protocol, groupId))} />}
       </aside>
       <section className="composer-canvas-wrap">
         <div className="composer-canvas-toolbar">
@@ -203,6 +218,10 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
           {message && <small>{message}</small>}
         </div>
         <div ref={canvasRef} className="composer-canvas" onClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); }}>
+          {(protocol.graph.groups || []).map(group => {
+            const bounds = groupBounds(group, protocol.graph.nodes);
+            return bounds && <section key={group.id} className="composer-group" style={bounds}><b>{group.name}</b><small>{group.nodeIds.length} node(s)</small></section>;
+          })}
           <svg className="composer-wires" aria-label="Graph connections">
             {protocol.graph.edges.map(edge => {
               const sourceNode = protocol.graph.nodes.find(node => node.id === edge.source.nodeId);
@@ -229,7 +248,13 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
       <aside className="composer-inspector">
         <h2>Inspector</h2>
         {migrationReviewRequired && <div className="migration-review-warning"><b>Migration review required</b><span>{protocol.legacy.migrationReport.issues.length} item(s) must be checked before this draft can be frozen.</span></div>}
-        {selectedNode && <NodeInspector node={selectedNode} definition={registry.get(selectedNode.component.type, selectedNode.component.version)} variables={protocol.variables || []} mode={editorMode} onUpdate={updateSelected} />}
+        {selectedNode && <NodeInspector node={selectedNode} definition={registry.get(selectedNode.component.type, selectedNode.component.version)} variables={protocol.variables || []} groups={protocol.graph.groups || []} mode={editorMode} onUpdate={updateSelected} onAssignGroup={groupId => commit(assignNodeToGroup(protocol, selectedNode.id, groupId))} onCreateGroup={() => {
+          try {
+            const result = createNodeGroup(protocol, [selectedNode.id], { name: `${selectedNode.label} group` });
+            commit(result.protocol);
+            setMessage(`Created group ${result.group.name}`);
+          } catch (error) { setMessage(error.message); }
+        }} />}
         {selectedEdge && <div className="inspector-card"><b>{selectedEdge.kind} connection</b><code>{selectedEdge.source.portId} → {selectedEdge.target.portId}</code><button className="danger" onClick={deleteSelection}>Delete connection</button></div>}
         {!selectedNode && !selectedEdge && <p>Select a node or connection to configure it.</p>}
         {!locked && selectedNode && !['core.start', 'core.end'].includes(selectedNode.component.type) && <button onClick={duplicateSelection}>Duplicate node</button>}
@@ -243,7 +268,8 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
   </main>;
 }
 
-function NodeInspector({ node, definition, variables, mode, onUpdate }) {
+function NodeInspector({ node, definition, variables, groups, mode, onUpdate, onAssignGroup, onCreateGroup }) {
+  const currentGroup = groups.find(group => group.nodeIds.includes(node.id));
   return <div className="inspector-card">
     <label>Label<input value={node.label} onChange={event => onUpdate({ label: event.target.value })} /></label>
     <small>{node.component.type}@{node.component.version}</small>
@@ -265,10 +291,25 @@ function NodeInspector({ node, definition, variables, mode, onUpdate }) {
       <option value="">Choose a variable…</option>
       {variables.map(variable => <option key={variable.name} value={variable.name}>{variable.name} · {variable.type} / {variable.scope}</option>)}
     </select></label>}
+    {mode !== 'quick' && !['core.start', 'core.end'].includes(node.component.type) && <label>Node group<select aria-label="Node group" value={currentGroup?.id || ''} onChange={event => onAssignGroup(event.target.value || null)}><option value="">No group</option>{groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>}
+    {mode !== 'quick' && !currentGroup && !['core.start', 'core.end'].includes(node.component.type) && <button onClick={onCreateGroup}>Create group from node</button>}
     {mode !== 'quick' && node.config?.ui && <ParticipantUiBuilder schema={node.config.ui} onChange={ui => onUpdate({ config: { ...node.config, ui } })} />}
     {mode === 'advanced' && <><details className="component-events"><summary>Recorded events ({definition?.events?.length || 0})</summary>{(definition?.events || []).map(eventType => <code key={eventType}>{eventType}</code>)}</details>
       <details><summary>Node ID</summary><code>{node.id}</code></details><details><summary>Node JSON</summary><pre>{JSON.stringify(node, null, 2)}</pre></details></>}
   </div>;
+}
+
+function GroupCatalog({ groups, locked, onUpdate, onRemove }) {
+  return <section className="group-catalog">
+    <h3>Groups</h3>
+    <p>Visual containers organize related nodes without creating a second execution model.</p>
+    {!groups.length && <small>No groups yet. Select a node and create one from its Inspector.</small>}
+    {groups.map(group => <article key={group.id}>
+      <input disabled={locked} aria-label={`${group.name} group name`} value={group.name} onChange={event => onUpdate(group.id, { name: event.target.value })} />
+      <small>{group.nodeIds.length} node(s) · {group.kind}</small>
+      <button disabled={locked} aria-label={`Delete group ${group.name}`} onClick={() => onRemove(group.id)}>×</button>
+    </article>)}
+  </section>;
 }
 
 function VariableCatalog({ variables, locked, mode, onAdd, onUpdate, onRemove, onError }) {

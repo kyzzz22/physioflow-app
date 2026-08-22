@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import {
   addVariable,
   addNode,
+  assignNodeToGroup,
   ComponentRegistry,
   connect,
   createCoreComponentRegistry,
+  createNodeGroup,
   createNode,
   createProtocolGraph,
   createSequentialIdFactory,
@@ -18,11 +20,13 @@ import {
   participantUiTemplate,
   removeNode,
   removeVariable,
+  removeNodeGroup,
   serializeProtocolGraph,
   validateComponentDefinition,
   validateProtocolGraph,
   validateProtocolGraphConfiguration,
   updateVariable,
+  updateNodeGroup,
 } from '../src/core/index.js';
 import { inspectLegacyProtocolV1, migrateLegacyProtocolV1 } from '../src/legacy/migrateProtocolV1.js';
 
@@ -186,6 +190,33 @@ test('graph validation rejects undeclared variable bindings', () => {
   const protocol = addNode(buildGraph(), 'logic.condition', { id: 'condition_missing', bindings: { value: { kind: 'variable', variable: 'missing_score' } } }).protocol;
   const check = validateProtocolGraph(protocol, createCoreComponentRegistry());
   assert.ok(check.errors.some(error => error.code === 'binding.variable_missing'));
+});
+
+test('node groups are validated, serialized with the graph, and never duplicate membership', () => {
+  const first = addNode(buildGraph(), 'display.screen', { id: 'group_screen_1' }).protocol;
+  const second = addNode(first, 'display.screen', { id: 'group_screen_2' }).protocol;
+  const created = createNodeGroup(second, ['group_screen_1'], { id: 'group_1', name: 'Instructions', now: '2026-08-22T03:00:00.000Z' });
+  let grouped = assignNodeToGroup(created.protocol, 'group_screen_2', 'group_1');
+  assert.deepEqual(grouped.graph.groups[0].nodeIds, ['group_screen_1', 'group_screen_2']);
+  grouped = updateNodeGroup(grouped, 'group_1', { name: 'Participant instructions' });
+  assert.equal(grouped.graph.groups[0].name, 'Participant instructions');
+  assert.throws(() => createNodeGroup(grouped, ['group_screen_1'], { name: 'Duplicate membership' }), /only one group/);
+
+  const removedNode = removeNode(grouped, 'group_screen_2');
+  assert.deepEqual(removedNode.graph.groups[0].nodeIds, ['group_screen_1']);
+  const removedGroup = removeNodeGroup(removedNode, 'group_1');
+  assert.deepEqual(removedGroup.graph.groups, []);
+});
+
+test('graph validation rejects missing and multiply grouped nodes', () => {
+  const protocol = addNode(buildGraph(), 'display.screen', { id: 'group_target' }).protocol;
+  protocol.graph.groups = [
+    { id: 'group_a', name: 'A', kind: 'container', nodeIds: ['group_target'], parameters: [], metadata: {} },
+    { id: 'group_b', name: 'B', kind: 'container', nodeIds: ['group_target', 'unknown_node'], parameters: [], metadata: {} },
+  ];
+  const check = validateProtocolGraph(protocol, createCoreComponentRegistry());
+  assert.ok(check.errors.some(error => error.code === 'group.node_multiple'));
+  assert.ok(check.errors.some(error => error.code === 'group.node_missing'));
 });
 
 test('validation reports unknown components and missing edge endpoints', () => {

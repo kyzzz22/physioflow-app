@@ -11,6 +11,7 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 | --- | --- |
 | Protocol Graph is the executable source of truth | Versioned graph schema, immutable graph commands, canonical serialization, graph validation, Runtime V2 consumption |
 | Visual composition | Palette, node canvas, control/data ports, connection validation, move, delete, inline duplicate, undo/redo |
+| Node grouping | Protocol-level group schema/commands, single-membership validation, safe node removal/duplication and live canvas containers |
 | Progressive editing | Quick, Design, and Advanced views operate on the same protocol object |
 | Typed variables and conditions | Variable catalog, scope/type/default/source/export policy, safe rename/delete, condition variable picker, missing/type checks |
 | Graph-native randomization | Seeded Random split, explicit A/B ports, deterministic state, decision event and replay-equivalent test |
@@ -24,7 +25,7 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 
 | Item | Status | Acceptance evidence still required |
 | --- | --- | --- |
-| Node grouping and parameterized subflows | Not implemented | Core schema/commands, Composer interaction, runtime semantics, migration and tests |
+| Parameterized subflows | Not implemented | Entry/exit contract, parameter mapping, reusable instance semantics, migration and tests |
 | Fully declarative component runtime registry | Partial | Adding a standard component without editing central runner/runtime type branches |
 | Component SDK and project component library | Stage 7 | Versioned SDK contract, sandbox/permissions, example external component |
 | Runtime variable debugger and replay UI | Stage 7 | Event-driven replay reaches the same state/branch and is usable from session review |

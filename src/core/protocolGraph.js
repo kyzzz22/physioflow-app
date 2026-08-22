@@ -68,6 +68,7 @@ export function createProtocolGraph(options = {}) {
       entryNodeId: start.id,
       nodes: [start, end],
       edges: [initialEdge],
+      groups: [],
     },
     variables: [],
     assets: [],

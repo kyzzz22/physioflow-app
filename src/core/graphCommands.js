@@ -35,6 +35,7 @@ export function removeNode(protocol, nodeId, options = {}) {
   const next = cloneProtocol(protocol);
   next.graph.nodes = next.graph.nodes.filter(item => item.id !== nodeId);
   next.graph.edges = next.graph.edges.filter(edge => edge.source.nodeId !== nodeId && edge.target.nodeId !== nodeId);
+  next.graph.groups = (next.graph.groups || []).map(group => ({ ...group, nodeIds: group.nodeIds.filter(id => id !== nodeId) }));
   return touch(next, options.now);
 }
 
@@ -99,6 +100,11 @@ export function duplicateNode(protocol, nodeId, options = {}) {
     layout: options.layout || { ...source.layout, x: source.layout.x + 220, y: source.layout.y + 28 },
     now: options.now,
   });
+  const sourceGroup = (protocol.graph.groups || []).find(group => group.nodeIds.includes(nodeId));
+  if (sourceGroup) {
+    const group = added.protocol.graph.groups.find(item => item.id === sourceGroup.id);
+    group.nodeIds.push(added.node.id);
+  }
   if (!options.insertAfter) return added;
   const outputPortId = options.outputPortId || 'next';
   const inputPortId = options.inputPortId || 'in';
