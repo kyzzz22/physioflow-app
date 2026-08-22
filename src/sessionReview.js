@@ -1,4 +1,6 @@
 import { assessSession } from './integrity.js';
+import { isGraphProtocol } from './core/protocolSelectors.js';
+import { assessGraphSession } from './data/graphIntegrity.js';
 
 export function withSessionIntegrity(session) {
   if (!session || !session.protocol_snapshot) return session;
@@ -9,7 +11,7 @@ export function withSessionIntegrity(session) {
     ...session,
     event_count: events.length,
   };
-  next.integrity = assessSession({
+  next.integrity = (isGraphProtocol(session.protocol_snapshot) ? assessGraphSession : assessSession)({
     session: next,
     protocol: session.protocol_snapshot,
     events,

@@ -13,6 +13,8 @@ import {
   startRuntime,
 } from './runtime/index.js';
 import { clearCurrentRun, saveCurrentRun, saveSession } from './storage.js';
+import { buildGraphSessionFiles } from './data/index.js';
+import { downloadBundle } from './exporter.js';
 
 const registry = createCoreComponentRegistry();
 
@@ -67,6 +69,7 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
   const currentNode = runtime.currentNodeId ? nodes.get(runtime.currentNodeId) : null;
   const executableCount = protocol.graph.nodes.filter(node => !node.component.type.startsWith('core.') && !node.component.type.startsWith('logic.')).length;
   const progress = { current: runtime.completedNodeIds.length, total: executableCount, percent: executableCount ? Math.round((runtime.completedNodeIds.length / executableCount) * 100) : 100 };
+  const exportFiles = runtime.status === 'completed' ? buildGraphSessionFiles({ ...data.session, status: 'completed', runtime_snapshot: runtime, events, responses }, protocol, events, responses) : null;
 
   const apply = result => {
     setRuntime(result.state);
@@ -128,7 +131,7 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
   }, [data.session, events, protocol, responses, runtime]);
 
   if (!started) return <main className="graph-runner"><div className="graph-runner-ready"><span className="eyebrow">RUNTIME V2 READY</span><h1>{protocolNameOf(protocol)}</h1><p>{data.session.participant_id} · {executableCount} participant components</p><button className="primary" onClick={begin}>Begin experiment</button></div></main>;
-  if (runtime.status === 'completed') return <main className="graph-runner"><div className="graph-runner-ready"><span className="eyebrow">SESSION COMPLETE</span><h1>Thank you</h1><p>{events.length} events · {responses.length} responses</p><p>{saved === true ? 'Saved locally.' : typeof saved === 'string' ? saved : 'Saving…'}</p><button disabled={saved !== true} onClick={onDone}>Return to projects</button></div></main>;
+  if (runtime.status === 'completed') return <main className="graph-runner"><div className="graph-runner-ready"><span className="eyebrow">SESSION COMPLETE</span><h1>Thank you</h1><p>{events.length} events · {responses.length} responses · {Object.keys(exportFiles).length} export files</p><p>{saved === true ? 'Saved locally.' : typeof saved === 'string' ? saved : 'Saving…'}</p><button className="primary" onClick={() => downloadBundle(exportFiles, data.session.participant_id)}>Export complete data package</button><button disabled={saved !== true} onClick={onDone}>Return to projects</button></div></main>;
   if (runtime.status === 'failed') return <main className="graph-runner"><div className="graph-runner-ready"><span className="eyebrow">RUNTIME FAILED</span><h1>Experiment stopped</h1><p>{runtime.error}</p><button onClick={onDone}>Return to projects</button></div></main>;
   if (!currentNode) return null;
 

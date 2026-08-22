@@ -66,3 +66,4 @@
 .ui-builder-preview .participant-ui-screen { padding: 16px !important; }
 .ui-builder-preview h1 { font-size: 1.3rem; }
 .ui-valid { color: #26734d; }.ui-invalid { color: #a32e25; }
+.component-events code { display: block; margin: 4px 0; padding: 4px 6px; border-radius: 4px; background: #66708512; }

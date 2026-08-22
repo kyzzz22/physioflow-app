@@ -7,6 +7,7 @@ import { loadAsset, saveAsset as idbSaveAsset, verifyProtocolAssets as verifyAss
 import { bundle as exporterBundle } from './exporter.js';
 import { withSessionIntegrity } from './sessionReview.js';
 import { isGraphProtocol, projectIdOf, protocolCreatedAtOf, protocolIdOf } from './core/protocolSelectors.js';
+import { buildGraphSessionFiles } from './data/graphExport.js';
 import {
   activeWorkspace,
   clearWorkspaceHandle,
@@ -148,17 +149,6 @@ function sessionSummary(session, folder) {
   };
 }
 
-function graphSessionFiles(session, protocol) {
-  const events = session.events || [];
-  return {
-    'session.json': JSON.stringify(session, null, 2),
-    'protocol_snapshot.json': JSON.stringify(protocol, null, 2),
-    'runtime_snapshot.json': JSON.stringify(session.runtime_snapshot || null, null, 2),
-    'events.jsonl': events.map(event => JSON.stringify(event)).join('\n') + (events.length ? '\n' : ''),
-    'responses.jsonl': (session.responses || []).map(response => JSON.stringify(response)).join('\n') + ((session.responses || []).length ? '\n' : ''),
-  };
-}
-
 export async function saveSession(session) {
   const prepared = withSessionIntegrity(session);
   const folder = sessionFolderName(prepared);
@@ -167,7 +157,7 @@ export async function saveSession(session) {
     const protocol = prepared.protocol_snapshot;
     const events = prepared.events || [];
     const responses = prepared.responses || [];
-    const files = protocol ? (isGraphProtocol(protocol) ? graphSessionFiles(prepared, protocol) : exporterBundle(prepared, protocol, events, responses)) : {};
+    const files = protocol ? (isGraphProtocol(protocol) ? buildGraphSessionFiles(prepared, protocol, events, responses) : exporterBundle(prepared, protocol, events, responses)) : {};
     for (const [filename, content] of Object.entries(files)) await writeText(`sessions/${folder}/${filename}`, content);
     await writeText(`sessions/${folder}/session_detail.json`, JSON.stringify(prepared, null, 2));
     return;

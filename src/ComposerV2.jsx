@@ -227,6 +227,7 @@ function NodeInspector({ node, definition, onUpdate }) {
       </label>;
     })}
     {node.component.type === 'display.screen' && <ParticipantUiBuilder schema={node.config.ui} onChange={ui => onUpdate({ config: { ...node.config, ui } })} />}
+    <details className="component-events"><summary>Recorded events ({definition?.events?.length || 0})</summary>{(definition?.events || []).map(eventType => <code key={eventType}>{eventType}</code>)}</details>
     <details><summary>Node ID</summary><code>{node.id}</code></details>
   </div>;
 }
