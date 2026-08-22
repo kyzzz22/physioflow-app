@@ -103,6 +103,14 @@ test('condition branches must both be connected before a graph is runnable', () 
   assert.ok(check.errors.some(error => error.code === 'port.required_unconnected' && error.path.endsWith('.false')));
 });
 
+test('random split requires two branches and a valid probability', () => {
+  const source = buildGraph();
+  const random = insertNodeOnControlEdge(source, source.graph.edges[0].id, 'logic.random', { idFactory: createSequentialIdFactory(80), outputPortId: 'a', config: { probabilityA: 2 } }).protocol;
+  const check = validateProtocolGraphConfiguration(random, createCoreComponentRegistry());
+  assert.ok(check.errors.some(error => error.code === 'port.required_unconnected' && error.path.endsWith('.b')));
+  assert.ok(check.errors.some(error => error.code === 'config.random_probability_invalid'));
+});
+
 test('component definitions reject duplicate and invalid ports', () => {
   const result = validateComponentDefinition({
     type: 'test.invalid', version: '1.0.0', label: 'Invalid',

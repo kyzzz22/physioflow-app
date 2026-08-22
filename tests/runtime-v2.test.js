@@ -136,6 +136,34 @@ test('bounded loop exits after the configured number of body visits', () => {
   assert.equal(third.state.loopCounts.loop_1, 2);
 });
 
+test('seeded random split is reproducible and records its decision', () => {
+  const idFactory = createSequentialIdFactory();
+  const protocol = createProtocolGraph({ idFactory, name: 'Random split', now: '2026-08-22T00:00:00.000Z' });
+  const start = protocol.graph.nodes.find(node => node.component.type === 'core.start');
+  const endA = protocol.graph.nodes.find(node => node.component.type === 'core.end');
+  protocol.graph.edges = [];
+  const random = addNode(protocol, 'logic.random', { id: 'random_1', config: { probabilityA: 0.5, seedSalt: 'trial-order' } });
+  const branchA = addNode(random.protocol, 'display.screen', { id: 'branch_a', label: 'Branch A' });
+  const branchB = addNode(branchA.protocol, 'display.screen', { id: 'branch_b', label: 'Branch B' });
+  const endB = addNode(branchB.protocol, 'core.end', { id: 'end_b', label: 'End B' });
+  let next = connect(endB.protocol, 'control', { nodeId: start.id, portId: 'next' }, { nodeId: 'random_1', portId: 'in' }).protocol;
+  next = connect(next, 'control', { nodeId: 'random_1', portId: 'a' }, { nodeId: 'branch_a', portId: 'in' }).protocol;
+  next = connect(next, 'control', { nodeId: 'random_1', portId: 'b' }, { nodeId: 'branch_b', portId: 'in' }).protocol;
+  next = connect(next, 'control', { nodeId: 'branch_a', portId: 'next' }, { nodeId: endA.id, portId: 'in' }).protocol;
+  next = connect(next, 'control', { nodeId: 'branch_b', portId: 'next' }, { nodeId: 'end_b', portId: 'in' }).protocol;
+
+  const options = { sessionId: 'session_random', startedAtEpochMs: 1000, startedAtMonotonicMs: 500, randomSeed: 'study-seed-42' };
+  const first = startRuntime(createRuntimeState(next, options), next, createCoreComponentRegistry(), services());
+  const second = startRuntime(createRuntimeState(next, options), next, createCoreComponentRegistry(), services());
+  const firstDecision = first.events.find(event => event.eventType === 'randomization_evaluated');
+  const secondDecision = second.events.find(event => event.eventType === 'randomization_evaluated');
+  assert.deepEqual(firstDecision.payload, secondDecision.payload);
+  assert.equal(first.state.currentNodeId, second.state.currentNodeId);
+  assert.equal(first.state.randomDrawCount, 1);
+  assert.equal(firstDecision.payload.seed, 'study-seed-42');
+  assert.ok(['a', 'b'].includes(firstDecision.payload.selectedPort));
+});
+
 test('pause, resume, retry, skip and snapshot preserve explicit state', () => {
   const protocol = linearProtocol();
   const registry = createCoreComponentRegistry();

@@ -258,7 +258,7 @@ function NodeInspector({ node, definition, variables, mode, onUpdate }) {
         {field.type === 'textarea' ? <textarea value={value ?? ''} onChange={event => change(event.target.value)} />
           : field.type === 'select' ? <select value={value ?? ''} onChange={event => change(event.target.value)}>{field.options.map(option => <option key={option} value={option}>{option}</option>)}</select>
             : field.type === 'boolean' ? <input type="checkbox" checked={Boolean(value)} onChange={event => change(event.target.checked)} />
-              : <input type={field.type} min={field.min} value={value ?? ''} onChange={event => change(event.target.value)} />}
+              : <input type={field.type} min={field.min} max={field.max} value={value ?? ''} onChange={event => change(event.target.value)} />}
       </label>;
     })}
     {node.component.type === 'logic.condition' && <label>Input variable<select aria-label="Condition input variable" value={node.bindings?.value?.kind === 'variable' ? node.bindings.value.variable : ''} onChange={event => onUpdate({ bindings: event.target.value ? { ...node.bindings, value: { kind: 'variable', variable: event.target.value } } : Object.fromEntries(Object.entries(node.bindings || {}).filter(([key]) => key !== 'value')) })}>

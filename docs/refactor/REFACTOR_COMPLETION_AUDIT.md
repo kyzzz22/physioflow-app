@@ -13,6 +13,7 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 | Visual composition | Palette, node canvas, control/data ports, connection validation, move, delete, inline duplicate, undo/redo |
 | Progressive editing | Quick, Design, and Advanced views operate on the same protocol object |
 | Typed variables and conditions | Variable catalog, scope/type/default/source/export policy, safe rename/delete, condition variable picker, missing/type checks |
+| Graph-native randomization | Seeded Random split, explicit A/B ports, deterministic state, decision event and replay-equivalent test |
 | Participant UI composition | Screen/Layout/Text/Media/Input/Button/Progress tree, bindings, actions, templates, preview and shared runtime renderer |
 | Deterministic execution | Injected IDs/clocks, sequence, conditions, bounded loops, pause/resume, retry/skip, snapshots and restore |
 | Reproducible formal versions | Pre-freeze validation, migration review gate, config hash, immutable frozen record, new-version editing |
@@ -24,7 +25,6 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 | Item | Status | Acceptance evidence still required |
 | --- | --- | --- |
 | Node grouping and parameterized subflows | Not implemented | Core schema/commands, Composer interaction, runtime semantics, migration and tests |
-| Graph-native randomization component | Not implemented in Runtime V2 | Seeded service, recorded order/seed, replay test and Composer controls |
 | Fully declarative component runtime registry | Partial | Adding a standard component without editing central runner/runtime type branches |
 | Component SDK and project component library | Stage 7 | Versioned SDK contract, sandbox/permissions, example external component |
 | Runtime variable debugger and replay UI | Stage 7 | Event-driven replay reaches the same state/branch and is usable from session review |

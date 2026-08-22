@@ -16,12 +16,13 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 
 ## Acceptance evidence
 
-- Automated tests: 93 passing.
+- Automated tests: 95 passing.
 - Production build: passing.
 - Lint: zero errors; 20 warnings remain only in legacy transition files.
 - Representative migration tests: Emotion, Stroop, and Go/No-Go each meet the native coverage threshold.
 - Frozen graph behavior: a frozen protocol retains its hash and status; editing creates a distinct next-version draft.
 - Data behavior: Runtime V2 records contiguous event sequences, value changes, UI actions, response submission, media lifecycle events, response reaction time, snapshots, raw records, normalized tables, manifests, a dictionary, and a quality report.
+- Randomization behavior: Composer exposes both required branches and probability/seed-salt settings; Runtime V2 records a deterministic decision and reproduces it with the same seed.
 
 ## Known transition scope
 

@@ -176,10 +176,25 @@ export function createCoreComponentRegistry() {
     ],
     defaultConfig: { operator: 'equals', expected: true },
     editorFields: [
-      { path: 'operator', label: 'Operator', type: 'select', options: ['equals', 'not_equals', 'greater_than', 'less_than', 'truthy', 'falsy'] },
+      { path: 'operator', label: 'Operator', type: 'select', options: ['equals', 'not_equals', 'contains', 'greater_than', 'greater_than_or_equal', 'less_than', 'less_than_or_equal', 'is_truthy', 'is_falsy'] },
       { path: 'expected', label: 'Expected value', type: 'text' },
     ],
     events: ['condition_evaluated'],
+  });
+  registry.register({
+    type: 'logic.random', version: '1.0.0', label: 'Random split', category: 'control',
+    ports: [
+      controlInput,
+      { id: 'a', label: 'A', kind: 'control', direction: 'output', required: true },
+      { id: 'b', label: 'B', kind: 'control', direction: 'output', required: true },
+    ],
+    defaultConfig: { probabilityA: 0.5, seedSalt: '' },
+    editorFields: [
+      { path: 'probabilityA', label: 'Probability of A (0–1)', type: 'number', min: 0, max: 1 },
+      { path: 'seedSalt', label: 'Seed salt', type: 'text' },
+    ],
+    events: ['randomization_evaluated'],
+    dataFields: ['seed', 'draw_index', 'random_value', 'selected_port'],
   });
   registry.register({
     type: 'logic.loop', version: '1.0.0', label: 'Loop', category: 'control',

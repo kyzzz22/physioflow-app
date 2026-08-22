@@ -30,11 +30,30 @@ function initializeVariables(protocol, initialValues = {}) {
   return { ...values, ...structuredClone(initialValues) };
 }
 
+function hashRandomSeed(value) {
+  let hash = 2166136261;
+  for (const character of String(value)) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function drawRandom(state, salt = '') {
+  const salted = salt ? (state.randomState ^ hashRandomSeed(salt)) >>> 0 : state.randomState;
+  const randomState = (Math.imul(1664525, salted) + 1013904223) >>> 0;
+  return {
+    state: { ...state, randomState, randomDrawCount: state.randomDrawCount + 1 },
+    value: randomState / 4294967296,
+  };
+}
+
 export function createRuntimeState(protocol, options) {
   if (!options?.sessionId) throw new Error('Runtime requires a session ID');
   if (!Number.isFinite(options.startedAtEpochMs) || !Number.isFinite(options.startedAtMonotonicMs)) {
     throw new Error('Runtime requires explicit epoch and monotonic start times');
   }
+  const randomSeed = String(options.randomSeed ?? `${protocol.protocolId}:${protocol.version?.number ?? 'draft'}:${options.sessionId}`);
   return {
     schemaVersion: RUNTIME_STATE_SCHEMA_VERSION,
     sessionId: options.sessionId,
@@ -47,6 +66,9 @@ export function createRuntimeState(protocol, options) {
     variables: initializeVariables(protocol, options.variables),
     outputs: {},
     loopCounts: {},
+    randomSeed,
+    randomState: hashRandomSeed(randomSeed),
+    randomDrawCount: 0,
     attempts: {},
     completedNodeIds: [],
     skippedNodeIds: [],
@@ -143,6 +165,20 @@ function advanceAutomatic(initialState, protocol, registry, services, startNodeI
         currentNodeId = chooseControlTarget(protocol, node, enterBody ? 'body' : 'exit');
         continue;
       }
+      if (type === 'logic.random') {
+        const probabilityA = Number(node.config?.probabilityA ?? 0.5);
+        const draw = drawRandom(state, node.config?.seedSalt || '');
+        state = draw.state;
+        const selectedPort = draw.value < probabilityA ? 'a' : 'b';
+        const emitted = appendEvent(state, protocol, 'randomization_evaluated', services, {
+          node,
+          payload: { seed: state.randomSeed, drawIndex: state.randomDrawCount, randomValue: draw.value, probabilityA, selectedPort },
+        });
+        state = emitted.state;
+        events.push(emitted.event);
+        currentNodeId = chooseControlTarget(protocol, node, selectedPort);
+        continue;
+      }
       if (!registry.has(node.component.type, node.component.version)) {
         return failRuntime(state, protocol, services, `Unknown component ${node.component.type}@${node.component.version}`, node, events);
       }
@@ -159,7 +195,7 @@ export function startRuntime(runtime, protocol, registry, services) {
   let state = { ...runtime, status: 'running' };
   const started = appendEvent(state, protocol, 'protocol_started', services, {
     nodeId: protocol.graph.entryNodeId,
-    payload: { protocolSchemaVersion: protocol.schemaVersion },
+    payload: { protocolSchemaVersion: protocol.schemaVersion, randomSeed: state.randomSeed },
   });
   state = started.state;
   return advanceAutomatic(state, protocol, registry, services, protocol.graph.entryNodeId, [started.event]);

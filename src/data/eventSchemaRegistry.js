@@ -2,7 +2,7 @@ import { RUNTIME_EVENT_SCHEMA_VERSION } from '../runtime/eventEnvelope.js';
 
 const RUNTIME_EVENTS = [
   'protocol_started', 'protocol_completed', 'component_entered', 'component_completed',
-  'component_skipped', 'component_retried', 'condition_evaluated', 'loop_evaluated',
+  'component_skipped', 'component_retried', 'condition_evaluated', 'loop_evaluated', 'randomization_evaluated',
   'session_paused', 'session_resumed', 'runtime_failed',
   'ui_action', 'media_loaded', 'media_error', 'value_changed', 'response_submitted',
 ];

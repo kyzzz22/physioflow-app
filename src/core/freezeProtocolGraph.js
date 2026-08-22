@@ -75,8 +75,11 @@ export function validateProtocolGraphConfiguration(protocol, registry) {
     if (node.component?.type === 'logic.loop' && (!Number.isInteger(Number(node.config?.maxIterations)) || Number(node.config.maxIterations) < 1)) {
       errors.push({ code: 'config.loop_limit_invalid', message: `${node.label} needs a positive integer iteration limit`, path, nodeId: node.id });
     }
-    if (node.component?.type === 'logic.condition' && !['equals', 'not_equals', 'greater_than', 'less_than', 'truthy', 'falsy'].includes(node.config?.operator)) {
+    if (node.component?.type === 'logic.condition' && !['equals', 'not_equals', 'contains', 'greater_than', 'greater_than_or_equal', 'less_than', 'less_than_or_equal', 'is_truthy', 'is_falsy'].includes(node.config?.operator)) {
       errors.push({ code: 'config.condition_operator_invalid', message: `${node.label} needs a supported condition operator`, path, nodeId: node.id });
+    }
+    if (node.component?.type === 'logic.random' && (!Number.isFinite(Number(node.config?.probabilityA)) || Number(node.config.probabilityA) < 0 || Number(node.config.probabilityA) > 1)) {
+      errors.push({ code: 'config.random_probability_invalid', message: `${node.label} probability must be between 0 and 1`, path, nodeId: node.id });
     }
   }
   return { valid: errors.length === 0, errors, warnings };
