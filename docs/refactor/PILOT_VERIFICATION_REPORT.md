@@ -16,7 +16,7 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 
 ## Acceptance evidence
 
-- Automated tests: 98 passing.
+- Automated tests: 101 passing.
 - Production build: passing.
 - Lint: zero errors; 20 warnings remain only in legacy transition files.
 - Representative migration tests: Emotion, Stroop, and Go/No-Go each meet the native coverage threshold.
@@ -25,6 +25,8 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 - Randomization behavior: Composer exposes both required branches and probability/seed-salt settings; Runtime V2 records a deterministic decision and reproduces it with the same seed.
 - Grouping behavior: created a group from the selected Random split node, confirmed the typed group selector, and verified the canvas container displayed the group name and live node count.
 - Registry-dispatch regression: after moving participant execution metadata into the component registry, ran a fresh Rating session to completion with 7 events, 1 response, and 13 export files.
+- Automated end-to-end gate: composed a Screen and Rating graph, validated and froze it, ran through snapshot/restore, and verified the completed export and quality report.
+- Performance gate: the 500-node validation/edit fixture and 10,000-event export fixture both pass their enforced thresholds.
 
 ## Known transition scope
 

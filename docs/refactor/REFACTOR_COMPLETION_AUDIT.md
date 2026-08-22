@@ -16,6 +16,8 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 | Typed variables and conditions | Variable catalog, scope/type/default/source/export policy, safe rename/delete, condition variable picker, missing/type checks |
 | Graph-native randomization | Seeded Random split, explicit A/B ports, deterministic state, decision event and replay-equivalent test |
 | Registry-driven participant runtime | Runtime kind, UI adapter and completion strategy are component metadata; a custom registered participant component executes without a central type branch |
+| Deterministic E2E release path | Automated compose, validate, freeze, run, snapshot/restore, response and export quality test |
+| Performance targets | Enforced 500-node validation/edit (<2 s) and 10,000-event export (<3 s) tests |
 | Participant UI composition | Screen/Layout/Text/Media/Input/Button/Progress tree, bindings, actions, templates, preview and shared runtime renderer |
 | Deterministic execution | Injected IDs/clocks, sequence, conditions, bounded loops, pause/resume, retry/skip, snapshots and restore |
 | Reproducible formal versions | Pre-freeze validation, migration review gate, config hash, immutable frozen record, new-version editing |
@@ -31,8 +33,7 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 | Component SDK and project component library | Stage 7 | Versioned SDK contract, sandbox/permissions, example external component |
 | Runtime variable debugger and replay UI | Stage 7 | Event-driven replay reaches the same state/branch and is usable from session review |
 | External device connectors | Stage 7 | Storage/I/O ports, permission model, failure/recovery and provenance events |
-| Automated browser E2E in release gate | Partial | Repeatable CI command covering create → preview → freeze → run → restore → export |
-| Performance gates | Not implemented | 500-node editing and 10,000-event export benchmarks with thresholds |
+| Automated browser E2E in release gate | Partial | Current CDP suite covers legacy workflows; Composer V2 has deterministic domain E2E plus manual browser evidence, but still needs self-hosted browser CI |
 | Formal usability study | Requires human participants | Timed novice/expert tasks and sign-off against the plan metrics |
 | Remote upload | Locally blocked | GitHub HTTPS/SSH authentication and remote branch verification |
 

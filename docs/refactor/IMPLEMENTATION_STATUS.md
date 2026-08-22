@@ -12,7 +12,7 @@ The planned MVP refactor phases 0–6 are implemented on the `demo` branch.
 | 5 — Data | Raw JSONL, normalized CSV, snapshots, manifests, data dictionary, quality report, full package download, participant/media lifecycle events, reaction times, and independently tested validator |
 | 6 — Migration/Pilot | In-app and CLI migration, migration reports, native Questionnaire adapter, review gate, freeze hashes, three representative migration tests, operator guide, and release gate |
 
-Current automated gate: 98 tests pass, production build passes, and lint reports no errors. Twenty warnings remain in legacy editor/runner files and are tracked as transition debt; no new V2 file adds a warning.
+Current automated gate: 101 tests pass, production build passes, and lint reports no errors. Twenty warnings remain in legacy editor/runner files and are tracked as transition debt; no new V2 file adds a warning.
 
 Composer V2 now includes a typed variable catalog with scope, source, default value, and export policy, plus a variable picker for condition inputs. Variable renames update node and participant-UI bindings atomically; referenced variables cannot be removed accidentally.
 
@@ -21,6 +21,8 @@ Runtime V2 includes a graph-native Random split component. Its deterministic sta
 Node groups are persisted inside the Protocol Graph, validated for referential integrity and single membership, included in serialization/freeze hashes, and rendered as live canvas containers. Removing a node updates its group safely; duplication preserves membership.
 
 Component definitions now declare their runtime kind, participant UI adapter, and completion strategy. Runtime V2 dispatches by the registry contract instead of component type; a newly registered standard participant component enters and completes without adding a central runtime type branch.
+
+The release gate includes a deterministic refactor E2E test (compose → validate → freeze → run → snapshot/restore → export) and explicit performance gates. Current local measurements validate/edit a 500-node graph in about 36 ms and export 10,000 events in about 39 ms, well below the enforced 2 s / 3 s limits.
 
 The final hardening pass makes frozen protocols immutable: editing always creates a new draft protocol version with a distinct ID. Formal validation now checks participant UI completion paths, media sources, durations, rating ranges, migration review, and every required condition/loop control exit before preview or freeze.
 
