@@ -77,6 +77,31 @@ test('runtime executes a linear graph with deterministic event envelopes', () =>
   assert.equal(completed.state.outputs.screen_1.acknowledged, true);
 });
 
+test('a registered participant component runs without a runtime type branch', () => {
+  const registry = createCoreComponentRegistry();
+  registry.register({
+    type: 'custom.confirmation', version: '1.0.0', label: 'Custom confirmation',
+    ports: [
+      { id: 'in', kind: 'control', direction: 'input', required: true },
+      { id: 'next', kind: 'control', direction: 'output', required: true },
+    ],
+    runtime: { kind: 'participant', uiAdapter: 'schema', completion: 'submit' },
+    events: ['component_entered', 'component_completed'],
+  });
+  const idFactory = createSequentialIdFactory();
+  const protocol = createProtocolGraph({ idFactory, name: 'Registry extension', now: '2026-08-22T00:00:00.000Z' });
+  const edgeId = protocol.graph.edges[0].id;
+  const custom = addNode(protocol, 'custom.confirmation', { id: 'custom_1' });
+  const start = custom.protocol.graph.nodes.find(node => node.component.type === 'core.start');
+  const end = custom.protocol.graph.nodes.find(node => node.component.type === 'core.end');
+  custom.protocol.graph.edges = custom.protocol.graph.edges.filter(edge => edge.id !== edgeId);
+  let next = connect(custom.protocol, 'control', { nodeId: start.id, portId: 'next' }, { nodeId: 'custom_1', portId: 'in' }).protocol;
+  next = connect(next, 'control', { nodeId: 'custom_1', portId: 'next' }, { nodeId: end.id, portId: 'in' }).protocol;
+  const started = startRuntime(runtimeFor(next), next, registry, services());
+  assert.equal(started.state.currentNodeId, 'custom_1');
+  assert.equal(started.state.status, 'waiting');
+});
+
 test('custom participant events share the deterministic runtime sequence', () => {
   const protocol = linearProtocol();
   const registry = createCoreComponentRegistry();

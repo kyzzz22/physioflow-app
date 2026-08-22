@@ -35,27 +35,28 @@ function findUiElement(element, type) {
   return null;
 }
 
-function schemaForNode(node) {
-  if (node.component.type === 'display.screen') return node.config?.ui || participantUiTemplate('instruction');
-  if (node.component.type === 'input.questionnaire') return node.config?.ui || participantUiTemplate('form');
-  if (node.component.type === 'display.media') {
+function schemaForNode(node, definition) {
+  const adapter = definition?.runtime?.uiAdapter || 'schema';
+  if (adapter === 'screen' || adapter === 'schema') return structuredClone(node.config?.ui || participantUiTemplate('instruction'));
+  if (adapter === 'media') {
     const schema = structuredClone(node.config?.ui || participantUiTemplate('media'));
     const media = findUiElement(schema.root, 'Media');
     if (media) media.props = { ...media.props, mediaType: node.config?.mediaType || 'image', sourceUrl: node.config?.sourceUrl || '', assetId: node.config?.assetId || null };
     return schema;
   }
-  if (node.component.type === 'input.rating') {
+  if (adapter === 'rating') {
     const schema = structuredClone(node.config?.ui || participantUiTemplate('form'));
     const input = findUiElement(schema.root, 'Input');
     if (input) input.props = { ...input.props, name: 'value', label: node.label, min: node.config?.min ?? 1, max: node.config?.max ?? 7, required: node.config?.required !== false };
     return schema;
   }
-  if (node.component.type === 'input.text') {
+  if (adapter === 'text') {
     const schema = structuredClone(node.config?.ui || participantUiTemplate('form'));
     const input = findUiElement(schema.root, 'Input');
     if (input) input.props = { ...input.props, name: 'value', label: node.label, inputType: node.config?.multiline ? 'textarea' : 'text', placeholder: node.config?.placeholder || '', required: Boolean(node.config?.required) };
     return schema;
   }
+  if (adapter !== 'wait') return structuredClone(node.config?.ui || participantUiTemplate('instruction'));
   const schema = structuredClone(node.config?.ui || participantUiTemplate('instruction'));
   schema.root.children = [
     createUiElement('Text', { props: { text: node.label, variant: 'heading' } }),
@@ -80,7 +81,8 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
   const nodeEnteredAt = useRef(performance.now());
   const nodes = useMemo(() => new Map(protocol.graph.nodes.map(node => [node.id, node])), [protocol]);
   const currentNode = runtime.currentNodeId ? nodes.get(runtime.currentNodeId) : null;
-  const executableCount = protocol.graph.nodes.filter(node => !node.component.type.startsWith('core.') && !node.component.type.startsWith('logic.')).length;
+  const currentDefinition = currentNode ? registry.get(currentNode.component.type, currentNode.component.version) : null;
+  const executableCount = protocol.graph.nodes.filter(node => registry.get(node.component.type, node.component.version)?.runtime?.kind === 'participant').length;
   const progress = { current: runtime.completedNodeIds.length, total: executableCount, percent: executableCount ? Math.round((runtime.completedNodeIds.length / executableCount) * 100) : 100 };
   const exportFiles = runtime.status === 'completed' ? buildGraphSessionFiles({ ...data.session, status: 'completed', runtime_snapshot: runtime, events, responses }, protocol, events, responses) : null;
 
@@ -128,7 +130,7 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
 
   useEffect(() => {
     if (!started || !currentNode || runtime.status !== 'waiting') return undefined;
-    const duration = currentNode.component.type === 'timing.wait'
+    const duration = currentDefinition?.runtime?.completion === 'durationMs'
       ? currentNode.config?.durationMs
       : currentNode.config?.completion?.mode === 'fixed' ? currentNode.config.completion.durationMs : null;
     if (duration === null || duration === undefined) return undefined;
@@ -175,7 +177,7 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
     </div></div>
     <section className="graph-participant" aria-label="Participant view">
       {runtime.status === 'paused' && <div className="pause-overlay">Paused</div>}
-      <ParticipantRenderer key={currentNode.id} schema={schemaForNode(currentNode)} disabled={runtime.status === 'paused'} context={{ participant: data.session, variables: runtime.variables, outputs: runtime.outputs, progress, timer: { elapsedMs: 0 } }} onSubmit={complete} onValueChange={payload => record('value_changed', payload)} onAction={action => record('ui_action', action)} onMediaEvent={(eventType, payload) => {
+      <ParticipantRenderer key={currentNode.id} schema={schemaForNode(currentNode, currentDefinition)} disabled={runtime.status === 'paused'} context={{ participant: data.session, variables: runtime.variables, outputs: runtime.outputs, progress, timer: { elapsedMs: 0 } }} onSubmit={complete} onValueChange={payload => record('value_changed', payload)} onAction={action => record('ui_action', action)} onMediaEvent={(eventType, payload) => {
         record(eventType, payload);
         if (eventType === 'media_ended' && currentNode.config?.completion?.mode === 'media-ended') complete({});
       }} />

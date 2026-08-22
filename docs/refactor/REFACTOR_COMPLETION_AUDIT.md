@@ -15,6 +15,7 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 | Progressive editing | Quick, Design, and Advanced views operate on the same protocol object |
 | Typed variables and conditions | Variable catalog, scope/type/default/source/export policy, safe rename/delete, condition variable picker, missing/type checks |
 | Graph-native randomization | Seeded Random split, explicit A/B ports, deterministic state, decision event and replay-equivalent test |
+| Registry-driven participant runtime | Runtime kind, UI adapter and completion strategy are component metadata; a custom registered participant component executes without a central type branch |
 | Participant UI composition | Screen/Layout/Text/Media/Input/Button/Progress tree, bindings, actions, templates, preview and shared runtime renderer |
 | Deterministic execution | Injected IDs/clocks, sequence, conditions, bounded loops, pause/resume, retry/skip, snapshots and restore |
 | Reproducible formal versions | Pre-freeze validation, migration review gate, config hash, immutable frozen record, new-version editing |
@@ -26,7 +27,7 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 | Item | Status | Acceptance evidence still required |
 | --- | --- | --- |
 | Parameterized subflows | Not implemented | Entry/exit contract, parameter mapping, reusable instance semantics, migration and tests |
-| Fully declarative component runtime registry | Partial | Adding a standard component without editing central runner/runtime type branches |
+| Extensible custom control handlers | Partial | Safe handler registration beyond the built-in start/end/condition/loop/random control kinds |
 | Component SDK and project component library | Stage 7 | Versioned SDK contract, sandbox/permissions, example external component |
 | Runtime variable debugger and replay UI | Stage 7 | Event-driven replay reaches the same state/branch and is usable from session review |
 | External device connectors | Stage 7 | Storage/I/O ports, permission model, failure/recovery and provenance events |

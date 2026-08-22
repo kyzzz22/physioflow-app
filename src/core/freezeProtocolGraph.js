@@ -33,7 +33,8 @@ export function validateProtocolGraphConfiguration(protocol, registry) {
   const warnings = [...base.warnings];
   for (const node of protocol.graph?.nodes || []) {
     const path = `graph.nodes.${node.id}.config`;
-    const participantComponent = ['display.screen', 'display.media', 'input.rating', 'input.text', 'input.questionnaire', 'timing.wait'].includes(node.component?.type);
+    const definition = registry?.get(node.component?.type, node.component?.version);
+    const participantComponent = definition?.runtime?.kind === 'participant' && definition.runtime.uiAdapter !== 'none';
     if (participantComponent && !node.config?.ui) {
       errors.push({ code: 'config.participant_ui_missing', message: `${node.label} needs a participant interface`, path: `${path}.ui`, nodeId: node.id });
     }

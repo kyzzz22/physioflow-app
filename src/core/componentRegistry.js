@@ -2,6 +2,7 @@ import { participantUiTemplate } from './participantUi.js';
 
 const PORT_KINDS = new Set(['control', 'data']);
 const PORT_DIRECTIONS = new Set(['input', 'output']);
+const RUNTIME_KINDS = new Set(['start', 'end', 'condition', 'loop', 'random', 'participant']);
 
 function waitParticipantUi() {
   const schema = participantUiTemplate('instruction');
@@ -29,6 +30,7 @@ export function validateComponentDefinition(definition) {
   if (!definition.type?.trim()) errors.push('Component type is required');
   if (!definition.version?.trim()) errors.push('Component version is required');
   if (!definition.label?.trim()) errors.push('Component label is required');
+  if (definition.runtime?.kind && !RUNTIME_KINDS.has(definition.runtime.kind)) errors.push(`Runtime kind ${definition.runtime.kind} is invalid`);
 
   const portIds = new Set();
   for (const port of definition.ports || []) {
@@ -56,6 +58,7 @@ export class ComponentRegistry {
       editorFields: [],
       events: [],
       dataFields: [],
+      runtime: { kind: 'participant', uiAdapter: 'schema', completion: 'config' },
       ...definition,
       ports: (definition.ports || []).map(normalizePort),
     });
@@ -88,16 +91,19 @@ export function createCoreComponentRegistry() {
   registry.register({
     type: 'core.start', version: '1.0.0', label: 'Start', category: 'control',
     ports: [controlOutput],
+    runtime: { kind: 'start' },
     events: ['protocol_started'],
   });
   registry.register({
     type: 'core.end', version: '1.0.0', label: 'End', category: 'control',
     ports: [controlInput],
+    runtime: { kind: 'end' },
     events: ['protocol_completed'],
   });
   registry.register({
     type: 'display.screen', version: '1.0.0', label: 'Screen', category: 'presentation',
     ports: [controlInput, controlOutput],
+    runtime: { kind: 'participant', uiAdapter: 'screen', completion: 'config' },
     defaultConfig: { content: '', ui: participantUiTemplate('instruction'), completion: { mode: 'manual' } },
     editorFields: [
       { path: 'content', label: 'Screen content', type: 'textarea' },
@@ -109,6 +115,7 @@ export function createCoreComponentRegistry() {
   registry.register({
     type: 'display.media', version: '1.0.0', label: 'Media', category: 'presentation',
     ports: [controlInput, controlOutput],
+    runtime: { kind: 'participant', uiAdapter: 'media', completion: 'config' },
     defaultConfig: { mediaType: 'image', assetId: null, ui: participantUiTemplate('media'), completion: { mode: 'fixed', durationMs: 3000 } },
     editorFields: [
       { path: 'mediaType', label: 'Media type', type: 'select', options: ['image', 'audio', 'video'] },
@@ -121,6 +128,7 @@ export function createCoreComponentRegistry() {
   });
   registry.register({
     type: 'input.rating', version: '1.0.0', label: 'Rating', category: 'interaction',
+    runtime: { kind: 'participant', uiAdapter: 'rating', completion: 'submit' },
     ports: [
       controlInput,
       controlOutput,
@@ -137,6 +145,7 @@ export function createCoreComponentRegistry() {
   });
   registry.register({
     type: 'input.text', version: '1.0.0', label: 'Text Input', category: 'interaction',
+    runtime: { kind: 'participant', uiAdapter: 'text', completion: 'submit' },
     ports: [
       controlInput,
       controlOutput,
@@ -153,6 +162,7 @@ export function createCoreComponentRegistry() {
   });
   registry.register({
     type: 'input.questionnaire', version: '1.0.0', label: 'Questionnaire', category: 'interaction',
+    runtime: { kind: 'participant', uiAdapter: 'schema', completion: 'submit' },
     ports: [controlInput, controlOutput],
     defaultConfig: { questionnaire: null, ui: participantUiTemplate('form') },
     events: ['component_entered', 'value_changed', 'response_submitted', 'component_completed'],
@@ -160,6 +170,7 @@ export function createCoreComponentRegistry() {
   });
   registry.register({
     type: 'timing.wait', version: '1.0.0', label: 'Wait', category: 'timing',
+    runtime: { kind: 'participant', uiAdapter: 'wait', completion: 'durationMs' },
     ports: [controlInput, controlOutput],
     defaultConfig: { durationMs: 1000, ui: waitParticipantUi() },
     editorFields: [{ path: 'durationMs', label: 'Duration (ms)', type: 'number', min: 0 }],
@@ -168,6 +179,7 @@ export function createCoreComponentRegistry() {
   });
   registry.register({
     type: 'logic.condition', version: '1.0.0', label: 'Condition', category: 'control',
+    runtime: { kind: 'condition' },
     ports: [
       controlInput,
       { id: 'value', kind: 'data', direction: 'input', dataType: 'unknown', required: true },
@@ -183,6 +195,7 @@ export function createCoreComponentRegistry() {
   });
   registry.register({
     type: 'logic.random', version: '1.0.0', label: 'Random split', category: 'control',
+    runtime: { kind: 'random' },
     ports: [
       controlInput,
       { id: 'a', label: 'A', kind: 'control', direction: 'output', required: true },
@@ -198,6 +211,7 @@ export function createCoreComponentRegistry() {
   });
   registry.register({
     type: 'logic.loop', version: '1.0.0', label: 'Loop', category: 'control',
+    runtime: { kind: 'loop' },
     ports: [
       { ...controlInput, multiple: true },
       { id: 'body', kind: 'control', direction: 'output', required: true },
@@ -210,7 +224,8 @@ export function createCoreComponentRegistry() {
   registry.register({
     type: 'legacy.step', version: '1.0.0', label: 'Legacy Step', category: 'legacy',
     ports: [controlInput, controlOutput],
-    defaultConfig: { legacyStep: null },
+    runtime: { kind: 'participant', uiAdapter: 'schema', completion: 'submit' },
+    defaultConfig: { legacyStep: null, ui: participantUiTemplate('instruction') },
     events: ['component_entered', 'component_completed'],
   });
   return registry;

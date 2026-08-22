@@ -125,18 +125,20 @@ function advanceAutomatic(initialState, protocol, registry, services, startNodeI
     const node = nodes.get(currentNodeId);
     if (!node) return failRuntime(state, protocol, services, `Node ${currentNodeId} does not exist`, null, events);
     state = { ...state, transitionCount: state.transitionCount + 1 };
-    const type = node.component.type;
+    const definition = registry.get(node.component.type, node.component.version);
+    if (!definition) return failRuntime(state, protocol, services, `Unknown component ${node.component.type}@${node.component.version}`, node, events);
+    const runtimeKind = definition.runtime?.kind || 'participant';
     try {
-      if (type === 'core.start') {
+      if (runtimeKind === 'start') {
         currentNodeId = chooseControlTarget(protocol, node, 'next');
         continue;
       }
-      if (type === 'core.end') {
+      if (runtimeKind === 'end') {
         const emitted = appendEvent({ ...state, status: 'completed', currentNodeId: null }, protocol, 'protocol_completed', services, { node });
         events.push(emitted.event);
         return { state: emitted.state, events };
       }
-      if (type === 'logic.condition') {
+      if (runtimeKind === 'condition') {
         const actual = resolveNodeInput(protocol, node, 'value', state);
         const passed = evaluateExpression(node.config, actual);
         const emitted = appendEvent(state, protocol, 'condition_evaluated', services, {
@@ -148,7 +150,7 @@ function advanceAutomatic(initialState, protocol, registry, services, startNodeI
         currentNodeId = chooseControlTarget(protocol, node, passed ? 'true' : 'false');
         continue;
       }
-      if (type === 'logic.loop') {
+      if (runtimeKind === 'loop') {
         const count = state.loopCounts[node.id] || 0;
         const maximum = Math.max(0, Number(node.config?.maxIterations ?? 1));
         const enterBody = count < maximum;
@@ -165,7 +167,7 @@ function advanceAutomatic(initialState, protocol, registry, services, startNodeI
         currentNodeId = chooseControlTarget(protocol, node, enterBody ? 'body' : 'exit');
         continue;
       }
-      if (type === 'logic.random') {
+      if (runtimeKind === 'random') {
         const probabilityA = Number(node.config?.probabilityA ?? 0.5);
         const draw = drawRandom(state, node.config?.seedSalt || '');
         state = draw.state;
@@ -178,9 +180,6 @@ function advanceAutomatic(initialState, protocol, registry, services, startNodeI
         events.push(emitted.event);
         currentNodeId = chooseControlTarget(protocol, node, selectedPort);
         continue;
-      }
-      if (!registry.has(node.component.type, node.component.version)) {
-        return failRuntime(state, protocol, services, `Unknown component ${node.component.type}@${node.component.version}`, node, events);
       }
       return enterExecutableNode(state, protocol, node, services, events);
     } catch (error) {
