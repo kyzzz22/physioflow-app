@@ -9,6 +9,7 @@ import {
   createCoreComponentRegistry,
   createNextGraphProtocolVersion,
   duplicateGraphProtocolAsProject,
+  hashProtocolGraph,
   isGraphProtocol,
   projectIdOf,
   protocolArchivedAtOf,
@@ -49,7 +50,7 @@ function formatDuration(ms) {
   return m > 0 ? `~${m}m ${s}s` : `~${s}s`;
 }
 
-export default function Dashboard({ protocols, sessions, onOpen, onNew, onTemplate, onImport, onRun, onNextVersion, onDuplicate, onArchive, onRenameProject, onAnalytics, storageInfo, onChooseDataDirectory, onOpenDataFolder, onGuide, onStroopTemplate, onGonogoTemplate }) {
+export default function Dashboard({ protocols, sessions, onOpen, onNew, onTemplate, onImport, onRun, onNextVersion, onDuplicate, onArchive, onRenameProject, onMigrate, onAnalytics, storageInfo, onChooseDataDirectory, onOpenDataFolder, onGuide, onStroopTemplate, onGonogoTemplate }) {
   const input = useRef(null);
   const projects = groupProjects(protocols);
   const workspaceReadiness = useMemo(() => summarizeWorkspaceReadiness(protocols, sessions, storageInfo), [protocols, sessions, storageInfo]);
@@ -84,6 +85,11 @@ export default function Dashboard({ protocols, sessions, onOpen, onNew, onTempla
         if (!candidate.config_hash) throw new Error('Frozen protocol has no config_hash.');
         const actualHash = await hashProtocol(candidate);
         if (actualHash !== candidate.config_hash) throw new Error(`Frozen protocol hash mismatch.\nExpected ${candidate.config_hash}\nActual ${actualHash}`);
+      }
+      if (graphCandidate && protocolStatusOf(candidate) === 'frozen') {
+        if (!candidate.freeze?.configHash) throw new Error('Frozen Protocol Graph has no config hash.');
+        const actualHash = await hashProtocolGraph(candidate);
+        if (actualHash !== candidate.freeze.configHash) throw new Error(`Frozen Protocol Graph hash mismatch.\nExpected ${candidate.freeze.configHash}\nActual ${actualHash}`);
       }
       const assets = graphCandidate
         ? { valid: !(candidate.assets || []).some(asset => asset.required && !asset.sourceUrl && !asset.assetId), issues: (candidate.assets || []).filter(asset => asset.required && !asset.sourceUrl && !asset.assetId).map(asset => ({ message: `Missing required asset ${asset.name || asset.id}` })) }
@@ -192,7 +198,7 @@ export default function Dashboard({ protocols, sessions, onOpen, onNew, onTempla
         <span>{projects.length} active · {protocols.filter(item => protocolStatusOf(item) === 'frozen').length} frozen versions</span>
       </div>
       <div className="protocol-grid">
-        {projects.map(versions => <ProjectCard key={projectIdOf(versions[0])} versions={versions} sessions={sessions} storageInfo={storageInfo} onOpen={onOpen} onRun={onRun} onNextVersion={onNextVersion} onDuplicate={onDuplicate} onArchive={onArchive} onRenameProject={onRenameProject} />)}
+        {projects.map(versions => <ProjectCard key={projectIdOf(versions[0])} versions={versions} sessions={sessions} storageInfo={storageInfo} onOpen={onOpen} onRun={onRun} onNextVersion={onNextVersion} onDuplicate={onDuplicate} onArchive={onArchive} onRenameProject={onRenameProject} onMigrate={onMigrate} />)}
         {!projects.length && <div className="empty">
           <div className="empty-icon">🧪</div>
           <h3 className="empty-title">No projects yet</h3>
@@ -234,7 +240,7 @@ export default function Dashboard({ protocols, sessions, onOpen, onNew, onTempla
   </main>;
 }
 
-function ProjectCard({ versions, sessions, storageInfo, onOpen, onRun, onNextVersion, onDuplicate, onArchive, onRenameProject }) {
+function ProjectCard({ versions, sessions, storageInfo, onOpen, onRun, onNextVersion, onDuplicate, onArchive, onRenameProject, onMigrate }) {
   const latest = versions[0], draft = versions.find(item => protocolStatusOf(item) === 'draft');
   const activeProtocol = draft || latest;
   const readiness = assessProtocolReadiness(activeProtocol, { sessions, storageInfo });
@@ -281,6 +287,7 @@ function ProjectCard({ versions, sessions, storageInfo, onOpen, onRun, onNextVer
       {draft ? <button className="primary" onClick={() => onOpen(draft)}>Edit draft</button> : <button onClick={() => onNextVersion(latest)}>New version</button>}
       {status === 'frozen' && <button className="primary" onClick={() => onRun(latest)}>Run latest</button>}
       <button onClick={() => onRenameProject(latest)}>Rename</button>
+      {!graphProtocol && onMigrate && <button className="primary" onClick={() => onMigrate(latest)}>Migrate to Composer V2</button>}
       <button onClick={() => onDuplicate(latest)}>Duplicate project</button>
       <button onClick={() => onArchive(latest)}>Archive project</button>
     </div>

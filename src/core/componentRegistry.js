@@ -142,6 +142,13 @@ export function createCoreComponentRegistry() {
     dataFields: ['value', 'reaction_time_ms'],
   });
   registry.register({
+    type: 'input.questionnaire', version: '1.0.0', label: 'Questionnaire', category: 'interaction',
+    ports: [controlInput, controlOutput],
+    defaultConfig: { questionnaire: null, ui: null },
+    events: ['component_entered', 'value_changed', 'response_submitted', 'component_completed'],
+    dataFields: ['question_id', 'value', 'reaction_time_ms'],
+  });
+  registry.register({
     type: 'timing.wait', version: '1.0.0', label: 'Wait', category: 'timing',
     ports: [controlInput, controlOutput],
     defaultConfig: { durationMs: 1000 },

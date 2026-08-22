@@ -27,6 +27,7 @@ function runtimeServices() {
 
 function schemaForNode(node) {
   if (node.component.type === 'display.screen') return node.config?.ui || participantUiTemplate('instruction');
+  if (node.component.type === 'input.questionnaire') return node.config?.ui || participantUiTemplate('form');
   if (node.component.type === 'display.media') {
     const schema = participantUiTemplate('media');
     const media = schema.root.children.find(element => element.type === 'Media');

@@ -1,4 +1,5 @@
 import { createEdge, createNode, createProtocolGraph } from '../core/protocolGraph.js';
+import { createParticipantScreen, createUiElement } from '../core/participantUi.js';
 
 const EXACT_COMPONENT_MAP = {
   instruction: 'display.screen',
@@ -9,6 +10,7 @@ const EXACT_COMPONENT_MAP = {
   timer: 'timing.wait',
   rest: 'timing.wait',
   response: 'input.rating',
+  questionnaire: 'input.questionnaire',
 };
 
 function reportIssue(code, message, path, severity = 'warning') {
@@ -62,6 +64,34 @@ export function inspectLegacyProtocolV1(protocol) {
   };
 }
 
+function instructionUi(step, idFactory) {
+  const content = step.content || step.content_i18n?.en || step.content_i18n?.zh || step.content_i18n?.ja || '';
+  return createParticipantScreen({ idFactory, children: [
+    createUiElement('Text', { idFactory, props: { text: step.name || 'Instructions', variant: 'heading' } }),
+    createUiElement('Text', { idFactory, props: { text: content, variant: 'body' } }),
+    createUiElement('Button', { idFactory, props: { label: 'Continue', variant: 'primary' }, actions: [{ event: 'click', action: 'submit' }] }),
+  ] });
+}
+
+function questionnaireUi(step, context, idFactory) {
+  const questionnaire = step.questionnaire || context.source.questionnaires?.find(item => item.questionnaire_id === step.questionnaire_id) || { questions: [] };
+  const children = [createUiElement('Text', { idFactory, props: { text: questionnaire.title || step.name || 'Questionnaire', variant: 'heading' } })];
+  for (const [index, question] of (questionnaire.questions || []).entries()) {
+    const options = question.options || question.options_i18n?.en || [];
+    const rating = ['single_choice', 'scale', 'likert', 'rating'].includes(question.type);
+    children.push(createUiElement('Input', { idFactory, props: {
+      name: question.question_id || `question_${index + 1}`,
+      label: question.text || question.prompt || question.text_i18n?.en || question.text_i18n?.zh || `Question ${index + 1}`,
+      inputType: rating ? 'rating' : question.type === 'long_text' ? 'textarea' : 'text',
+      min: 1,
+      max: Math.max(2, options.length || Number(question.max || 7)),
+      required: question.required !== false,
+    } }));
+  }
+  children.push(createUiElement('Button', { idFactory, props: { label: 'Submit', variant: 'primary' }, actions: [{ event: 'click', action: 'submit' }] }));
+  return createParticipantScreen({ idFactory, children });
+}
+
 function migrateStep(step, context, idFactory, x, y) {
   const componentType = EXACT_COMPONENT_MAP[step.type] || 'legacy.step';
   let config;
@@ -78,10 +108,7 @@ function migrateStep(step, context, idFactory, x, y) {
     config = { durationMs: Number(step.planned_duration_ms || 0), legacyType: step.type, legacyStep: structuredClone(step) };
   } else if (componentType === 'display.screen') {
     config = {
-      ui: {
-        type: 'screen',
-        children: [{ type: 'text', contentI18n: structuredClone(step.content_i18n || {}), content: step.content || '' }],
-      },
+      ui: instructionUi(step, idFactory),
       completion: { mode: step.duration_mode || 'manual', durationMs: Number(step.planned_duration_ms || 0) },
       legacyStep: structuredClone(step),
     };
@@ -92,6 +119,8 @@ function migrateStep(step, context, idFactory, x, y) {
       options: structuredClone(step.response_options || []),
       legacyStep: structuredClone(step),
     };
+  } else if (componentType === 'input.questionnaire') {
+    config = { questionnaire: structuredClone(step.questionnaire || context.source.questionnaires?.find(item => item.questionnaire_id === step.questionnaire_id) || null), ui: questionnaireUi(step, context, idFactory), legacyStep: structuredClone(step) };
   } else {
     config = { legacyStep: structuredClone(step) };
   }
@@ -152,7 +181,7 @@ export function migrateLegacyProtocolV1(source, options = {}) {
     for (const trial of block.trials || []) {
       idMap.trials[trial.trial_id] = idFactory('subflow');
       for (const step of trial.steps || []) {
-        const node = migrateStep(step, { block, trial }, idFactory, 280 + order * 220, 180);
+        const node = migrateStep(step, { block, trial, source }, idFactory, 280 + order * 220, 180);
         order += 1;
         nodes.push(node);
         idMap.steps[step.step_id] = node.id;
@@ -174,6 +203,12 @@ export function migrateLegacyProtocolV1(source, options = {}) {
     idMap,
     executionMode: 'linear-safe-draft',
     formalRunAllowed: false,
+    coverage: {
+      mappedSteps: inspection.counts.steps - inspection.issues.filter(issue => issue.code === 'step.legacy_adapter').length,
+      totalSteps: inspection.counts.steps,
+      mappedPercent: inspection.counts.steps ? Math.round(((inspection.counts.steps - inspection.issues.filter(issue => issue.code === 'step.legacy_adapter').length) / inspection.counts.steps) * 1000) / 10 : 100,
+      payloadPreservedPercent: 100,
+    },
   };
   protocol.legacy.migrationReport = report;
   return { protocol, report };

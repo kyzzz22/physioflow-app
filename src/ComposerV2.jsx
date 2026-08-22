@@ -48,7 +48,7 @@ function edgePath(source, target) {
   return `M ${source.x} ${source.y} C ${source.x + bend} ${source.y}, ${target.x - bend} ${target.y}, ${target.x} ${target.y}`;
 }
 
-export default function ComposerV2({ protocol, onChange, onSave, onBack, onExport, onPreview, onUndo, onRedo, canUndo, canRedo, hasUnsaved, saveAnim }) {
+export default function ComposerV2({ protocol, onChange, onSave, onBack, onExport, onPreview, onFreeze, onUnfreeze, onUndo, onRedo, canUndo, canRedo, hasUnsaved, saveAnim }) {
   const [selectedNodeId, setSelectedNodeId] = useState(protocol.graph.entryNodeId);
   const [selectedEdgeId, setSelectedEdgeId] = useState(null);
   const [pendingPort, setPendingPort] = useState(null);
@@ -59,7 +59,9 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
   const selectedNode = protocol.graph.nodes.find(node => node.id === selectedNodeId) || null;
   const selectedEdge = protocol.graph.edges.find(edge => edge.id === selectedEdgeId) || null;
 
-  const commit = next => onChange(next, true);
+  const locked = protocol.version?.status === 'frozen';
+  const migrationReviewRequired = protocol.legacy?.migrationReport?.formalRunAllowed === false;
+  const commit = next => { if (!locked) onChange(next, true); };
   const addComponent = definition => {
     const controlIn = definition.ports.find(port => port.kind === 'control' && port.direction === 'input');
     const controlOut = definition.ports.find(port => port.kind === 'control' && port.direction === 'output');
@@ -141,14 +143,16 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
     } catch (error) { setMessage(error.message); }
   };
 
-  return <main className="composer-v2">
+  return <main className={`composer-v2 ${locked ? 'locked' : ''}`}>
     <header className="composer-header">
       <div className="brand"><span>PF</span> Composer V2 {hasUnsaved && <small className="unsaved-dot">●</small>}</div>
-      <input className="composer-title" aria-label="Protocol name" value={protocolNameOf(protocol)} onChange={event => onChange({ ...protocol, metadata: { ...protocol.metadata, name: event.target.value }, audit: { ...protocol.audit, updatedAt: new Date().toISOString() } }, true)} />
+      <input disabled={locked} className="composer-title" aria-label="Protocol name" value={protocolNameOf(protocol)} onChange={event => onChange({ ...protocol, metadata: { ...protocol.metadata, name: event.target.value }, audit: { ...protocol.audit, updatedAt: new Date().toISOString() } }, true)} />
       <div className="header-tools">
         <button disabled={!canUndo} onClick={onUndo}>↩ Undo</button>
         <button disabled={!canRedo} onClick={onRedo}>↪ Redo</button>
         <button disabled={!validation.valid} onClick={onPreview}>Preview run</button>
+        {migrationReviewRequired && !locked && <button onClick={() => commit({ ...protocol, legacy: { ...protocol.legacy, migrationReport: { ...protocol.legacy.migrationReport, formalRunAllowed: true, reviewedAt: new Date().toISOString() } } })}>Mark migration reviewed</button>}
+        {locked ? <button onClick={onUnfreeze}>Unfreeze draft</button> : <button disabled={!validation.valid || migrationReviewRequired} onClick={onFreeze}>Freeze version</button>}
         <button onClick={onExport}>Export</button>
         <button className={saveAnim ? 'saved' : ''} onClick={() => onSave(protocol)}>{saveAnim ? '✓ Saved' : 'Save'}</button>
         <button onClick={onBack}>← Projects</button>
@@ -195,6 +199,7 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
       </section>
       <aside className="composer-inspector">
         <h2>Inspector</h2>
+        {migrationReviewRequired && <div className="migration-review-warning"><b>Migration review required</b><span>{protocol.legacy.migrationReport.issues.length} item(s) must be checked before this draft can be frozen.</span></div>}
         {selectedNode && <NodeInspector node={selectedNode} definition={registry.get(selectedNode.component.type, selectedNode.component.version)} onUpdate={updateSelected} />}
         {selectedEdge && <div className="inspector-card"><b>{selectedEdge.kind} connection</b><code>{selectedEdge.source.portId} → {selectedEdge.target.portId}</code><button className="danger" onClick={deleteSelection}>Delete connection</button></div>}
         {!selectedNode && !selectedEdge && <p>Select a node or connection to configure it.</p>}

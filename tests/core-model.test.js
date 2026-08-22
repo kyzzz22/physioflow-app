@@ -10,11 +10,14 @@ import {
   createSequentialIdFactory,
   createNextGraphProtocolVersion,
   duplicateGraphProtocolAsProject,
+  freezeProtocolGraph,
+  hashProtocolGraph,
   insertNodeOnControlEdge,
   removeNode,
   serializeProtocolGraph,
   validateComponentDefinition,
   validateProtocolGraph,
+  unfreezeProtocolGraph,
 } from '../src/core/index.js';
 import { inspectLegacyProtocolV1, migrateLegacyProtocolV1 } from '../src/legacy/migrateProtocolV1.js';
 
@@ -46,6 +49,27 @@ test('graph versions preserve projects while duplicates receive isolated project
   assert.equal(duplicate.version.number, 1);
   assert.notEqual(duplicate.projectId, source.projectId);
   assert.match(duplicate.metadata.name, /Copy$/);
+});
+
+test('Protocol Graph freeze creates a reproducible hash and unfreeze restores a draft', async () => {
+  const protocol = buildGraph();
+  const registry = createCoreComponentRegistry();
+  const frozen = await freezeProtocolGraph(protocol, registry, { now: '2026-08-22T01:00:00.000Z' });
+  const archivedMetadataChange = structuredClone(frozen);
+  archivedMetadataChange.audit.archivedAt = '2026-08-23T00:00:00.000Z';
+
+  assert.equal(frozen.version.status, 'frozen');
+  assert.equal(frozen.freeze.configHash.length, 64);
+  assert.equal(await hashProtocolGraph(archivedMetadataChange), frozen.freeze.configHash);
+  const draft = unfreezeProtocolGraph(frozen, { now: '2026-08-24T00:00:00.000Z' });
+  assert.equal(draft.version.status, 'draft');
+  assert.equal(draft.freeze, undefined);
+});
+
+test('unreviewed migrated graph cannot be frozen for formal collection', async () => {
+  const protocol = buildGraph();
+  protocol.legacy = { migrationReport: { formalRunAllowed: false, issues: [] } };
+  await assert.rejects(() => freezeProtocolGraph(protocol, createCoreComponentRegistry()), /Review and acknowledge/);
 });
 
 test('component definitions reject duplicate and invalid ports', () => {

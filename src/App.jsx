@@ -20,7 +20,9 @@ import {
   createNextGraphProtocolVersion,
   createProtocolGraph,
   createCoreComponentRegistry,
+  createId,
   duplicateGraphProtocolAsProject,
+  freezeProtocolGraph,
   isGraphProtocol,
   projectIdOf,
   protocolArchivedAtOf,
@@ -28,8 +30,10 @@ import {
   protocolNameOf,
   protocolStatusOf,
   renameProtocol,
+  unfreezeProtocolGraph,
   validateProtocolGraph,
 } from './core/index.js';
+import { migrateLegacyProtocolV1 } from './legacy/migrateProtocolV1.js';
 
 // Lazy-loaded for code splitting
 const Analytics = lazy(() => import('./Analytics.jsx'));
@@ -328,6 +332,16 @@ export default function App() {
     });
   };
 
+  const migrateProtocol = async value => {
+    try {
+      const { protocol: migrated, report } = migrateLegacyProtocolV1(value, { idFactory: createId });
+      await addAndOpen(migrated);
+      setAlert({ title: 'Migration complete', message: `${report.counts.steps} steps inspected · ${report.coverage.mappedPercent}% mapped to native V2 components · ${report.issues.length} review item(s). The migrated version remains a safe editable draft until reviewed.` });
+    } catch (error) {
+      setAlert({ title: 'Migration failed', message: error.message });
+    }
+  };
+
   const chooseDataDirectory = async () => {
     try {
       await selectDataDirectory();
@@ -394,6 +408,18 @@ export default function App() {
           onPreview={() => {
             const check = validateProtocolGraph(current, createCoreComponentRegistry());
             if (check.valid) { setRun(current); setView('setup'); }
+          }}
+          onFreeze={async () => {
+            try {
+              const frozen = await freezeProtocolGraph(current, createCoreComponentRegistry());
+              setCurrent(frozen);
+              if (await handleSave(frozen)) showToast('Protocol Graph frozen');
+            } catch (error) { setAlert({ title: 'Cannot freeze', message: error.message }); }
+          }}
+          onUnfreeze={async () => {
+            const draft = unfreezeProtocolGraph(current);
+            setCurrent(draft);
+            if (await handleSave(draft)) showToast('Editable draft restored');
           }}
           onUndo={undo}
           onRedo={redo}
@@ -540,6 +566,7 @@ export default function App() {
       onDuplicate={value => addAndOpen(isGraphProtocol(value) ? duplicateGraphProtocolAsProject(value) : duplicateProtocolAsProject(value))}
       onArchive={archive}
       onRenameProject={renameProject}
+      onMigrate={migrateProtocol}
       onAnalytics={() => setView('analytics')}
       storageInfo={storageInfo}
       onChooseDataDirectory={chooseDataDirectory}
