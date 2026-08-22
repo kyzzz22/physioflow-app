@@ -12,7 +12,7 @@ The planned MVP refactor phases 0–6 are implemented on the `demo` branch.
 | 5 — Data | Raw JSONL, normalized CSV, snapshots, manifests, data dictionary, quality report, full package download, participant/media lifecycle events, reaction times, and independently tested validator |
 | 6 — Migration/Pilot | In-app and CLI migration, migration reports, native Questionnaire adapter, review gate, freeze hashes, three representative migration tests, operator guide, and release gate |
 
-Current automated gate: 107 tests pass, production build passes, and lint reports no errors. Nineteen warnings remain in legacy editor/runner files and are tracked as transition debt; no new V2 file adds a warning.
+Current automated gate: 111 tests pass, production build passes, and lint reports no errors. Nineteen warnings remain in legacy editor/runner files and are tracked as transition debt; no new V2 file adds a warning.
 
 Composer V2 now includes a typed variable catalog with scope, source, default value, and export policy, plus a variable picker for condition inputs. Variable renames update node and participant-UI bindings atomically; referenced variables cannot be removed accidentally.
 
@@ -25,6 +25,8 @@ A node group can define a subflow boundary with one member entry, one or more me
 Component definitions now declare their runtime kind, participant UI adapter, and completion strategy. Runtime V2 dispatches by the registry contract instead of component type; a newly registered standard participant component enters and completes without adding a central runtime type branch.
 
 Session Review now includes an event-sequence replay panel. A pure reducer rebuilds runtime status, active node, variables, outputs, attempts, loop counts and recorded branch decisions at each immutable event; discontinuous or cross-session logs are rejected instead of being silently approximated.
+
+The declarative Component SDK 1.0 and project component library support versioned JSON packages without executable code injection. Composer Advanced mode imports packages, requires explicit capability approval, registers components in the normal palette, and prevents uninstall while nodes still depend on them. Runtime and validation enforce variable, asset, network-media and event permissions. A runnable Reaction Button package is included as the reference example; see `COMPONENT_SDK.md`.
 
 The release gate includes a deterministic refactor E2E test (compose → validate → freeze → run → snapshot/restore → export) and explicit performance gates. Current local measurements validate/edit a 500-node graph in about 36 ms and export 10,000 events in about 39 ms, well below the enforced 2 s / 3 s limits.
 

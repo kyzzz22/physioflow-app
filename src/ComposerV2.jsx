@@ -4,7 +4,6 @@ import {
   addNode,
   assignNodeToGroup,
   connect,
-  createCoreComponentRegistry,
   createNodeGroup,
   createSubflowTemplate,
   disconnect,
@@ -23,13 +22,10 @@ import {
   validateProtocolGraphConfiguration,
 } from './core/index.js';
 import ParticipantUiBuilder from './ParticipantUiBuilder.jsx';
+import { createProjectComponentRegistry, exampleReactionButtonPackage, installComponentPackage, uninstallComponentPackage } from './sdk/index.js';
 
-const registry = createCoreComponentRegistry();
 const NODE_WIDTH = 188;
 const NODE_HEIGHT = 112;
-const paletteGroups = Object.entries(registry.list()
-  .filter(item => !['core.start', 'core.end', 'legacy.step'].includes(item.type))
-  .reduce((groups, item) => { (groups[item.category] ??= []).push(item); return groups; }, {}));
 
 function getPath(value, path) {
   return path.split('.').reduce((current, key) => current?.[key], value);
@@ -77,7 +73,11 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
   const [editorMode, setEditorMode] = useState('quick');
   const canvasRef = useRef(null);
   const dragRef = useRef(null);
-  const validation = useMemo(() => validateProtocolGraphConfiguration(protocol, registry), [protocol]);
+  const registry = useMemo(() => createProjectComponentRegistry(protocol), [protocol]);
+  const paletteGroups = useMemo(() => Object.entries(registry.list()
+    .filter(item => !['core.start', 'core.end', 'legacy.step'].includes(item.type))
+    .reduce((groups, item) => { (groups[item.category] ??= []).push(item); return groups; }, {})), [registry]);
+  const validation = useMemo(() => validateProtocolGraphConfiguration(protocol, registry), [protocol, registry]);
   const selectedNode = protocol.graph.nodes.find(node => node.id === selectedNodeId) || null;
   const selectedEdge = protocol.graph.edges.find(edge => edge.id === selectedEdgeId) || null;
 
@@ -212,8 +212,18 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
           try { commit(removeVariable(protocol, name)); }
           catch (error) { setMessage(error.message); }
         }} />}
-        {editorMode !== 'quick' && <GroupCatalog groups={protocol.graph.groups || []} nodes={protocol.graph.nodes} locked={locked} onUpdate={(groupId, changes) => commit(updateNodeGroup(protocol, groupId, changes))} onRemove={groupId => commit(removeNodeGroup(protocol, groupId))} onPublish={groupId => {
+        {editorMode !== 'quick' && <GroupCatalog registry={registry} groups={protocol.graph.groups || []} nodes={protocol.graph.nodes} locked={locked} onUpdate={(groupId, changes) => commit(updateNodeGroup(protocol, groupId, changes))} onRemove={groupId => commit(removeNodeGroup(protocol, groupId))} onPublish={groupId => {
           try { const result = createSubflowTemplate(protocol, groupId); commit(result.protocol); setMessage(`Published reusable subflow ${result.template.name}`); }
+          catch (error) { setMessage(error.message); }
+        }} />}
+        {editorMode === 'advanced' && <ComponentPackageCatalog packages={protocol.componentPackages || []} locked={locked} onInstallExample={() => {
+          try { commit(installComponentPackage(protocol, exampleReactionButtonPackage(), { approvedPermissions: ['events.emit'] })); setMessage('Installed Reaction Button example package'); }
+          catch (error) { setMessage(error.message); }
+        }} onImport={componentPackage => {
+          try { commit(installComponentPackage(protocol, componentPackage, { approvedPermissions: componentPackage.permissions || [] })); setMessage(`Installed ${componentPackage.name}`); }
+          catch (error) { setMessage(error.message); }
+        }} onRemove={(packageId, version) => {
+          try { commit(uninstallComponentPackage(protocol, packageId, version)); }
           catch (error) { setMessage(error.message); }
         }} />}
         {editorMode !== 'quick' && <SubflowTemplateCatalog templates={protocol.subflowTemplates || []} variables={protocol.variables || []} locked={locked} onInstantiate={(templateId, parameterMappings) => {
@@ -312,10 +322,10 @@ function NodeInspector({ node, definition, variables, groups, mode, onUpdate, on
   </div>;
 }
 
-function groupDataPorts(group, nodes, direction) {
+function groupDataPorts(group, nodes, direction, componentRegistry) {
   return group.nodeIds.flatMap(nodeId => {
     const node = nodes.find(item => item.id === nodeId);
-    const definition = node && registry.get(node.component.type, node.component.version);
+    const definition = node && componentRegistry.get(node.component.type, node.component.version);
     return (definition?.ports || []).filter(port => port.kind === 'data' && port.direction === direction).map(port => ({ nodeId, portId: port.id, dataType: port.dataType, label: `${node.label} · ${port.label || port.id}` }));
   });
 }
@@ -329,7 +339,7 @@ function parseEndpoint(value) {
   return nodeId && portId ? { nodeId, portId } : null;
 }
 
-function GroupCatalog({ groups, nodes, locked, onUpdate, onRemove, onPublish }) {
+function GroupCatalog({ registry: componentRegistry, groups, nodes, locked, onUpdate, onRemove, onPublish }) {
   return <section className="group-catalog">
     <h3>Groups</h3>
     <p>Visual containers organize related nodes without creating a second execution model.</p>
@@ -345,22 +355,22 @@ function GroupCatalog({ groups, nodes, locked, onUpdate, onRemove, onPublish }) 
         <label>Entry<select disabled={locked} aria-label={`${group.name} subflow entry`} value={group.entryNodeId || ''} onChange={event => onUpdate(group.id, { entryNodeId: event.target.value })}>{group.nodeIds.map(nodeId => <option key={nodeId} value={nodeId}>{nodes.find(node => node.id === nodeId)?.label || nodeId}</option>)}</select></label>
         <fieldset className="subflow-exits"><legend>Exits</legend>{group.nodeIds.map(nodeId => <label key={nodeId}><input disabled={locked} type="checkbox" checked={(group.exitNodeIds || []).includes(nodeId)} onChange={event => onUpdate(group.id, { exitNodeIds: event.target.checked ? [...(group.exitNodeIds || []), nodeId] : (group.exitNodeIds || []).filter(id => id !== nodeId) })} />{nodes.find(node => node.id === nodeId)?.label || nodeId}</label>)}</fieldset>
         {(group.parameters || []).map((parameter, index) => {
-          const ports = groupDataPorts(group, nodes, parameter.direction);
+          const ports = groupDataPorts(group, nodes, parameter.direction, componentRegistry);
           const endpointName = parameter.direction === 'output' ? 'source' : 'target';
           return <div className="subflow-parameter" key={index}>
           <input disabled={locked} aria-label={`${group.name} parameter ${index + 1} name`} value={parameter.name} onChange={event => onUpdate(group.id, { parameters: group.parameters.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item) })} />
           <select disabled={locked} aria-label={`${group.name} parameter ${index + 1} type`} value={parameter.type} onChange={event => onUpdate(group.id, { parameters: group.parameters.map((item, itemIndex) => itemIndex === index ? { ...item, type: event.target.value } : item) })}>{['string', 'number', 'boolean', 'enum', 'object', 'array', 'unknown'].map(type => <option key={type}>{type}</option>)}</select>
           <select disabled={locked} aria-label={`${group.name} parameter ${index + 1} direction`} value={parameter.direction} onChange={event => {
             const direction = event.target.value;
-            const firstPort = groupDataPorts(group, nodes, direction)[0];
+            const firstPort = groupDataPorts(group, nodes, direction, componentRegistry)[0];
             onUpdate(group.id, { parameters: group.parameters.map((item, itemIndex) => itemIndex === index ? { ...item, direction, type: firstPort?.dataType || item.type, target: direction === 'input' && firstPort ? { nodeId: firstPort.nodeId, portId: firstPort.portId } : undefined, source: direction === 'output' && firstPort ? { nodeId: firstPort.nodeId, portId: firstPort.portId } : undefined } : item) });
           }}><option value="input">input</option><option value="output">output</option></select>
           <select disabled={locked || !ports.length} aria-label={`${group.name} parameter ${index + 1} endpoint`} value={endpointValue(parameter[endpointName])} onChange={event => onUpdate(group.id, { parameters: group.parameters.map((item, itemIndex) => itemIndex === index ? { ...item, [endpointName]: parseEndpoint(event.target.value) } : item) })}><option value="">Select port</option>{ports.map(port => <option key={`${port.nodeId}:${port.portId}`} value={endpointValue(port)}>{port.label}</option>)}</select>
           <button disabled={locked} aria-label={`Delete parameter ${parameter.name}`} onClick={() => onUpdate(group.id, { parameters: group.parameters.filter((_, itemIndex) => itemIndex !== index) })}>×</button>
         </div>})}
-        <button disabled={locked || (!groupDataPorts(group, nodes, 'input').length && !groupDataPorts(group, nodes, 'output').length)} onClick={() => {
-          const direction = groupDataPorts(group, nodes, 'input').length ? 'input' : 'output';
-          const port = groupDataPorts(group, nodes, direction)[0];
+        <button disabled={locked || (!groupDataPorts(group, nodes, 'input', componentRegistry).length && !groupDataPorts(group, nodes, 'output', componentRegistry).length)} onClick={() => {
+          const direction = groupDataPorts(group, nodes, 'input', componentRegistry).length ? 'input' : 'output';
+          const port = groupDataPorts(group, nodes, direction, componentRegistry)[0];
           const endpointName = direction === 'output' ? 'source' : 'target';
           onUpdate(group.id, { parameters: [...(group.parameters || []), { name: `parameter_${(group.parameters || []).length + 1}`, type: port.dataType || 'unknown', direction, [endpointName]: { nodeId: port.nodeId, portId: port.portId } }] });
         }}>Add parameter</button>
@@ -389,6 +399,43 @@ function SubflowTemplateCatalog({ templates, variables, locked, onInstantiate, o
         <div className="subflow-template-actions"><button disabled={locked || !ready} onClick={() => onInstantiate(template.id, resolvedMappings)}>Create instance</button><button disabled={locked} onClick={() => onRemove(template.id)}>Delete template</button></div>
       </article>;
     })}
+  </section>;
+}
+
+function ComponentPackageCatalog({ packages, locked, onInstallExample, onImport, onRemove }) {
+  const [pending, setPending] = useState(null);
+  const [approved, setApproved] = useState([]);
+  const [error, setError] = useState('');
+  const readPackage = async event => {
+    try {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      const parsed = JSON.parse(await file.text());
+      setPending(parsed);
+      setApproved([]);
+      setError('');
+    } catch (nextError) { setError(nextError.message); setPending(null); }
+    event.target.value = '';
+  };
+  const permissions = pending?.permissions || [];
+  return <section className="component-package-catalog">
+    <h3>Project component library</h3>
+    <p>SDK packages are declarative, versioned, permission-gated, and cannot inject JavaScript into Runtime V2.</p>
+    <button disabled={locked || packages.some(item => item.packageId === 'org.physioflow.examples.reaction-button')} onClick={onInstallExample}>Install Reaction Button example</button>
+    <label className="component-package-import">Import SDK package<input disabled={locked} type="file" accept="application/json,.json" onChange={readPackage} /></label>
+    {error && <small className="package-error">{error}</small>}
+    {pending && <article className="package-approval">
+      <b>{pending.name || pending.packageId}</b><small>{pending.packageId}@{pending.version}</small>
+      <p>Approve every requested capability before installation:</p>
+      {!permissions.length && <small>No permissions requested.</small>}
+      {permissions.map(permission => <label key={permission}><input type="checkbox" checked={approved.includes(permission)} onChange={event => setApproved(current => event.target.checked ? [...current, permission] : current.filter(item => item !== permission))} />{permission}</label>)}
+      <div><button disabled={permissions.some(permission => !approved.includes(permission))} onClick={() => { onImport(pending); setPending(null); setApproved([]); }}>Approve and install</button><button onClick={() => setPending(null)}>Cancel</button></div>
+    </article>}
+    {packages.map(componentPackage => <article key={`${componentPackage.packageId}@${componentPackage.version}`}>
+      <div><b>{componentPackage.name}</b><small>{componentPackage.packageId}@{componentPackage.version} · {componentPackage.components.length} component(s)</small></div>
+      <small>{componentPackage.permissions?.length ? `Permissions: ${componentPackage.permissions.join(', ')}` : 'No permissions'}</small>
+      <button disabled={locked} onClick={() => onRemove(componentPackage.packageId, componentPackage.version)}>Uninstall</button>
+    </article>)}
   </section>;
 }
 

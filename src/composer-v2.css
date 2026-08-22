@@ -110,5 +110,17 @@
 .subflow-template-catalog select { min-width: 0; padding: 5px; border: 1px solid var(--border, #dfe3e8); border-radius: 5px; background: var(--surface, #fff); color: inherit; font-size: .65rem; }
 .subflow-template-actions { display: flex; gap: 5px; }
 .subflow-template-actions button { padding: 5px; border: 1px solid #6c63ff; border-radius: 5px; background: #6c63ff12; color: #5249d7; font-size: .62rem; }
+.component-package-catalog { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border, #dfe3e8); }
+.component-package-catalog > p { color: var(--muted, #667085); font-size: .68rem; line-height: 1.4; }
+.component-package-catalog > button, .component-package-import { display: flex; justify-content: center; box-sizing: border-box; width: 100%; margin: 5px 0; padding: 6px; border: 1px solid #6c63ff; border-radius: 6px; background: #6c63ff10; color: #5249d7; font-size: .64rem; cursor: pointer; }
+.component-package-import input { display: none; }
+.component-package-catalog article { display: grid; gap: 6px; margin: 7px 0; padding: 8px; border: 1px solid var(--border, #dfe3e8); border-radius: 7px; }
+.component-package-catalog article b, .component-package-catalog article small { display: block; }
+.component-package-catalog article small, .component-package-catalog article p, .component-package-catalog article label { color: var(--muted, #667085); font-size: .62rem; }
+.component-package-catalog article p { margin: 0; }
+.component-package-catalog article label { display: flex; align-items: center; gap: 4px; }
+.component-package-catalog article button { padding: 5px; border: 1px solid var(--border, #dfe3e8); border-radius: 5px; background: var(--surface, #fff); color: inherit; }
+.package-approval > div { display: flex; gap: 4px; }
+.package-error { color: #a32e25 !important; }
 .composer-v2.locked .composer-palette, .composer-v2.locked .composer-inspector .inspector-card, .composer-v2.locked .composer-node { pointer-events: none; opacity: .72; }
 .migration-review-warning { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; padding: 9px; border: 1px solid #e2ba7b; border-radius: 7px; background: #fff7e8; color: #7a4a00; font-size: .68rem; }

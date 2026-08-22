@@ -1,10 +1,10 @@
-import { createCoreComponentRegistry } from '../core/componentRegistry.js';
+import { createProjectComponentRegistry } from '../sdk/index.js';
 import { createEventSchemaRegistry, validateRuntimeEvent } from './eventSchemaRegistry.js';
 
 export function assessGraphSession({ session, protocol, events = [], responses = [], runtime }) {
   const errors = [];
   const warnings = [];
-  const registry = createEventSchemaRegistry(createCoreComponentRegistry());
+  const registry = createEventSchemaRegistry(createProjectComponentRegistry(protocol));
   const eventIds = new Set();
   const nodeIds = new Set((protocol.graph?.nodes || []).map(node => node.id));
   let previousSequence = 0;

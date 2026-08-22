@@ -7,6 +7,12 @@ function issue(code, message, path, details = {}) {
   return { code, message, path, ...details };
 }
 
+function walkUi(element, visit) {
+  if (!element) return;
+  visit(element);
+  (element.children || []).forEach(child => walkUi(child, visit));
+}
+
 export function validateProtocolGraph(protocol, registry) {
   const errors = [];
   const warnings = [];
@@ -46,6 +52,22 @@ export function validateProtocolGraph(protocol, registry) {
   const ends = nodes.filter(node => node.component?.type === 'core.end');
   if (starts.length !== 1) errors.push(issue('graph.start_count', `Graph needs exactly one Start node; found ${starts.length}`, 'graph.nodes'));
   if (!ends.length) errors.push(issue('graph.end_missing', 'Graph needs at least one End node', 'graph.nodes'));
+
+  for (const [packageIndex, componentPackage] of (protocol.componentPackages || []).entries()) {
+    const approved = new Set(componentPackage.approvedPermissions || []);
+    for (const permission of componentPackage.permissions || []) {
+      if (!approved.has(permission)) errors.push(issue('sdk.permission_unapproved', `Package ${componentPackage.packageId} lacks approval for ${permission}`, `componentPackages.${packageIndex}.approvedPermissions`));
+    }
+    const componentKeys = new Set((componentPackage.components || []).map(component => `${component.type}@${component.version}`));
+    nodes.filter(node => componentKeys.has(`${node.component?.type}@${node.component?.version}`)).forEach(node => {
+      walkUi(node.config?.ui?.root, element => {
+        const variableBinding = Object.values(element.bindings || {}).some(binding => typeof binding === 'string' && binding.startsWith('variables.'));
+        if (variableBinding && !approved.has('session.variables.read')) errors.push(issue('sdk.permission_variable_read', `${node.label} reads variables without package permission`, `graph.nodes.${node.id}.config.ui`, { nodeId: node.id }));
+        if (element.type === 'Media' && element.props?.sourceUrl && !approved.has('network.media')) errors.push(issue('sdk.permission_network_media', `${node.label} uses network media without package permission`, `graph.nodes.${node.id}.config.ui`, { nodeId: node.id }));
+        if (element.type === 'Media' && element.props?.assetId && !approved.has('assets.read')) errors.push(issue('sdk.permission_asset_read', `${node.label} reads an asset without package permission`, `graph.nodes.${node.id}.config.ui`, { nodeId: node.id }));
+      });
+    });
+  }
 
   const edgeIds = new Set();
   const incomingPortCounts = new Map();

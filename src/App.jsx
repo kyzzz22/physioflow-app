@@ -19,7 +19,6 @@ import {
   archiveProtocol,
   createNextGraphProtocolVersion,
   createProtocolGraph,
-  createCoreComponentRegistry,
   createId,
   duplicateGraphProtocolAsProject,
   freezeProtocolGraph,
@@ -32,6 +31,7 @@ import {
   renameProtocol,
   validateProtocolGraph,
 } from './core/index.js';
+import { createProjectComponentRegistry } from './sdk/index.js';
 import { migrateLegacyProtocolV1 } from './legacy/migrateProtocolV1.js';
 
 // Lazy-loaded for code splitting
@@ -405,12 +405,12 @@ export default function App() {
           onBack={handleBackFromBuilder}
           onExport={() => saveFile(`${protocolNameOf(current)}.protocol-graph.json`, JSON.stringify(current, null, 2))}
           onPreview={() => {
-            const check = validateProtocolGraph(current, createCoreComponentRegistry());
+            const check = validateProtocolGraph(current, createProjectComponentRegistry(current));
             if (check.valid) { setRun(current); setView('setup'); }
           }}
           onFreeze={async () => {
             try {
-              const frozen = await freezeProtocolGraph(current, createCoreComponentRegistry());
+              const frozen = await freezeProtocolGraph(current, createProjectComponentRegistry(current));
               setCurrent(frozen);
               if (await handleSave(frozen)) showToast('Protocol Graph frozen');
             } catch (error) { setAlert({ title: 'Cannot freeze', message: error.message }); }
@@ -1049,7 +1049,7 @@ function GraphSessionSetup({ protocol: p, onBack, onStart, storageInfo, onChoose
   const [participantLanguage, setParticipantLanguage] = useState(language);
   const isFormal = protocolStatusOf(p) === 'frozen';
   const storageBlocked = isFormal && !storageInfo?.selected;
-  const check = validateProtocolGraph(p, createCoreComponentRegistry());
+  const check = validateProtocolGraph(p, createProjectComponentRegistry(p));
 
   return <main><Header onGuide={onGuide} /><div className="narrow">
     <button onClick={onBack}>← Protocol</button>

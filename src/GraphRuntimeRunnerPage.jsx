@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ParticipantRenderer from './ParticipantRenderer.jsx';
-import { createCoreComponentRegistry, createUiElement, participantUiTemplate, protocolNameOf, protocolStatusOf, protocolVersionOf } from './core/index.js';
+import { createUiElement, participantUiTemplate, protocolNameOf, protocolStatusOf, protocolVersionOf } from './core/index.js';
 import {
   completeCurrentNode,
   createRuntimeState,
@@ -16,8 +16,7 @@ import {
 import { clearCurrentRun, saveCurrentRun, saveSession } from './storage.js';
 import { buildGraphSessionFiles } from './data/index.js';
 import { downloadBundle } from './exporter.js';
-
-const registry = createCoreComponentRegistry();
+import { createProjectComponentRegistry } from './sdk/index.js';
 
 function runtimeServices() {
   return {
@@ -33,6 +32,11 @@ function findUiElement(element, type) {
     if (found) return found;
   }
   return null;
+}
+
+function packagePermissions(protocol, node) {
+  const componentPackage = (protocol.componentPackages || []).find(item => item.components?.some(component => component.type === node.component.type && component.version === node.component.version));
+  return componentPackage ? new Set(componentPackage.approvedPermissions || []) : null;
 }
 
 function schemaForNode(node, definition) {
@@ -67,6 +71,7 @@ function schemaForNode(node, definition) {
 
 export default function GraphRuntimeRunnerPage({ data, onDone }) {
   const protocol = data.protocol;
+  const registry = useMemo(() => createProjectComponentRegistry(protocol), [protocol]);
   const services = useRef(runtimeServices());
   const initialState = useMemo(() => data.restore?.runtime?.protocolSchemaVersion
     ? restoreRuntime(data.restore.runtime, protocol)
@@ -82,6 +87,7 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
   const nodes = useMemo(() => new Map(protocol.graph.nodes.map(node => [node.id, node])), [protocol]);
   const currentNode = runtime.currentNodeId ? nodes.get(runtime.currentNodeId) : null;
   const currentDefinition = currentNode ? registry.get(currentNode.component.type, currentNode.component.version) : null;
+  const currentPermissions = currentNode ? packagePermissions(protocol, currentNode) : null;
   const executableCount = protocol.graph.nodes.filter(node => registry.get(node.component.type, node.component.version)?.runtime?.kind === 'participant').length;
   const progress = { current: runtime.completedNodeIds.length, total: executableCount, percent: executableCount ? Math.round((runtime.completedNodeIds.length / executableCount) * 100) : 100 };
   const exportFiles = runtime.status === 'completed' ? buildGraphSessionFiles({ ...data.session, status: 'completed', runtime_snapshot: runtime, events, responses }, protocol, events, responses) : null;
@@ -118,11 +124,15 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
     const submitted = rows.length
       ? recordRuntimeEvent(activeRuntime, protocol, services.current, 'response_submitted', { payload: { fields: rows.map(row => row.name), values, reactionTimeMs: rows[0].reactionTimeMs } })
       : { state: activeRuntime, events: [] };
-    const completed = completeCurrentNode(submitted.state, protocol, registry, services.current, { outputs: result?.outputs || values, variables: result?.variables || values });
+    const requestedVariables = result?.variables || values;
+    const completed = completeCurrentNode(submitted.state, protocol, registry, services.current, { outputs: result?.outputs || values, variables: currentPermissions && !currentPermissions.has('session.variables.write') ? {} : requestedVariables });
     apply({ state: completed.state, events: [...submitted.events, ...completed.events] });
   };
 
-  const record = (eventType, payload) => apply(recordRuntimeEvent(runtimeRef.current, protocol, services.current, eventType, { payload }));
+  const record = (eventType, payload) => {
+    if (currentPermissions && eventType === 'ui_action' && !currentPermissions.has('events.emit')) return;
+    apply(recordRuntimeEvent(runtimeRef.current, protocol, services.current, eventType, { payload }));
+  };
 
   useEffect(() => {
     if (currentNode?.id) nodeEnteredAt.current = performance.now();
@@ -177,7 +187,7 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
     </div></div>
     <section className="graph-participant" aria-label="Participant view">
       {runtime.status === 'paused' && <div className="pause-overlay">Paused</div>}
-      <ParticipantRenderer key={currentNode.id} schema={schemaForNode(currentNode, currentDefinition)} disabled={runtime.status === 'paused'} context={{ participant: data.session, variables: runtime.variables, outputs: runtime.outputs, progress, timer: { elapsedMs: 0 } }} onSubmit={complete} onValueChange={payload => record('value_changed', payload)} onAction={action => record('ui_action', action)} onMediaEvent={(eventType, payload) => {
+      <ParticipantRenderer key={currentNode.id} schema={schemaForNode(currentNode, currentDefinition)} disabled={runtime.status === 'paused'} context={{ participant: data.session, variables: currentPermissions && !currentPermissions.has('session.variables.read') ? {} : runtime.variables, outputs: runtime.outputs, progress, timer: { elapsedMs: 0 } }} onSubmit={complete} onValueChange={payload => record('value_changed', payload)} onAction={action => record('ui_action', action)} onMediaEvent={(eventType, payload) => {
         record(eventType, payload);
         if (eventType === 'media_ended' && currentNode.config?.completion?.mode === 'media-ended') complete({});
       }} />

@@ -6,7 +6,6 @@ import { ConfirmDialog, AlertDialog } from './Modal.jsx';
 import { assessProtocolReadiness, summarizeWorkspaceReadiness } from './readiness.js';
 import TemplateButton from './TemplateConfig.jsx';
 import {
-  createCoreComponentRegistry,
   createNextGraphProtocolVersion,
   duplicateGraphProtocolAsProject,
   hashProtocolGraph,
@@ -21,6 +20,7 @@ import {
   protocolVersionOf,
   validateProtocolGraph,
 } from './core/index.js';
+import { createProjectComponentRegistry } from './sdk/index.js';
 
 const groupProjects = protocols => Object.values(protocols
   .filter(item => protocolStatusOf(item) !== 'retired' && !protocolArchivedAtOf(item))
@@ -78,7 +78,7 @@ export default function Dashboard({ protocols, sessions, onOpen, onNew, onTempla
       const candidate = JSON.parse(await file.text());
       const graphCandidate = isGraphProtocol(candidate);
       const check = graphCandidate
-        ? validateProtocolGraph(candidate, createCoreComponentRegistry())
+        ? validateProtocolGraph(candidate, createProjectComponentRegistry(candidate))
         : validateProtocol(candidate);
       if (!check.valid) throw new Error(check.errors.slice(0, 8).map(error => error.message || error).join('\n'));
       if (!graphCandidate && candidate.status === 'frozen') {

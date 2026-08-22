@@ -1,4 +1,4 @@
-import { createCoreComponentRegistry } from '../core/componentRegistry.js';
+import { createProjectComponentRegistry } from '../sdk/index.js';
 import { protocolNameOf, protocolVersionOf } from '../core/protocolSelectors.js';
 import { assessGraphSession } from './graphIntegrity.js';
 import { createEventSchemaRegistry } from './eventSchemaRegistry.js';
@@ -75,7 +75,7 @@ export function graphDataDictionary() {
 export function buildGraphSessionFiles(session, protocol, events = session.events || [], responses = session.responses || []) {
   const eventRows = normalizeGraphEvents(session, events);
   const responseRows = normalizeGraphResponses(session, protocol, responses);
-  const componentRegistry = createCoreComponentRegistry();
+  const componentRegistry = createProjectComponentRegistry(protocol);
   const eventRegistry = createEventSchemaRegistry(componentRegistry);
   const quality = assessGraphSession({ session, protocol, events, responses, runtime: session.runtime_snapshot });
   const componentTypes = new Set(protocol.graph.nodes.map(node => node.component.type));

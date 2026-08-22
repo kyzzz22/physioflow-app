@@ -1,6 +1,5 @@
 import { stepContentIssues, validateProtocol } from './domain.js';
 import {
-  createCoreComponentRegistry,
   isGraphProtocol,
   protocolArchivedAtOf,
   protocolConfigHashOf,
@@ -10,6 +9,7 @@ import {
   protocolVersionOf,
   validateProtocolGraphConfiguration,
 } from './core/index.js';
+import { createProjectComponentRegistry } from './sdk/index.js';
 
 const MEDIA_TYPES = new Set(['video', 'audio', 'image']);
 
@@ -32,7 +32,7 @@ function sessionMatchesProtocol(session, protocol) {
 
 export function assessProtocolReadiness(protocol, { sessions = [], storageInfo = {} } = {}) {
   const graphProtocol = isGraphProtocol(protocol);
-  const validation = graphProtocol ? validateProtocolGraphConfiguration(protocol, createCoreComponentRegistry()) : validateProtocol(protocol);
+  const validation = graphProtocol ? validateProtocolGraphConfiguration(protocol, createProjectComponentRegistry(protocol)) : validateProtocol(protocol);
   const stimuli = protocol?.stimuli || [];
   const questionnaires = protocol?.questionnaires || [];
   const hierarchy = graphProtocol
