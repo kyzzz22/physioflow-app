@@ -209,7 +209,8 @@
   color: var(--warning); font-weight: 600;
   background: #fffcf0; border-radius: 4px; padding: 0 .4rem;
 }
-.canvas-bar > button { font-size: .68rem; padding: .15rem .45rem; white-space: nowrap; }
+.canvas-bar > button { font-size: .68rem; padding: .15rem .45rem; white-space: nowrap; line-height: 1.2; }
+.canvas-bar button.icon-btn { display: grid; place-items: center; padding: .2rem .3rem; }
 .canvas-bar > label { font-size: .66rem; white-space: nowrap; margin: 0; }
 .canvas-bar > label input { vertical-align: middle; margin: 0; }
 .flow-status { font-size: .65rem; padding: 0 .4rem; border-radius: 99px; white-space: nowrap; font-weight: 700; }
@@ -1293,7 +1294,7 @@
   flex-shrink: 0;
 }
 .view-toggle button {
-  padding: 2px 8px; font-size: .68rem; font-weight: 600;
+  padding: 2px 8px; font-size: .68rem; font-weight: 600; line-height: 1.2;
   border: 0; border-radius: 4px; background: transparent; color: var(--muted-strong);
   cursor: pointer;
 }
@@ -1384,19 +1385,50 @@
 .dark-mode .studio-palette button.palette-card { background: #1b2721; border-color: var(--line); }
 .dark-mode .studio-palette button.palette-card:hover { background: #223129; border-color: var(--green); }
 
-/* ── Node hover actions (Details / Duplicate / Delete) ── */
+/* ── Node hover actions (Preview / Duplicate / Delete) ──
+   Dark floating toolbar so it stays clearly visible on any node background. */
 .node-hover-actions {
-  position: absolute; top: 4px; right: 4px; z-index: 3;
-  display: flex; gap: 3px; opacity: 0; transition: opacity .12s;
+  position: absolute; top: 4px; right: 4px; z-index: 5;
+  display: flex; gap: 2px; padding: 2px;
+  opacity: 0; transition: opacity .12s;
+  background: rgba(23, 34, 29, 0.92);
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  border-radius: 7px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
 }
 .clean-node:hover .node-hover-actions { opacity: 1; }
 .node-hover-actions button {
   width: 18px; height: 18px; padding: 0;
-  font-size: 10px; line-height: 1;
-  border: 1px solid var(--line); border-radius: 4px;
-  background: var(--paper); color: var(--muted-strong);
+  border: 0; border-radius: 4px;
+  background: transparent; color: #d7e5dd;
   cursor: pointer; display: grid; place-items: center;
+  transition: background .12s, color .12s;
 }
-.node-hover-actions button:hover { border-color: var(--green); color: var(--green-strong); }
-.node-hover-actions button.danger:hover { border-color: var(--danger); color: var(--danger); }
-.dark-mode .node-hover-actions button { background: #18231e; border-color: var(--line); color: var(--muted); }
+.node-hover-actions button:hover { background: rgba(255, 255, 255, 0.14); color: #ffffff; }
+.node-hover-actions button.danger:hover { background: rgba(220, 38, 38, 0.3); color: #ffc4bf; }
+.dark-mode .node-hover-actions { background: #2a3b32; border-color: #3a4d44; }
+.dark-mode .node-hover-actions button { color: #c9d8d0; }
+.dark-mode .node-hover-actions button:hover { background: rgba(255, 255, 255, 0.1); color: #ffffff; }
+.dark-mode .node-hover-actions button.danger:hover { background: #5a2a26; color: #ffb4ae; }
+
+/* ── Composite preset glyph ── */
+.studio-palette button.palette-card i.preset-glyph { font-size: 15px; }
+
+/* ── Branch-colored output port dots ── */
+.node-outputs button i.branch-true { background: #16a34a; }
+.node-outputs button i.branch-false { background: #dc2626; }
+.node-outputs button i.branch-body { background: #2563eb; }
+.node-outputs button i.branch-exit { background: #94a3b8; }
+
+/* ── Port affordance: glow on hover ── */
+.node-input:hover { background: var(--green); box-shadow: 0 0 0 1px var(--green), 0 0 0 4px rgba(25,116,83,.22); }
+
+/* ── Empty canvas guide ── */
+.canvas-empty-guide {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  text-align: center; color: var(--muted); pointer-events: none; max-width: 320px;
+  z-index: 2;
+}
+.canvas-empty-arrow { font-size: 2rem; opacity: .4; animation: pulse 1.6s ease-in-out infinite; }
+.canvas-empty-guide b { display: block; font-size: 1.05rem; color: var(--ink); margin: .4rem 0 .2rem; }
+.canvas-empty-guide p { margin: 0; font-size: .82rem; line-height: 1.5; }

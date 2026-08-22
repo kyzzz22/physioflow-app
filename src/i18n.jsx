@@ -117,6 +117,9 @@ Object.assign(dictionaries.zh,{
   'Fix blocking protocol, media, content, or storage issues before formal collection.':'正式采集前请修复阻止性的方案、媒体、内容或存储问题。',
   'Review warnings, freeze versions, and run pilot sessions before handoff.':'交接前请检查警告、冻结版本并运行试运行。',
   'Workspace is ready for collection and export.':'工作区已准备好进行采集和导出。',
+  // Canvas/Code dual view + presets + empty guide (IC-style editor)
+  'Canvas':'画布','Code':'代码','Presets':'预设','Stimulus trial':'刺激试次','SAM block':'SAM 模块','Instruction + check':'指导语 + 检查','Apply now':'立即应用','Trial JSON':'Trial JSON','Start building your flow':'开始构建你的流程','Drag a step or preset from the palette to place your first node.':'从左侧面板拖入步骤或预设以放置第一个节点。',
+  'Search steps…':'搜索步骤…','Drag to canvas, or click to add':'拖到画布，或点击添加','Undo (⌘Z)':'撤销 (⌘Z)','Redo (⌘⇧Z)':'重做 (⌘⇧Z)','Fit view':'适应视图','Duplicate (⌘D)':'复制 (⌘D)','Expand':'展开','Collapse':'折叠','Ungroup':'解散分组','Group selected':'分组选中','No steps match':'无匹配步骤','… syncing':'… 同步中','✗ Invalid JSON':'✗ JSON 无效','Baseline → media stimulus → rating response':'基线 → 媒体刺激 → 评分响应','Baseline → SAM questionnaire':'基线 → SAM 问卷','Instruction → attention check':'指导语 → 注意检查',
 });
 Object.assign(dictionaries.ja,{
   'Projects':'プロジェクト','Blocks & Trials':'Block・Trial','Stimuli':'刺激ライブラリ','Questionnaires':'アンケート','Save flow':'フロー保存','Advanced settings':'詳細設定','Editing':'編集中','EXPERIMENT STRUCTURE':'実験構造','Blocks and Trials':'Block と Trial','Add Trial':'Trialを追加','Add Block':'Blockを追加','Duplicate project':'プロジェクト複製','Archive project':'プロジェクトを保管','Rename':'名前変更','Edit draft':'ドラフト編集','Run latest':'最新版を実行','Version history':'バージョン履歴','View':'表示','Close':'閉じる','Delete':'削除','Repeat':'反復回数','Condition':'条件','Fixed':'固定','Random':'ランダム','Latin square':'ラテン方格','Manual':'手動',
@@ -219,6 +222,9 @@ Object.assign(dictionaries.ja,{
   'Fix blocking protocol, media, content, or storage issues before formal collection.':'正式な収集前にブロックしているプロトコル、メディア、コンテンツ、ストレージの問題を修正してください。',
   'Review warnings, freeze versions, and run pilot sessions before handoff.':'引き渡し前に警告を確認し、バージョンを凍結し、パイロットセッションを実行してください。',
   'Workspace is ready for collection and export.':'ワークスペースは収集と出力の準備ができています。',
+  // Canvas/Code dual view + presets + empty guide (IC-style editor)
+  'Canvas':'キャンバス','Code':'コード','Presets':'プリセット','Stimulus trial':'刺激トライアル','SAM block':'SAM ブロック','Instruction + check':'教示 + チェック','Apply now':'今すぐ適用','Trial JSON':'Trial JSON','Start building your flow':'フローの構築を始めましょう','Drag a step or preset from the palette to place your first node.':'パレットからステップまたはプリセットをドラッグして最初のノードを配置してください。',
+  'Search steps…':'ステップを検索…','Drag to canvas, or click to add':'キャンバスにドラッグ、またはクリックで追加','Undo (⌘Z)':'元に戻す (⌘Z)','Redo (⌘⇧Z)':'やり直す (⌘⇧Z)','Fit view':'全体を表示','Duplicate (⌘D)':'複製 (⌘D)','Expand':'展開','Collapse':'折りたたむ','Ungroup':'グループ解除','Group selected':'選択をグループ化','No steps match':'一致するステップなし','… syncing':'… 同期中','✗ Invalid JSON':'✗ 無効な JSON','Baseline → media stimulus → rating response':'ベースライン → 刺激 → 評価応答','Baseline → SAM questionnaire':'ベースライン → SAM アンケート','Instruction → attention check':'教示 → 注意チェック',
 });
 
 const LanguageContext = createContext(null);
@@ -255,6 +261,13 @@ export function LanguageProvider({ children }) {
 }
 
 export function useLanguage() { return useContext(LanguageContext); }
+
+/** Returns a translate() bound to the current UI language — for attributes,
+ *  placeholders, and dynamically-composed strings the DOM walker can't reach. */
+export function useT() {
+  const { language } = useLanguage();
+  return key => translate(key, language);
+}
 
 /** Translate a key to the current language. Falls back to the key itself. */
 export function translate(key, lang = 'en') {

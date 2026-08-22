@@ -149,6 +149,7 @@ function EventFullSettings({ item, trial: _trial, stimuli, questionnaires, disab
     {item.type === 'response' && <ResponseSettings item={item} disabled={disabled} updateStep={updateStep} />}
     {item.type === 'fixation' && <FixationConfig item={item} disabled={disabled} updateStep={updateStep} />}
     {item.type === 'timer' && <TimerConfig item={item} disabled={disabled} updateStep={updateStep} />}
+    {item.type === 'custom_html' && <CustomHtmlSettings item={item} disabled={disabled} updateStep={updateStep} />}
     <AnalysisSection item={item} disabled={disabled} updateStep={updateStep} />
     {item.type === 'questionnaire' && <>
       <QuestionnaireModeSettings item={item} disabled={disabled} updateStep={updateStep} />
@@ -329,6 +330,9 @@ function AppearanceOverrides({ item, disabled, updateStep }) {
       </label>
       <ColorField label="Text color" value={item.appearance?.color} fallback="#17221d" disabled={disabled} onChange={v => updateStep({ appearance: { ...item.appearance, color: v } })} />
       <ColorField label="Background" value={item.appearance?.background} fallback="#fffef9" disabled={disabled} onChange={v => updateStep({ appearance: { ...item.appearance, background: v } })} />
+      <label style={{ display: 'grid', gap: '.25rem', fontSize: '.72rem', fontWeight: 600 }}>Custom CSS
+        <textarea rows={3} value={item.appearance?.custom_css || ''} disabled={disabled} placeholder=".instruction { font-family: Georgia, serif; }" style={{ fontFamily: 'monospace', fontSize: '.7rem' }} onChange={e => updateStep({ appearance: { ...item.appearance, custom_css: e.target.value || null } })} />
+      </label>
     </div>
   </details>;
 }
@@ -438,6 +442,18 @@ function TimerConfig({ item, disabled, updateStep }) {
         <input type="number" min={1} max={12} value={cfg.ring_width ?? 3} disabled={disabled} onChange={e => set('ring_width', Number(e.target.value))} />
       </label>
       <label className="check-row"><input type="checkbox" checked={cfg.show_ms || false} disabled={disabled} onChange={e => set('show_ms', e.target.checked)} /> Show milliseconds</label>
+    </div>
+  </fieldset>;
+}
+
+// ── Custom HTML step ──
+function CustomHtmlSettings({ item, disabled, updateStep }) {
+  return <fieldset className="inspector-fieldset"><legend>Custom HTML</legend>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '.5rem' }}>
+      <label>HTML / CSS / JS
+        <textarea rows={12} value={item.html || ''} disabled={disabled} placeholder={'<h1>Hello</h1>\n<style>h1{color:#197453;font-family:Georgia}</style>'} style={{ fontFamily: "'SF Mono', 'Cascadia Code', monospace", fontSize: '.78rem' }} onChange={e => updateStep({ html: e.target.value })} />
+      </label>
+      <small style={{ color: 'var(--muted)', fontSize: '.72rem' }}>Rendered in a sandboxed iframe. Use fixed or manual end mode to control timing.</small>
     </div>
   </fieldset>;
 }

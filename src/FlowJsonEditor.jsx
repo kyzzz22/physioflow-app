@@ -4,20 +4,20 @@
 // regenerates this text. Same pattern as AWS Infrastructure Composer's
 // Canvas / Template views.
 //
-// Draft-buffer pattern: the textarea holds a local draft and only commits to the
-// model on "Apply" (valid JSON). This keeps typing from fighting the model and
-// prevents cursor jumps.
+// Live-edit model: the textarea holds a local draft and auto-syncs to the model
+// (debounced, only when the JSON is valid). No mandatory "Apply" gate — invalid
+// JSON just shows an inline error and leaves the model untouched, so the cursor
+// never jumps and you can keep typing freely.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { normalizeFlow, validateFlow } from './flowEngine';
+import { useT } from './i18n.jsx';
 
 export default function FlowJsonEditor({ trial, onChange, disabled }) {
+  const t = useT();
   const [draft, setDraft] = useState(() => JSON.stringify(trial, null, 2));
-
-  // Resync when the underlying model changes (e.g. after "Apply").
-  useEffect(() => {
-    setDraft(JSON.stringify(trial, null, 2));
-  }, [trial]);
+  const [dirty, setDirty] = useState(false);
+  const lastAppliedRef = useRef(JSON.stringify(trial));
 
   const parsed = useMemo(() => {
     try { return { ok: true, value: JSON.parse(draft) }; }
@@ -28,34 +28,51 @@ export default function FlowJsonEditor({ trial, onChange, disabled }) {
     ? parsed.error
     : !parsed.value || typeof parsed.value !== 'object' || Array.isArray(parsed.value)
       ? 'Root must be a JSON object'
-      : !Array.isArray(parsed.value.steps)
-        ? 'Missing "steps" array'
-        : null;
+      : null;
 
-  const flowCheck = useMemo(() => {
-    if (!parsed.ok || structureError) return { errors: [], warnings: [] };
-    try {
-      const flow = normalizeFlow(parsed.value);
-      return validateFlow(flow, parsed.value.steps || []);
-    } catch { return { errors: [], warnings: [] }; }
+  // Normalize so the canvas never receives a malformed trial (missing steps -> [])
+  const normalized = useMemo(() => {
+    if (!parsed.ok || structureError) return null;
+    return { ...parsed.value, steps: Array.isArray(parsed.value.steps) ? parsed.value.steps : [] };
   }, [parsed.ok, structureError, parsed.value]);
 
+  const flowCheck = useMemo(() => {
+    if (!normalized) return { errors: [], warnings: [] };
+    try { return validateFlow(normalizeFlow(normalized), normalized.steps || []); }
+    catch { return { errors: [], warnings: [] }; }
+  }, [normalized]);
+
   const apply = () => {
-    if (!parsed.ok || structureError || disabled) return;
-    onChange(parsed.value);
+    if (disabled || !normalized) return;
+    onChange(normalized);
+    lastAppliedRef.current = draft;
+    setDirty(false);
   };
 
-  const nodeCount = parsed.ok && !structureError ? (parsed.value.flow?.nodes?.length ?? 0) : 0;
-  const stepCount = parsed.ok && !structureError ? (parsed.value.steps?.length ?? 0) : 0;
+  // Debounced live-apply: sync to the model ~500ms after valid edits stop.
+  useEffect(() => {
+    if (!normalized || disabled || draft === lastAppliedRef.current) return;
+    const id = setTimeout(() => {
+      onChange(normalized);
+      lastAppliedRef.current = draft;
+      setDirty(false);
+    }, 500);
+    return () => clearTimeout(id);
+  }, [draft, normalized, disabled, onChange]);
+
+  const nodeCount = normalized ? (normalized.flow?.nodes?.length ?? 0) : 0;
+  const stepCount = normalized ? (normalized.steps?.length ?? 0) : 0;
 
   return (
     <div className="flow-json-editor">
       <div className="flow-json-toolbar">
         <span className="flow-json-title">Trial JSON <small>flow · steps · layout</small></span>
         {structureError
-          ? <span className="flow-json-status error" title={structureError}>✗ Invalid JSON</span>
-          : <span className="flow-json-status ok">✓ {nodeCount} nodes · {stepCount} steps</span>}
-        <button type="button" className="primary" disabled={disabled || !parsed.ok || !!structureError} onClick={apply}>Apply to canvas</button>
+          ? <span className="flow-json-status error" title={structureError}>{t('✗ Invalid JSON')}</span>
+          : dirty
+            ? <span className="flow-json-status">{t('… syncing')}</span>
+            : <span className="flow-json-status ok">✓ {nodeCount} {t('nodes')} · {stepCount} {t('steps')}</span>}
+        <button type="button" className="primary" disabled={disabled || !normalized} onClick={apply}>Apply now</button>
       </div>
 
       {structureError && <div className="flow-json-error">{structureError}</div>}
@@ -67,8 +84,9 @@ export default function FlowJsonEditor({ trial, onChange, disabled }) {
         autoComplete="off"
         autoCorrect="off"
         autoCapitalize="off"
-        onChange={e => setDraft(e.target.value)}
-        aria-label="Trial JSON"
+        onChange={e => { setDraft(e.target.value); setDirty(true); }}
+        onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') apply(); }}
+        aria-label={t('Trial JSON')}
       />
 
       {(flowCheck.errors.length > 0 || flowCheck.warnings.length > 0) && (

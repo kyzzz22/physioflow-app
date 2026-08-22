@@ -145,6 +145,8 @@
 .q-lang-tabs { display: flex; gap: 2px; margin: .3rem 0; }
 .q-lang-btn { font-size: .65rem; padding: .15rem .4rem; border: 1px solid var(--line); border-radius: 4px 4px 0 0; border-bottom: 0; cursor: pointer; background: #eef1ec; color: #7b867f; font-weight: 400; }
 .q-lang-btn.active { background: var(--paper); color: var(--ink); font-weight: 700; }
+.q-add-lang { font-size: .68rem; padding: .2rem .5rem; margin: .2rem 0 .4rem; border: 1px dashed var(--line); border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; }
+.q-add-lang:hover { color: var(--green); border-color: var(--green); }
 .q-prompt { width: 100%; font-size: .78rem; padding: .3rem; border: 1px solid var(--line); border-radius: 4px; resize: vertical; }
 
 .q-scale { display: flex; gap: .4rem; flex-wrap: wrap; margin: .3rem 0; font-size: .7rem; }

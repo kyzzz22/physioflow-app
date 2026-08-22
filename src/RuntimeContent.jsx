@@ -83,6 +83,11 @@ export default function RuntimeContent({ step, session, language, timing: _timin
     return <ResponsePrompt step={step} language={language} onSubmit={onResponseSubmit} preview={preview} fontSize={fontSize} />;
   }
 
+  // ── Custom HTML (sandboxed) ──
+  if (step.type === 'custom_html') {
+    return <CustomHtml step={step} preview={preview} />;
+  }
+
   // ── Fixation ──
   if (step.type === 'fixation') {
     const fcfg = step.fixation_config || {};
@@ -243,4 +248,24 @@ function ResponsePrompt({ step, language, onSubmit, preview, fontSize }) {
     </div>
     {selected && step.response_auto_advance === false && <button className="primary" type="button" onClick={() => onSubmit?.([selected], { response_variable: variable, response_value: selected.value, option_label: selected.option_label, response_key: selected.response_key, reaction_time_ms: selected.reaction_time_ms })}>Continue →</button>}
   </div>;
+}
+
+// ── Custom HTML step ── renders the author's HTML/CSS/JS in a sandboxed iframe
+function CustomHtml({ step, preview }) {
+  const html = step.html || '';
+  if (!html) {
+    return (
+      <div style={{ color: 'var(--muted)', textAlign: 'center', padding: '2rem' }}>
+        <span style={{ fontSize: '2rem', opacity: 0.4 }}>⚙</span>
+        <p style={{ fontSize: '.85rem', margin: '.5rem 0 0' }}>{preview ? 'No HTML yet — edit this step to add custom HTML content.' : ''}</p>
+      </div>
+    );
+  }
+  return <iframe
+    title="Custom HTML"
+    className="custom-html-frame"
+    srcDoc={html}
+    sandbox="allow-scripts"
+    style={{ width: '100%', height: preview ? '360px' : 'min(70vh, 640px)', border: '1px solid var(--line)', borderRadius: 10, background: '#fff' }}
+  />;
 }

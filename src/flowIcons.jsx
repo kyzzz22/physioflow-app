@@ -15,7 +15,8 @@ const STEP_COLORS = {
   attention_check: '#dc2626',   // red
   manual_event: '#4f46e5',      // indigo
   device_check: '#059669',      // emerald
-  screen_calibration: '#65a30d' // lime
+  screen_calibration: '#65a30d', // lime
+  custom_html: '#6366f1'        // indigo
 };
 
 const CONTROL_COLORS = {
@@ -89,6 +90,8 @@ export function NodeGlyph({ type, size = 16 }) {
       return <svg {...p}><circle cx="12" cy="12" r="9" /><path d="M8 12l3 3 5-6" /></svg>;
     case 'screen_calibration':
       return <svg {...p}><path d="M4 9V4h5" /><path d="M15 4h5v5" /><path d="M20 15v5h-5" /><path d="M9 20H4v-5" /></svg>;
+    case 'custom_html':
+      return <svg {...p}><path d="M9 6l-5 6 5 6" /><path d="M15 6l5 6-5 6" /></svg>;
 
     // ── Control nodes ──
     case 'start':

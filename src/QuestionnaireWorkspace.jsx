@@ -233,7 +233,8 @@ export default function QuestionnaireWorkspace({ value, onChange, onClose, disab
 
 // ── Question Editor Panel (in-workspace version) ──
 function QuestionEditorPanel({ question: q, index, allQuestions, disabled, updateQuestion }) {
-  const [lang, setLang] = useState('zh');
+  const [lang, setLang] = useState('en');
+  const [multiLang, setMultiLang] = useState(false);
 
   return (
     <div className="qw-editor-body">
@@ -275,15 +276,19 @@ function QuestionEditorPanel({ question: q, index, allQuestions, disabled, updat
         )}
       </details>
 
-      {/* Language tabs */}
-      <div className="q-lang-tabs">
-        {LANGS.map(([code, label]) => (
-          <button key={code} type="button" disabled={disabled} className={`q-lang-btn${lang === code ? ' active' : ''}`} onClick={() => setLang(code)}>{label}</button>
-        ))}
-      </div>
+      {/* Language — single by default, translations optional */}
+      {multiLang ? (
+        <div className="q-lang-tabs">
+          {LANGS.map(([code, label]) => (
+            <button key={code} type="button" disabled={disabled} className={`q-lang-btn${lang === code ? ' active' : ''}`} onClick={() => setLang(code)}>{label}</button>
+          ))}
+        </div>
+      ) : (
+        <button type="button" className="q-add-lang" disabled={disabled} onClick={() => setMultiLang(true)}>＋ 多语言翻译（可选）</button>
+      )}
 
       {/* Prompt */}
-      <textarea className="q-prompt" placeholder={`Question text (${lang})`}
+      <textarea className="q-prompt" placeholder={multiLang ? `Question text (${lang})` : 'Question text'}
         value={q.prompt_i18n?.[lang] || ''} disabled={disabled}
         onChange={e => updateQuestion(index, 'prompt_i18n', { ...q.prompt_i18n, [lang]: e.target.value })}
         rows={2} />
@@ -306,7 +311,7 @@ function QuestionEditorPanel({ question: q, index, allQuestions, disabled, updat
           <textarea disabled={disabled}
             value={(q.options_i18n?.[lang] || []).join('\n')}
             onChange={e => updateQuestion(index, 'options_i18n', { ...q.options_i18n, [lang]: e.target.value.split('\n') })}
-            placeholder={`One option per line (${lang})`} rows={4} />
+            placeholder={multiLang ? `One option per line (${lang})` : 'One option per line'} rows={4} />
         </div>
       )}
 

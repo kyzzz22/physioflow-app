@@ -448,6 +448,7 @@ export default function RuntimeRunnerPage({ data, onDone }) {
   const contentStyle = { width: '100%', maxWidth: layout.content_width || 900, marginInline: 'auto', textAlign: app.alignment ?? (layout.alignment || 'center') };
 
   return <main className="runner">
+    {((layout.custom_css || '') + (app.custom_css || '')).trim() ? <style>{(layout.custom_css || '') + '\n' + (app.custom_css || '')}</style> : null}
     <div className="operator" role="toolbar" aria-label="Operator controls">
       <div><b>{item.block.name}</b><span>{item.trial.name} · {item.trial.condition}</span><span className={`badge ${step.type}`} style={{ marginLeft: '.5rem', fontSize: '.6rem', background: '#2a3b32', color: '#a9c4b4' }}>{step.type}</span></div>
       <div style={{ textAlign: 'center' }}>
@@ -456,11 +457,11 @@ export default function RuntimeRunnerPage({ data, onDone }) {
         <div className={`save-indicator ${saveFlash ? 'saved' : ''}`}>{lastSaved ? `Saved ${lastSaved}` : ''}</div>
       </div>
       <div className="operator-actions">
-        <button onClick={() => { document.querySelector('.participant')?.requestFullscreen?.().catch(() => { }); }} title="Participant fullscreen (F)">⛶ Fullscreen</button>
-        <button onClick={togglePause} aria-label={paused ? 'Resume' : 'Pause'}>{paused ? '▶ Resume' : '⏸ Pause'}</button>
-        <button onClick={retry} disabled={!step.allow_retry} aria-label="Retry step">↺ Retry</button>
-        <button onClick={skip} disabled={!step.allow_skip} aria-label="Skip step">⏭ Skip</button>
-        <button onClick={() => setConfirmAbort({ title: 'Abort session?', message: 'This will mark the session as aborted. All data so far will be preserved.', confirmLabel: 'Abort', danger: true, onConfirm: () => { setConfirmAbort(null); finish('aborted'); }, onCancel: () => setConfirmAbort(null) })} title="Abort session">⏹ Abort</button>
+        <button onClick={() => { document.querySelector('.participant')?.requestFullscreen?.().catch(() => { }); }} title="Participant fullscreen (F)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9V4h5" /><path d="M15 4h5v5" /><path d="M20 15v5h-5" /><path d="M9 20H4v-5" /></svg>Fullscreen</button>
+        <button onClick={togglePause} aria-label={paused ? 'Resume' : 'Pause'}>{paused ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5l11 7-11 7V5z" /></svg>Resume</> : <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M9 5v14" /><path d="M15 5v14" /></svg>Pause</>}</button>
+        <button onClick={retry} disabled={!step.allow_retry} aria-label="Retry step"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66" /><path d="M20 4v4h-4" /></svg>Retry</button>
+        <button onClick={skip} disabled={!step.allow_skip} aria-label="Skip step"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 5l10 7-10 7V5z" /><path d="M18 5v14" /></svg>Skip</button>
+        <button onClick={() => setConfirmAbort({ title: 'Abort session?', message: 'This will mark the session as aborted. All data so far will be preserved.', confirmLabel: 'Abort', danger: true, onConfirm: () => { setConfirmAbort(null); finish('aborted'); }, onCancel: () => setConfirmAbort(null) })} title="Abort session"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>Abort</button>
       </div>
     </div>
 

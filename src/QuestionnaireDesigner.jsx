@@ -123,7 +123,8 @@ export function BatchImport({ disabled, onImport }) {
 
 // ── Question Editor ──
 function QuestionEditor({ question: q, index, total, disabled, updateQuestion, removeQuestion, moveQuestion, allQuestions }) {
-  const [lang, setLang] = useState('zh');
+  const [lang, setLang] = useState('en');
+  const [multiLang, setMultiLang] = useState(false);
   const [dragOver, setDragOver] = useState(null);
 
   return <article className={`q-card${dragOver === 'top' ? ' drag-over-top' : dragOver === 'bottom' ? ' drag-over-bottom' : ''}`}>
@@ -161,18 +162,22 @@ function QuestionEditor({ question: q, index, total, disabled, updateQuestion, r
       </div> : <button type="button" disabled={disabled} onClick={() => updateQuestion(index, 'show_if', { question_id: '', operator: 'equals', value: '' })}>+ 添加条件</button>}
     </details>
 
-    {/* Language tabs */}
-    <div className="q-lang-tabs">
-      {LANGS.map(([code, label]) => (
-        <button type="button" key={code} disabled={disabled}
-          className={`q-lang-btn${lang === code ? ' active' : ''}`}
-          onClick={() => setLang(code)}
-        >{label}</button>
-      ))}
-    </div>
+    {/* Language — single by default, translations optional */}
+    {multiLang ? (
+      <div className="q-lang-tabs">
+        {LANGS.map(([code, label]) => (
+          <button type="button" key={code} disabled={disabled}
+            className={`q-lang-btn${lang === code ? ' active' : ''}`}
+            onClick={() => setLang(code)}
+          >{label}</button>
+        ))}
+      </div>
+    ) : (
+      <button type="button" className="q-add-lang" disabled={disabled} onClick={() => setMultiLang(true)}>＋ 多语言翻译（可选）</button>
+    )}
 
     {/* Prompt */}
-    <textarea className="q-prompt" placeholder={`题目文字 (${lang})`}
+    <textarea className="q-prompt" placeholder={multiLang ? `题目文字 (${lang})` : '题目文字'}
       value={q.prompt_i18n?.[lang] || ''} disabled={disabled}
       onChange={e => updateQuestion(index, 'prompt_i18n', { ...q.prompt_i18n, [lang]: e.target.value })}
       rows={2} />
@@ -195,7 +200,7 @@ function QuestionEditor({ question: q, index, total, disabled, updateQuestion, r
         <textarea disabled={disabled}
           value={(q.options_i18n?.[lang] || []).join('\n')}
           onChange={e => updateQuestion(index, 'options_i18n', { ...q.options_i18n, [lang]: e.target.value.split('\n') })}
-          placeholder={`每行一个选项 (${lang})`} rows={3} />
+          placeholder={multiLang ? `每行一个选项 (${lang})` : '每行一个选项'} rows={3} />
       </div>
     )}
 

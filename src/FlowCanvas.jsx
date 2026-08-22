@@ -2,15 +2,32 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { step as createStep, stepContentIssues } from './domain';
 import { normalizeFlow, validateFlow } from './flowEngine';
 import { Inspector } from './Inspector';
-import { PALETTE } from './constants.js';
+import { FLOW_PRESETS, PALETTE } from './constants.js';
 import RuntimeContent from './RuntimeContent';
 import QuestionnaireWorkspace from './QuestionnaireWorkspace';
 import FlowJsonEditor from './FlowJsonEditor.jsx';
 import { NodeGlyph, nodeBadgeStyle, nodeColor, tint } from './flowIcons.jsx';
+import { useT } from './i18n.jsx';
 
 const branchesFor = node => ['note', 'group'].includes(node.type) ? [] : node.type === 'condition' ? ['true', 'false'] : node.type === 'loop' ? ['body', 'exit'] : ['next'];
 const nodeWidth = n => n.type === 'note' ? (n.width || 180) : n.type === 'junction' ? 20 : n.type === 'group' ? (n.width || 240) : 180;
 const nodeHeight = n => n.type === 'note' ? (n.height || 100) : n.type === 'junction' ? 20 : n.type === 'group' ? (n.height || 160) : 55;
+// Orthogonal (Z-shaped) routing for forward edges; smooth curve fallback for back-edges
+const edgePath = (x1, y1, x2, y2) => {
+  const m = x1 + (x2 - x1) / 2;
+  if (x2 >= x1) return `M${x1},${y1} L${m},${y1} L${m},${y2} L${x2},${y2}`;
+  return `M${x1},${y1} C${x1 + 60},${y1} ${x2 - 60},${y2} ${x2},${y2}`;
+};
+// Branch semantics: color + dash convey flow meaning
+const branchStyle = branch => {
+  switch (branch) {
+    case 'true': return { stroke: '#16a34a', dash: undefined };
+    case 'false': return { stroke: '#dc2626', dash: '6 4' };
+    case 'body': return { stroke: '#2563eb', dash: undefined };
+    case 'exit': return { stroke: '#94a3b8', dash: '6 4' };
+    default: return { stroke: '#8f9d95', dash: undefined };
+  }
+};
 
 const GRID_SIZE = 24;
 const SNAP_THRESHOLD = 4;
@@ -37,6 +54,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   const [searchQuery, setSearchQuery] = useState('');
   const [paletteSearch, setPaletteSearch] = useState('');
   const [viewMode, setViewMode] = useState('canvas'); // 'canvas' | 'code'
+  const t = useT();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [snapshots, setSnapshots] = useState(() => {
     try { return JSON.parse(localStorage.getItem(`physioflow.snapshots.${trial.trial_id}`) || '[]'); }
@@ -186,21 +204,45 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   }, [disabled, onChange, pushUndo]);
   const addEvent = type => addEventAt(type, 260, 140 + flow.nodes.length * 24);
 
+  // Composite presets (enhanced components) — expand into a connected chain
+  const addPreset = (preset, x, y) => {
+    if (disabled || !preset) return;
+    pushUndo();
+    const newSteps = preset.steps.map(s => createStep(s.type, s));
+    const nodes = newSteps.map((s, i) => ({ id: `node_${s.step_id}`, type: 'event', step_id: s.step_id, label: s.name, x: x + i * 230, y }));
+    const edges = nodes.slice(0, -1).map((n, i) => ({ id: `edge_${crypto.randomUUID()}`, source: n.id, target: nodes[i + 1].id, branch: 'next' }));
+    onChange({
+      ...trialRef.current,
+      steps: [...trialRef.current.steps, ...newSteps],
+      flow: { ...flowRef.current, nodes: [...flowRef.current.nodes, ...nodes], edges: [...flowRef.current.edges, ...edges] },
+    });
+    setSelectedNodeIds(new Set(nodes.map(n => n.id)));
+  };
+
   // Palette → canvas drag-and-drop (AWS Infrastructure Composer style)
   const onPaletteDragStart = (e, type) => {
     e.dataTransfer.setData('application/x-physioflow-step', type);
     e.dataTransfer.effectAllowed = 'copy';
   };
+  const onPalettePresetDragStart = (e, presetId) => {
+    e.dataTransfer.setData('application/x-physioflow-preset', presetId);
+    e.dataTransfer.effectAllowed = 'copy';
+  };
   const onCanvasDrop = e => {
     e.preventDefault();
-    const type = e.dataTransfer.getData('application/x-physioflow-step');
-    if (!type) return;
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect || !rect.width || !rect.height) return;
     const rawX = (e.clientX - rect.left - pan.x) / zoom;
     const rawY = (e.clientY - rect.top - pan.y) / zoom;
     const x = Math.max(20, snapEnabled ? Math.round(rawX / GRID_SIZE) * GRID_SIZE : Math.round(rawX));
     const y = Math.max(20, snapEnabled ? Math.round(rawY / GRID_SIZE) * GRID_SIZE : Math.round(rawY));
+    const presetId = e.dataTransfer.getData('application/x-physioflow-preset');
+    if (presetId) {
+      const preset = FLOW_PRESETS.find(p => p.id === presetId);
+      if (preset) { addPreset(preset, x, y); return; }
+    }
+    const type = e.dataTransfer.getData('application/x-physioflow-step');
+    if (!type) return;
     if (type === 'condition' || type === 'loop') addLogic(type, x, y);
     else if (type === 'note') addNote(x, y);
     else if (type === 'junction') addJunction(x, y);
@@ -788,9 +830,10 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   return <div className="studio">
     {!paletteCollapsed && <aside className="studio-palette">
       <div className="studio-brand"><span>＋</span><div><b>Add to flow</b><small>Drag nodes to arrange</small></div></div>
-      <div className="palette-search"><input value={paletteSearch} placeholder="Search steps…" onChange={e => setPaletteSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setPaletteSearch(''); }} /></div>
-      {filteredPalette.length === 0 && <p className="palette-empty">No steps match “{paletteSearch}”</p>}
-      {filteredPalette.map(group => <section key={group.title}><h4>{group.title}</h4><div className="palette-grid">{group.items.map(([type, , label]) => <button key={type} className="palette-card" draggable={!disabled} onDragStart={e => onPaletteDragStart(e, type)} disabled={disabled} onClick={() => addEvent(type)} title="Drag to canvas, or click to add"><i style={nodeBadgeStyle(type)}><NodeGlyph type={type} /></i><span>{label}</span></button>)}</div></section>)}
+      <div className="palette-search"><input value={paletteSearch} placeholder={t('Search steps…')} onChange={e => setPaletteSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setPaletteSearch(''); }} /></div>
+      {!paletteQuery && <section><h4>Presets</h4><div className="palette-grid">{FLOW_PRESETS.map(p => <button key={p.id} className="palette-card" draggable={!disabled} onDragStart={e => onPalettePresetDragStart(e, p.id)} disabled={disabled} onClick={() => addPreset(p, 260, 140 + flow.nodes.length * 24)} title={t(p.description)}><i className="preset-glyph">{p.glyph}</i><span>{p.label}</span></button>)}</div></section>}
+      {filteredPalette.length === 0 && <p className="palette-empty">{t('No steps match')} “{paletteSearch}”</p>}
+      {filteredPalette.map(group => <section key={group.title}><h4>{group.title}</h4><div className="palette-grid">{group.items.map(([type, , label]) => <button key={type} className="palette-card" draggable={!disabled} onDragStart={e => onPaletteDragStart(e, type)} disabled={disabled} onClick={() => addEvent(type)} title={t('Drag to canvas, or click to add')}><i style={nodeBadgeStyle(type)}><NodeGlyph type={type} /></i><span>{label}</span></button>)}</div></section>)}
       {(!paletteQuery || flowControlMatches) && <section><h4>Flow</h4><div className="palette-grid"><button className="palette-card" draggable={!disabled} onDragStart={e => onPaletteDragStart(e, 'condition')} disabled={disabled} onClick={() => addLogic('condition')}><i style={nodeBadgeStyle('condition')}><NodeGlyph type="condition" /></i><span>Condition</span></button><button className="palette-card" draggable={!disabled} onDragStart={e => onPaletteDragStart(e, 'loop')} disabled={disabled} onClick={() => addLogic('loop')}><i style={nodeBadgeStyle('loop')}><NodeGlyph type="loop" /></i><span>Loop</span></button></div></section>}
       {(!paletteQuery || utilControlMatches) && <section><h4>Utils</h4><div className="palette-grid"><button className="palette-card" draggable={!disabled} onDragStart={e => onPaletteDragStart(e, 'note')} disabled={disabled} onClick={addNote}><i style={nodeBadgeStyle('note')}><NodeGlyph type="note" /></i><span>Note</span></button><button className="palette-card" draggable={!disabled} onDragStart={e => onPaletteDragStart(e, 'junction')} disabled={disabled} onClick={addJunction}><i style={nodeBadgeStyle('junction')}><NodeGlyph type="junction" /></i><span>Junction</span></button></div></section>}
     </aside>}
@@ -814,10 +857,10 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
         <label className="check-row">
           <input type="checkbox" checked={snapEnabled} onChange={e => { setSnapEnabled(e.target.checked); try { localStorage.setItem('physioflow.snap', e.target.checked ? '1' : '0'); } catch {} }} /> Snap
         </label>
-        <button onClick={performUndo} title="Undo (⌘Z)">↶</button>
-        <button onClick={performRedo} title="Redo (⌘⇧Z)">↷</button>
+        <button className="icon-btn" onClick={performUndo} title={t('Undo (⌘Z)')}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4L3 9l6 5" /><path d="M3 9h11a6 6 0 0 1 0 12h-3" /></svg></button>
+        <button className="icon-btn" onClick={performRedo} title={t('Redo (⌘⇧Z)')}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 4l6 5-6 5" /><path d="M21 9H10a6 6 0 0 0 0 12h3" /></svg></button>
         <button onClick={autoLayout}>Auto layout</button>
-        <button onClick={fitView} title="Fit view">⤢</button>
+        <button className="icon-btn" onClick={fitView} title={t('Fit view')}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9V4h5" /><path d="M15 4h5v5" /><path d="M20 15v5h-5" /><path d="M9 20H4v-5" /></svg></button>
         <div style={{ position: 'relative' }}>
           <button onClick={() => setSnapshotsOpen(o => !o)} title="Flow snapshots">{snapshots.length > 0 ? `📸 ${snapshots.length}` : '📸'}</button>
           {snapshotsOpen && <div className="snapshots-dropdown" style={{ position: 'absolute', top: '100%', right: 0, zIndex: 50, background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: 8, padding: '.5rem', minWidth: 240, maxHeight: 320, overflowY: 'auto', boxShadow: 'var(--shadow-md)' }}>
@@ -901,14 +944,17 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
               };
               const p1 = getPort(a, true), p2 = getPort(b, false);
               const x1 = p1.x, y1 = p1.y, x2 = p2.x, y2 = p2.y, m = x1 + (x2 - x1) / 2;
+              const d = edgePath(x1, y1, x2, y2);
+              const bs = branchStyle(edge.branch);
               const sel = selectedEdgeId === edge.id;
+              const stroke = sel ? 'var(--green)' : bs.stroke;
               return <g key={edge.id}
                 onContextMenu={e => edgeContextMenu(e, edge.id)}
                 style={{ cursor: 'pointer', pointerEvents: 'auto' }}
                 onClick={e => { e.stopPropagation(); setSelectedEdgeId(edge.id); setSelectedNodeIds(new Set()); setContextMenu(null); }}
               >
-                <path d={`M${x1},${y1} C${m},${y1} ${m},${y2} ${x2},${y2}`} className="edge-hit" />
-                <path d={`M${x1},${y1} C${m},${y1} ${m},${y2} ${x2},${y2}`} stroke={sel ? 'var(--green)' : '#8f9d95'} strokeWidth={sel ? 2.5 : 1.5} fill="none" markerEnd="url(#arrow)" />
+                <path d={d} className="edge-hit" />
+                <path d={d} stroke={stroke} strokeWidth={sel ? 2.5 : 1.5} fill="none" strokeDasharray={sel ? undefined : bs.dash} markerEnd="url(#arrow)" />
                 <rect x={m - 25} y={(y1 + y2) / 2 - 13} width="50" height="20" rx="10" fill={sel ? 'var(--green)' : '#e8ebe6'} />
                 <text x={m} y={(y1 + y2) / 2 + 1} fill={sel ? 'white' : 'var(--ink)'} textAnchor="middle" fontSize="11" fontWeight={sel ? 700 : 400}>{edge.label || edge.branch}</text>
                 {sel && <g transform={`translate(${m + 28},${(y1 + y2) / 2 - 10})`} onClick={e => { e.stopPropagation(); deleteEdge(edge.id); }}>
@@ -964,8 +1010,8 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
                   <span className="clean-group-dot" style={{ background: group.color }} />
                   <span className="clean-group-title">{group.label}</span>
                   <span className="clean-group-count">{memberCount} step{memberCount !== 1 ? 's' : ''}</span>
-                  <button className="clean-group-btn" title={group.collapsed ? 'Expand' : 'Collapse'} onClick={e => { e.stopPropagation(); toggleGroupCollapse(group.id); }}>{group.collapsed ? '▸' : '▾'}</button>
-                  <button className="clean-group-btn danger" title="Ungroup" onClick={e => { e.stopPropagation(); ungroupNode(group.id); }}>✕</button>
+                  <button className="clean-group-btn" title={group.collapsed ? t('Expand') : t('Collapse')} onClick={e => { e.stopPropagation(); toggleGroupCollapse(group.id); }}>{group.collapsed ? '▸' : '▾'}</button>
+                  <button className="clean-group-btn danger" title={t('Ungroup')} onClick={e => { e.stopPropagation(); ungroupNode(group.id); }}>✕</button>
                 </div>
               </div>
             );
@@ -1027,8 +1073,17 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
               {!['start', 'end'].includes(node.type) && <button className={`node-input ${dragConnection ? 'awaiting' : ''}`} title="Connect a wire to here" onClick={e => { e.stopPropagation(); finishConnection(node.id); }} />}
               {!['start', 'end'].includes(node.type) && (
                 <div className="node-hover-actions" onClick={e => e.stopPropagation()}>
-                  <button title="Duplicate (⌘D)" onClick={e => { e.stopPropagation(); duplicateNode(node); }}>⧉</button>
-                  <button className="danger" title="Delete" onClick={e => { e.stopPropagation(); removeNode(node.id); }}>✕</button>
+                  {node.type === 'event' && step && (
+                    <button title={t('Preview (double-click)')} onClick={e => { e.stopPropagation(); openPreview(node); }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" /><circle cx="12" cy="12" r="3" /></svg>
+                    </button>
+                  )}
+                  <button title={t('Duplicate (⌘D)')} onClick={e => { e.stopPropagation(); duplicateNode(node); }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
+                  </button>
+                  <button className="danger" title={t('Delete')} onClick={e => { e.stopPropagation(); removeNode(node.id); }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12" /><path d="M18 6L6 18" /></svg>
+                  </button>
                 </div>
               )}
               <div className="node-title">
@@ -1040,14 +1095,21 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
                 <span className="step-type-badge">{step?.type}</span>
                 {nodeHasError && <span className="node-issue-dot error" title={nodeIssues.filter(i => i.kind === 'error').map(i => i.message).join('; ')}>!</span>}
                 {nodeHasWarn && <span className="node-issue-dot warn" title={nodeIssues.map(i => i.message).join('; ')}>△</span>}
-                {step && <button className="node-preview-btn" onClick={e => { e.stopPropagation(); openPreview(node); }} title="Preview (double-click)">▸</button>}
               </span>}
               {branchesFor(node).length > 0 && <div className="node-outputs">
-                {branchesFor(node).map(branch => <button className={dragConnection?.source === node.id && dragConnection.branch === branch ? 'active' : ''} key={branch} onPointerDown={e => beginConnDrag(e, node, branch)} title={`${branch} → drag to connect`}>{branch}<i /></button>)}
+                {branchesFor(node).map(branch => <button className={dragConnection?.source === node.id && dragConnection.branch === branch ? 'active' : ''} key={branch} onPointerDown={e => beginConnDrag(e, node, branch)} title={`${branch} → drag to connect`}>{branch}<i className={`branch-${branch}`} /></button>)}
               </div>}
             </div>
           )})}
         </div>
+
+        {flow.nodes.filter(n => n.type === 'event').length === 0 && (
+          <div className="canvas-empty-guide">
+            <div className="canvas-empty-arrow">⇐</div>
+            <b>Start building your flow</b>
+            <p>Drag a step or preset from the palette to place your first node.</p>
+          </div>
+        )}
 
         {flow.nodes.length > 0 && (
           <div className="flow-minimap" ref={minimapRef => { if (minimapRef) minimapRef._drag = e => {
@@ -1107,7 +1169,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
             <button onClick={() => { addJunction(); setContextMenu(null); }} style={{ fontSize: '12px', padding: '4px 8px' }}>● Junction</button>
           </div>
           {clipboardNode && <button onClick={() => { pasteNode(); setContextMenu(null); }}>Paste {clipboardNode.label || clipboardNode.type}</button>}
-          {selectedNodeIds.size >= 2 && <button onClick={() => { groupSelected(); }}>Group selected ({selectedNodeIds.size})</button>}
+          {selectedNodeIds.size >= 2 && <button onClick={() => { groupSelected(); }}>{t('Group selected')} ({selectedNodeIds.size})</button>}
           <button onClick={() => { setSelectedNodeIds(new Set(flow.nodes.map(n => n.id))); setContextMenu(null); }}>Select all</button>
           <button onClick={() => { autoLayout(); setContextMenu(null); }}>Auto layout</button>
         </div>
@@ -1123,7 +1185,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
                 ['Ctrl+C/V/D', 'Copy / Paste / Duplicate'], ['Ctrl+A', 'Select all'],
                 ['Ctrl+Z / Ctrl+Shift+Z', 'Undo / Redo'], ['Ctrl+F', 'Search nodes'],
                 ['Del', 'Delete selected'], ['Shift+Click', 'Toggle selection'],
-                ['Drag output port', 'Connect nodes'], ['Space/Middle+Drag', 'Pan canvas'],
+                ['Double-click node', 'Preview step full-size'], ['Drag output port', 'Connect nodes'], ['Space/Middle+Drag', 'Pan canvas'],
                 ['Scroll', 'Zoom in/out'], ['Alt+Drag', 'Disable snap'], ['Escape', 'Cancel'],
               ].map(([key, desc], i) => <div key={i}><code>{key}</code><span>{desc}</span></div>)}
             </div>
@@ -1330,12 +1392,17 @@ function NodePreviewModal({ step, trialLayout, onClose, onUpdate, onOpenQuestion
             <span className="eyebrow" style={{ display:'block',fontSize:'.65rem',fontWeight:700,letterSpacing:'.14em',textTransform:'uppercase',color:'var(--muted)',marginBottom:'.8rem' }}>{step.type}</span>
           )}
           {!['fixation','rest','timer'].includes(step.type) && (
-            <h1 style={{ fontFamily:"'Instrument Serif',Georgia,serif",fontSize:'clamp(1.6rem,4vw,2.6rem)',fontWeight:400,margin:'0 0 1.5rem',lineHeight:1.2,maxWidth:700 }}>{step.name}</h1>
+            <h1 style={{ fontFamily:"'Instrument Serif',Georgia,serif",fontSize:'clamp(1.6rem,4vw,2.6rem)',fontWeight:400,margin:'0 0 1.5rem',lineHeight:1.2,maxWidth:700 }}>{step.name_i18n?.en || step.name}</h1>
           )}
           <RuntimeContent step={step} session={{ participant_language: 'en' }} language="en"
             timing={{ current: { remaining: 0, started_at: 0, active: false } }}
             onComplete={() => {}} onQuestionnaireSubmit={() => {}} onResponseSubmit={() => {}}
-            onMediaEvent={() => {}} onQuestionnaireExternalEvent={() => {}} preview fontSize={app.font_size || null} />
+            onMediaEvent={() => {}} onQuestionnaireExternalEvent={() => {}} fontSize={app.font_size || null} />
+          {!['questionnaire', 'response', 'manual_event', 'device_check'].includes(step.type) && (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '1.2rem 0 0' }}>
+              <button className="primary" onClick={onClose} style={{ minWidth: 180, fontSize: '1rem', padding: '.6rem 1.5rem', borderRadius: 8 }}>Continue →</button>
+            </div>
+          )}
         </div>
       )}
     </div>
