@@ -24,6 +24,7 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 | Runtime replay and state debugger | Pure event reducer reconstructs variables, outputs, attempts, loops, branches and terminal status; Session Review provides a sequence timeline and state/payload inspection |
 | Declarative component SDK and project library | SDK 1.0 package contract, semantic versions, permission approval, no-code sandbox, dynamic project registry, JSON import, uninstall protection and runnable Reaction Button example |
 | External device connector framework | Versioned manifests, typed input/output channels, approved connect/read/write permissions, injected host adapters, failure/recovery lifecycle, full provenance and raw/normalized export tables |
+| Self-hosted Composer browser release gate | Script launches Vite and isolated headless Chrome itself, exercises V2 variable/subflow/SDK/device workflows, and runs in the demo push/PR GitHub Actions job |
 | Reproducible formal versions | Pre-freeze validation, migration review gate, config hash, immutable frozen record, new-version editing |
 | Complete session data | Raw events/responses, normalized CSV, snapshots, manifest, dictionary, quality report and independent validator |
 | Legacy migration | Copy-and-convert workflow, original payload preservation, report/review gate, CLI/in-app paths, representative coverage tests |
@@ -33,8 +34,7 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 | Item | Status | Acceptance evidence still required |
 | --- | --- | --- |
 | Extensible custom control handlers | Partial | Safe handler registration beyond the built-in start/end/condition/loop/random control kinds |
-| Automated browser E2E in release gate | Partial | Current CDP suite covers legacy workflows; Composer V2 has deterministic domain E2E plus manual browser evidence, but still needs self-hosted browser CI |
 | Formal usability study | Requires human participants | Timed novice/expert tasks and sign-off against the plan metrics |
 | Remote upload | Locally blocked | GitHub HTTPS/SSH authentication and remote branch verification |
 
-The next implementation order is: self-hosted browser CI and extensible safe control handlers. Hardware-specific adapters can now be added behind the connector port without changing protocol/runtime semantics. Human usability evidence and authenticated remote upload require external state beyond source changes.
+The next implementation order is extensible safe control handlers. Hardware-specific adapters can now be added behind the connector port without changing protocol/runtime semantics. Human usability evidence and authenticated remote upload require external state beyond source changes.

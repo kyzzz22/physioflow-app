@@ -15,6 +15,7 @@
     "test": "node --test tests/*.test.js",
     "test:e2e": "node tests/e2e-cdp.mjs",
     "test:refactor-e2e": "node --test tests/refactor-e2e.test.js",
+    "test:e2e:refactor-browser": "node tests/e2e-composer-v2-self-hosted.mjs",
     "test:performance": "node --test tests/performance-gates.test.js",
     "validate:graph-export": "node scripts/validate-graph-export.mjs",
     "migrate:v1": "node scripts/migrate-protocol-v1.mjs",

@@ -17,6 +17,7 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 - Confirmed the first-run tour stays inside a 1280px viewport after clamping side-positioned cards to the visible area.
 - Installed the declarative Reaction Button SDK example from Composer Advanced mode, confirmed its package/version/permission record, found the component in the normal interaction palette, and inserted it into the same Protocol Graph with schema-driven participant UI.
 - Installed the simulated physiology connector from Composer Advanced mode and confirmed its versioned manifest, simulated transport, signal/marker channel types and approved connect/read/write capabilities.
+- Ran the self-hosted Composer V2 browser gate from a clean profile. It launched Vite and Chrome itself, produced a four-node graph with a reusable subflow instance, and verified both the Reaction Button SDK package and simulated sensor connector.
 - Migrated the representative Emotion protocol from the Dashboard into Composer V2. The migration produced 22 nodes and 21 edges, preserved all 20 steps, reported 100% native mapping, and kept formal collection behind the explicit migration-review gate.
 - Re-ran the automated release gate after immutable-version, required-port, participant binding/action, lifecycle-event, response-time, and independent export-validator hardening.
 
@@ -38,6 +39,7 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 - Reusable-subflow behavior: template instances receive isolated node/edge IDs, remapped parameter endpoints and variable mappings; Runtime V2 tests prove mapped input reads and output write-through.
 - Component SDK behavior: tests cover package/schema validation, explicit permission approval, rejection of executable control kinds, uninstall dependency protection, project registry dispatch, runtime execution, and variable-read enforcement.
 - Device connector behavior: tests cover permission-gated installation and I/O, immutable provenance events, typed sample/marker channels, failed connection attempts, successful recovery, and device-event export tables.
+- Browser release behavior: `npm run test:e2e:refactor-browser` passes locally and `.github/workflows/refactor-quality.yml` runs it after the full quality gate on pushes and pull requests.
 
 ## Known transition scope
 
