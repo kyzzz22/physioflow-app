@@ -88,7 +88,7 @@ export function createCoreComponentRegistry() {
   registry.register({
     type: 'display.screen', version: '1.0.0', label: 'Screen', category: 'presentation',
     ports: [controlInput, controlOutput],
-    defaultConfig: { content: '', ui: { type: 'screen', children: [] }, completion: { mode: 'manual' } },
+    defaultConfig: { content: '', ui: participantUiTemplate('instruction'), completion: { mode: 'manual' } },
     editorFields: [
       { path: 'content', label: 'Screen content', type: 'textarea' },
       { path: 'completion.mode', label: 'Completion', type: 'select', options: ['manual', 'fixed'] },
@@ -183,3 +183,4 @@ export function createCoreComponentRegistry() {
   });
   return registry;
 }
+import { participantUiTemplate } from './participantUi.js';

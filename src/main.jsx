@@ -12,6 +12,7 @@ import './dashboard.css';
 import './analytics.css';
 import './sessions.css';
 import './composer-v2.css';
+import './participant-ui.css';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -79,7 +80,7 @@ createRoot(root).render(
 );
 
 // Register service worker for PWA offline support (web only)
-if ('serviceWorker' in navigator && !window.__TAURI_INTERNALS__) {
+if (import.meta.env.PROD && 'serviceWorker' in navigator && !window.__TAURI_INTERNALS__) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   });

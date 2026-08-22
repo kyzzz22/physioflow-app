@@ -5,6 +5,19 @@ export { validateProtocolGraph } from './validateProtocolGraph.js';
 export { addNode, connect, disconnect, insertNodeOnControlEdge, moveNodes, removeNode, replaceConnection, updateNode } from './graphCommands.js';
 export { parseProtocolGraph, serializeProtocolGraph } from './serialization.js';
 export {
+  appendUiElement,
+  createParticipantScreen,
+  createUiElement,
+  mapUiElement,
+  normalizeParticipantUi,
+  PARTICIPANT_UI_SCHEMA_VERSION,
+  PARTICIPANT_UI_TYPES,
+  participantUiTemplate,
+  removeUiElement,
+  resolveUiBinding,
+  validateParticipantUi,
+} from './participantUi.js';
+export {
   archiveProtocol,
   createNextGraphProtocolVersion,
   duplicateGraphProtocolAsProject,

@@ -14,10 +14,12 @@ import PreRunChecklist from './PreRunChecklist.jsx';
 import { STEP_DEFAULTS } from './constants.js';
 import Onboarding from './Onboarding.jsx';
 import ComposerV2 from './ComposerV2.jsx';
+import GraphRuntimeRunnerPage from './GraphRuntimeRunnerPage.jsx';
 import {
   archiveProtocol,
   createNextGraphProtocolVersion,
   createProtocolGraph,
+  createCoreComponentRegistry,
   duplicateGraphProtocolAsProject,
   isGraphProtocol,
   projectIdOf,
@@ -26,6 +28,7 @@ import {
   protocolNameOf,
   protocolStatusOf,
   renameProtocol,
+  validateProtocolGraph,
 } from './core/index.js';
 
 // Lazy-loaded for code splitting
@@ -388,6 +391,10 @@ export default function App() {
           onSave={handleSave}
           onBack={handleBackFromBuilder}
           onExport={() => saveFile(`${protocolNameOf(current)}.protocol-graph.json`, JSON.stringify(current, null, 2))}
+          onPreview={() => {
+            const check = validateProtocolGraph(current, createCoreComponentRegistry());
+            if (check.valid) { setRun(current); setView('setup'); }
+          }}
           onUndo={undo}
           onRedo={redo}
           canUndo={undoStack.length > 0}
@@ -492,7 +499,8 @@ export default function App() {
   }
 
   if (view === 'setup' && run) {
-    return <SessionSetup
+    const SetupComponent = isGraphProtocol(run) ? GraphSessionSetup : SessionSetup;
+    return <SetupComponent
       protocol={run}
       onBack={() => setView(run.status === 'frozen' ? 'home' : 'builder')}
       onStart={session => { setRun({ protocol: run, session }); setView('runner'); }}
@@ -506,7 +514,8 @@ export default function App() {
   }
 
   if (view === 'runner' && run?.protocol) {
-    return <RunnerPage data={run} onDone={() => { setRecoverable(null); setView('home'); }} />;
+    const RunnerComponent = isGraphProtocol(run.protocol) ? GraphRuntimeRunnerPage : RunnerPage;
+    return <RunnerComponent data={run} onDone={() => { setRecoverable(null); setView('home'); }} />;
   }
 
   if (view === 'analytics') {
@@ -1009,6 +1018,46 @@ function ResumeBanner({ snapshot, onResume, onDiscard }) {
     <button className="primary" onClick={onResume}>Resume experiment</button>
     <button onClick={onDiscard}>Discard</button>
   </div>;
+}
+
+function GraphSessionSetup({ protocol: p, onBack, onStart, storageInfo, onChooseDataDirectory, onGuide, guideOpen, guideTab, onCloseGuide }) {
+  const { language } = useLanguage();
+  const [participant, setParticipant] = useState('');
+  const [operator, setOperator] = useState('');
+  const [participantLanguage, setParticipantLanguage] = useState(language);
+  const isFormal = protocolStatusOf(p) === 'frozen';
+  const storageBlocked = isFormal && !storageInfo?.selected;
+  const check = validateProtocolGraph(p, createCoreComponentRegistry());
+
+  return <main><Header onGuide={onGuide} /><div className="narrow">
+    <button onClick={onBack}>← Protocol</button>
+    <span className="eyebrow">RUNTIME V2 SESSION SETUP</span>
+    <h1>{protocolNameOf(p)}</h1>
+    <p>Bind this run to an anonymous participant and the exact Protocol Graph version.</p>
+    <label htmlFor="participant-id">Participant ID<input id="participant-id" autoFocus value={participant} onChange={event => setParticipant(event.target.value)} placeholder="P001" /></label>
+    <label htmlFor="participant-lang">Participant language<select id="participant-lang" value={participantLanguage} onChange={event => setParticipantLanguage(event.target.value)}><option value="zh">中文</option><option value="ja">日本語</option><option value="en">English</option></select></label>
+    <label htmlFor="operator-id">Operator ID<input id="operator-id" value={operator} onChange={event => setOperator(event.target.value)} placeholder="optional" /></label>
+    <div className={`setup-note ${check.valid ? 'ok' : 'error'}`}><b>Protocol Graph validation</b><p>{check.valid ? `${p.graph.nodes.length} nodes · ${p.graph.edges.length} connections · ready to preview` : check.errors.slice(0, 3).map(error => error.message).join(' ')}</p></div>
+    <div className={`setup-note storage-gate ${storageBlocked ? 'blocked' : storageInfo?.selected ? 'ready' : 'preview'}`}>
+      <b>{storageBlocked ? 'Local data folder required' : storageInfo?.selected ? `Local data folder: ${storageInfo.name || 'selected'}` : 'Preview storage'}</b>
+      <p>{storageBlocked ? 'Select a local data folder before formal collection.' : 'Runtime state, raw events, and responses are saved throughout the session.'}</p>
+      {storageBlocked && onChooseDataDirectory && <button onClick={onChooseDataDirectory}>Select local data folder</button>}
+    </div>
+    <button className="primary wide" disabled={!participant.trim() || storageBlocked || !check.valid} onClick={() => onStart({
+      session_id: crypto.randomUUID(),
+      participant_id: participant.trim(),
+      operator_id: operator.trim(),
+      participant_language: participantLanguage,
+      protocol_id: protocolIdOf(p),
+      protocol_version: p.version.number,
+      protocol_hash: p.freeze?.configHash || '',
+      protocol_name: protocolNameOf(p),
+      run_mode: isFormal ? 'formal' : 'preview',
+      status: 'ready',
+      started_at: new Date().toISOString(),
+      ended_at: null,
+    })}>Start session</button>
+  </div>{guideOpen && <Suspense fallback={null}><GuidePanel initialTab={guideTab} onClose={onCloseGuide} /></Suspense>}</main>;
 }
 
 function SessionSetup({ protocol: p, onBack, onStart, storageInfo, onChooseDataDirectory, onGuide, guideOpen, guideTab, onCloseGuide }) {

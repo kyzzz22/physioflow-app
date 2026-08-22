@@ -11,6 +11,7 @@ import {
   updateNode,
   validateProtocolGraph,
 } from './core/index.js';
+import ParticipantUiBuilder from './ParticipantUiBuilder.jsx';
 
 const registry = createCoreComponentRegistry();
 const NODE_WIDTH = 188;
@@ -47,7 +48,7 @@ function edgePath(source, target) {
   return `M ${source.x} ${source.y} C ${source.x + bend} ${source.y}, ${target.x - bend} ${target.y}, ${target.x} ${target.y}`;
 }
 
-export default function ComposerV2({ protocol, onChange, onSave, onBack, onExport, onUndo, onRedo, canUndo, canRedo, hasUnsaved, saveAnim }) {
+export default function ComposerV2({ protocol, onChange, onSave, onBack, onExport, onPreview, onUndo, onRedo, canUndo, canRedo, hasUnsaved, saveAnim }) {
   const [selectedNodeId, setSelectedNodeId] = useState(protocol.graph.entryNodeId);
   const [selectedEdgeId, setSelectedEdgeId] = useState(null);
   const [pendingPort, setPendingPort] = useState(null);
@@ -147,6 +148,7 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
       <div className="header-tools">
         <button disabled={!canUndo} onClick={onUndo}>↩ Undo</button>
         <button disabled={!canRedo} onClick={onRedo}>↪ Redo</button>
+        <button disabled={!validation.valid} onClick={onPreview}>Preview run</button>
         <button onClick={onExport}>Export</button>
         <button className={saveAnim ? 'saved' : ''} onClick={() => onSave(protocol)}>{saveAnim ? '✓ Saved' : 'Save'}</button>
         <button onClick={onBack}>← Projects</button>
@@ -224,6 +226,7 @@ function NodeInspector({ node, definition, onUpdate }) {
               : <input type={field.type} min={field.min} value={value ?? ''} onChange={event => change(event.target.value)} />}
       </label>;
     })}
+    {node.component.type === 'display.screen' && <ParticipantUiBuilder schema={node.config.ui} onChange={ui => onUpdate({ config: { ...node.config, ui } })} />}
     <details><summary>Node ID</summary><code>{node.id}</code></details>
   </div>;
 }
