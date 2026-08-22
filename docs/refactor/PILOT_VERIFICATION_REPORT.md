@@ -45,6 +45,7 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 - Control handler behavior: tests cover trusted versioned registration, deterministic routing, deeply frozen cloned context, synchronous-only execution, event allow-lists and undeclared branch rejection.
 - Usability evidence behavior: tests cover complete passing cohorts as well as insufficient participants, failed thresholds, unresolved data-integrity defects, and missing sign-offs.
 - Browser release behavior: `npm run test:e2e` and `npm run test:e2e:refactor-browser` pass locally and `.github/workflows/refactor-quality.yml` runs both after the full quality gate on pushes and pull requests.
+- Unified release behavior: `npm run quality:release` is the single entry point used locally and by GitHub Actions, so tests, build, strict lint and both browser gates cannot drift into different release definitions.
 
 ## Known transition scope
 

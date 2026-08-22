@@ -1,6 +1,6 @@
 # Refactor Release Checklist
 
-- [x] `npm run quality:refactor` passes.
+- [x] `npm run quality:release` passes as the single automated release gate.
 - [x] Lint completes with zero errors and zero warnings.
 - [x] Composer V2 can create, edit, connect, validate, save, reopen, duplicate, version, archive, import, and export a graph protocol.
 - [x] Instruction, Media, and Form participant interfaces render without custom code.

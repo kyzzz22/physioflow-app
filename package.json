@@ -20,7 +20,8 @@
     "validate:graph-export": "node scripts/validate-graph-export.mjs",
     "verify:usability-study": "node scripts/verify-usability-study.mjs",
     "migrate:v1": "node scripts/migrate-protocol-v1.mjs",
-    "quality:refactor": "npm test && npm run build && npm run lint"
+    "quality:refactor": "npm test && npm run build && npm run lint -- --max-warnings=0",
+    "quality:release": "npm run quality:refactor && npm run test:e2e && npm run test:e2e:refactor-browser"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
