@@ -1,5 +1,6 @@
 export { evaluateExpression, resolveBinding } from './expression.js';
 export { createRuntimeEvent, RUNTIME_EVENT_SCHEMA_VERSION } from './eventEnvelope.js';
+export { createRuntimeReplay, reduceRuntimeEvent, replayRuntimeToSequence } from './replayRuntime.js';
 export {
   completeCurrentNode,
   createRuntimeState,

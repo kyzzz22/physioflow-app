@@ -9,6 +9,7 @@ import {
 } from '../src/core/index.js';
 import {
   completeCurrentNode,
+  createRuntimeReplay,
   createRuntimeState,
   pauseRuntime,
   recordRuntimeEvent,
@@ -75,6 +76,30 @@ test('runtime executes a linear graph with deterministic event envelopes', () =>
   assert.equal(completed.state.status, 'completed');
   assert.deepEqual(completed.events.map(event => event.eventType), ['component_completed', 'protocol_completed']);
   assert.equal(completed.state.outputs.screen_1.acknowledged, true);
+});
+
+test('event replay reconstructs runtime variables, outputs and final state', () => {
+  const protocol = linearProtocol();
+  protocol.variables = [{ name: 'score', type: 'number', scope: 'session', defaultValue: 0 }];
+  const registry = createCoreComponentRegistry();
+  const svc = services();
+  const started = startRuntime(runtimeFor(protocol), protocol, registry, svc);
+  const completed = completeCurrentNode(started.state, protocol, registry, svc, { outputs: { score: 7 }, variables: { score: 7 } });
+  const replay = createRuntimeReplay(protocol, [...started.events, ...completed.events]);
+
+  assert.equal(replay.frames.length, 5);
+  assert.equal(replay.frames[2].state.currentNodeId, 'screen_1');
+  assert.equal(replay.finalState.status, completed.state.status);
+  assert.equal(replay.finalState.currentNodeId, completed.state.currentNodeId);
+  assert.deepEqual(replay.finalState.variables, completed.state.variables);
+  assert.deepEqual(replay.finalState.outputs, completed.state.outputs);
+  assert.deepEqual(replay.finalState.completedNodeIds, completed.state.completedNodeIds);
+});
+
+test('event replay rejects sequence gaps instead of inventing state', () => {
+  const protocol = linearProtocol();
+  const started = startRuntime(runtimeFor(protocol), protocol, createCoreComponentRegistry(), services());
+  assert.throws(() => createRuntimeReplay(protocol, [started.events[1]]), /expected 1, found 2/);
 });
 
 test('a registered participant component runs without a runtime type branch', () => {

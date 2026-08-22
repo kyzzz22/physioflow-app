@@ -217,6 +217,22 @@
   font-size: .62rem;
 }
 
+.runtime-replay { margin-bottom: 1.2rem; padding: 14px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+.runtime-replay-head { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+.runtime-replay h3, .runtime-replay p { margin: 0 0 5px; }
+.runtime-replay-head p { color: #556058; font-size: .7rem; }
+.runtime-replay > input { width: 100%; accent-color: var(--green, #3b7656); }
+.runtime-replay-controls { display: flex; justify-content: space-between; margin: 4px 0 10px; }
+.runtime-replay-state { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.runtime-replay-state > div { min-width: 0; padding: 7px; border-radius: 6px; background: #f7faf8; }
+.runtime-replay-state small, .runtime-replay-state b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.runtime-replay-state small { color: #65736a; font-size: .58rem; }
+.runtime-replay-state b { margin-top: 2px; font-size: .68rem; }
+.runtime-replay-decision { margin-top: 9px !important; font-size: .68rem; }
+.runtime-replay details { margin-top: 6px; font-size: .68rem; }
+.runtime-replay pre { max-height: 180px; overflow: auto; padding: 8px; border-radius: 6px; background: #101a15; color: #dce9e1; font-size: .62rem; }
+.runtime-replay-error { color: #a6362e; }
+
 .session-detail > label {
   display: grid; gap: .3rem;
   margin: .8rem 0; font-size: .72rem; font-weight: 700;
@@ -258,6 +274,9 @@
   background: #16201b;
   border-color: #314039;
 }
+.dark-mode .runtime-replay { background: #16201b; border-color: #314039; }
+.dark-mode .runtime-replay-head p { color: var(--muted); }
+.dark-mode .runtime-replay-state > div { background: #101a15; }
 .dark-mode .session-export-note p {
   color: var(--muted);
 }
@@ -283,6 +302,7 @@
   .session-manager-body { grid-template-columns: 1fr; }
   .session-manager-body > aside { max-height: 210px; }
   .session-detail-title { display: block; }
+  .runtime-replay-state { grid-template-columns: repeat(2, 1fr); }
   .session-export-note { grid-template-columns: 1fr; }
   .session-export-files { justify-content: flex-start; }
 }

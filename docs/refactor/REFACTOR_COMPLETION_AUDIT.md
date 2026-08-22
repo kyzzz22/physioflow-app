@@ -21,6 +21,7 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 | Performance targets | Enforced 500-node validation/edit (<2 s) and 10,000-event export (<3 s) tests |
 | Participant UI composition | Screen/Layout/Text/Media/Input/Button/Progress tree, bindings, actions, templates, preview and shared runtime renderer |
 | Deterministic execution | Injected IDs/clocks, sequence, conditions, bounded loops, pause/resume, retry/skip, snapshots and restore |
+| Runtime replay and state debugger | Pure event reducer reconstructs variables, outputs, attempts, loops, branches and terminal status; Session Review provides a sequence timeline and state/payload inspection |
 | Reproducible formal versions | Pre-freeze validation, migration review gate, config hash, immutable frozen record, new-version editing |
 | Complete session data | Raw events/responses, normalized CSV, snapshots, manifest, dictionary, quality report and independent validator |
 | Legacy migration | Copy-and-convert workflow, original payload preservation, report/review gate, CLI/in-app paths, representative coverage tests |
@@ -32,10 +33,9 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 | Reusable subflow instances | Partial | Boundary and parameter contracts are implemented; parameter-to-variable mapping, reusable instance semantics and migration still require implementation |
 | Extensible custom control handlers | Partial | Safe handler registration beyond the built-in start/end/condition/loop/random control kinds |
 | Component SDK and project component library | Stage 7 | Versioned SDK contract, sandbox/permissions, example external component |
-| Runtime variable debugger and replay UI | Stage 7 | Event-driven replay reaches the same state/branch and is usable from session review |
 | External device connectors | Stage 7 | Storage/I/O ports, permission model, failure/recovery and provenance events |
 | Automated browser E2E in release gate | Partial | Current CDP suite covers legacy workflows; Composer V2 has deterministic domain E2E plus manual browser evidence, but still needs self-hosted browser CI |
 | Formal usability study | Requires human participants | Timed novice/expert tasks and sign-off against the plan metrics |
 | Remote upload | Locally blocked | GitHub HTTPS/SSH authentication and remote branch verification |
 
-The next implementation order is: runtime debugger/replay, reusable subflow instance semantics, component SDK/library, then external-device connectors and self-hosted browser CI. Human usability evidence and authenticated remote upload require external state beyond source changes.
+The next implementation order is: reusable subflow instance semantics, component SDK/library, then external-device connectors and self-hosted browser CI. Human usability evidence and authenticated remote upload require external state beyond source changes.

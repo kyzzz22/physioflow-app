@@ -4,6 +4,8 @@ import { deleteSession, loadSession, loadSessions, saveSession } from './storage
 import { AlertDialog, PromptDialog } from './Modal.jsx';
 import GuidePanel from './GuidePanel.jsx';
 import { OUTPUT_FILES } from './constants.js';
+import { isGraphProtocol } from './core/protocolSelectors.js';
+import { createRuntimeReplay } from './runtime/replayRuntime.js';
 
 export default function SessionManager() {
   const [open, setOpen] = useState(false);
@@ -171,6 +173,7 @@ export default function SessionManager() {
 
 function SessionDetail({ detail, setDetail, onSave, onExport, onExportSimple, onDelete }) {
   const integrity = detail.integrity || {};
+  const graphSession = isGraphProtocol(detail.protocol_snapshot);
   return <div className="session-detail">
     <div className="session-detail-title">
       <div>
@@ -184,7 +187,7 @@ function SessionDetail({ detail, setDetail, onSave, onExport, onExportSimple, on
     <div className="session-metrics">
       <div><b>{detail.events?.length || 0}</b><span>events</span></div>
       <div><b>{detail.responses?.length || 0}</b><span>responses</span></div>
-      <div><b>{detail.runtime_snapshot?.completed_steps?.length || 0}</b><span>completed Steps</span></div>
+      <div><b>{graphSession ? detail.runtime_snapshot?.completedNodeIds?.length || 0 : detail.runtime_snapshot?.completed_steps?.length || 0}</b><span>completed Steps</span></div>
     </div>
     <div className="integrity-list">
       <h3>Automatic integrity check</h3>
@@ -202,6 +205,7 @@ function SessionDetail({ detail, setDetail, onSave, onExport, onExportSimple, on
         <code>+{Math.max(0, OUTPUT_FILES.length - 6)} more</code>
       </div>
     </div>
+    {graphSession && <RuntimeReplayPanel protocol={detail.protocol_snapshot} events={detail.events || []} />}
     <label htmlFor="researcher-validity">Researcher validity
       <select id="researcher-validity" value={detail.researcher_validity || 'unreviewed'} onChange={e => setDetail({ ...detail, researcher_validity: e.target.value })}>
         <option value="unreviewed">Unreviewed</option>
@@ -220,5 +224,34 @@ function SessionDetail({ detail, setDetail, onSave, onExport, onExportSimple, on
       <small style={{ display: 'block', marginBottom: '.5rem', color: '#7b867f' }}>Danger zone</small>
       <button className="danger" onClick={onDelete}>Delete Session</button>
     </div>
+  </div>;
+}
+
+function RuntimeReplayPanel({ protocol, events }) {
+  const [sequence, setSequence] = useState(events.length);
+  const replay = useMemo(() => {
+    try { return { value: createRuntimeReplay(protocol, events), error: null }; }
+    catch (error) { return { value: null, error: error.message }; }
+  }, [events, protocol]);
+  useEffect(() => { setSequence(events.length); }, [events.length]);
+  if (replay.error) return <div className="runtime-replay runtime-replay-error"><h3>Runtime replay</h3><p>{replay.error}</p></div>;
+  const frames = replay.value.frames;
+  const frame = frames[Math.max(0, Math.min(sequence, frames.length - 1))];
+  const node = protocol.graph.nodes.find(item => item.id === (frame.state.currentNodeId || frame.event?.nodeId));
+  const decision = frame.state.decisions.at(-1);
+  return <div className="runtime-replay">
+    <div className="runtime-replay-head"><div><h3>Runtime replay</h3><p>Inspect the reconstructed state after any immutable event.</p></div><b>{frame.sequence}/{events.length}</b></div>
+    <input aria-label="Replay event sequence" type="range" min="0" max={events.length} value={frame.sequence} onChange={event => setSequence(Number(event.target.value))} />
+    <div className="runtime-replay-controls"><button disabled={frame.sequence === 0} onClick={() => setSequence(value => Math.max(0, value - 1))}>Previous</button><button disabled={frame.sequence === events.length} onClick={() => setSequence(value => Math.min(events.length, value + 1))}>Next</button></div>
+    <div className="runtime-replay-state">
+      <div><small>Status</small><b>{frame.state.status}</b></div>
+      <div><small>Event</small><b>{frame.event?.eventType || 'initial state'}</b></div>
+      <div><small>Node</small><b>{node?.label || frame.event?.nodeId || '—'}</b></div>
+      <div><small>Elapsed</small><b>{frame.event ? `${Math.round(frame.event.elapsedMonotonicMs)} ms` : '—'}</b></div>
+    </div>
+    {decision && <p className="runtime-replay-decision">Latest branch: <code>{decision.kind}</code> at <code>{protocol.graph.nodes.find(item => item.id === decision.nodeId)?.label || decision.nodeId}</code> → <b>{decision.selectedPort}</b></p>}
+    <details><summary>Variables ({Object.keys(frame.state.variables).length})</summary><pre>{JSON.stringify(frame.state.variables, null, 2)}</pre></details>
+    <details><summary>Outputs ({Object.keys(frame.state.outputs).length} nodes)</summary><pre>{JSON.stringify(frame.state.outputs, null, 2)}</pre></details>
+    {frame.event && <details><summary>Event payload</summary><pre>{JSON.stringify(frame.event.payload, null, 2)}</pre></details>}
   </div>;
 }

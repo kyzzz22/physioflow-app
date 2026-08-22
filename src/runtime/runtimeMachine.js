@@ -205,7 +205,8 @@ export function completeCurrentNode(runtime, protocol, registry, services, resul
   const node = nodeMap(protocol).get(runtime.currentNodeId);
   if (!node) return failRuntime(runtime, protocol, services, `Node ${runtime.currentNodeId} does not exist`, null, []);
   const outputs = structuredClone(result.outputs || {});
-  const variables = { ...runtime.variables, ...structuredClone(result.variables || {}) };
+  const variableChanges = structuredClone(result.variables || {});
+  const variables = { ...runtime.variables, ...variableChanges };
   let state = {
     ...runtime,
     variables,
@@ -214,7 +215,7 @@ export function completeCurrentNode(runtime, protocol, registry, services, resul
   };
   const emitted = appendEvent(state, protocol, 'component_completed', services, {
     node,
-    payload: { attempt: state.attempts[node.id], outputs, metadata: structuredClone(result.metadata || {}) },
+    payload: { attempt: state.attempts[node.id], outputs, variables: variableChanges, metadata: structuredClone(result.metadata || {}) },
   });
   state = emitted.state;
   let target;
