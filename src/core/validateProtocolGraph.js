@@ -96,6 +96,20 @@ export function validateProtocolGraph(protocol, registry) {
       if (groupedNodes.has(nodeId)) errors.push(issue('group.node_multiple', `Node ${nodeId} belongs to multiple groups`, `${path}.nodeIds`, { nodeId }));
       else groupedNodes.set(nodeId, group.id);
     }
+    if (!['container', 'subflow'].includes(group?.kind || 'container')) errors.push(issue('group.kind_invalid', `Group ${group?.name || group?.id} has an invalid kind`, `${path}.kind`));
+    if (group?.kind === 'subflow') {
+      if (!group.entryNodeId || !group.nodeIds?.includes(group.entryNodeId)) errors.push(issue('subflow.entry_invalid', `Subflow ${group.name} needs one entry node from its members`, `${path}.entryNodeId`));
+      if (!(group.exitNodeIds || []).length || group.exitNodeIds.some(nodeId => !group.nodeIds?.includes(nodeId))) errors.push(issue('subflow.exit_invalid', `Subflow ${group.name} needs at least one member exit node`, `${path}.exitNodeIds`));
+      const parameterNames = new Set();
+      for (const [parameterIndex, parameter] of (group.parameters || []).entries()) {
+        const parameterPath = `${path}.parameters.${parameterIndex}`;
+        if (!parameter?.name?.match(/^[A-Za-z_][A-Za-z0-9_]*$/)) errors.push(issue('subflow.parameter_name_invalid', 'Subflow parameter needs a valid name', `${parameterPath}.name`));
+        else if (parameterNames.has(parameter.name)) errors.push(issue('subflow.parameter_name_duplicate', `Duplicate subflow parameter ${parameter.name}`, `${parameterPath}.name`));
+        else parameterNames.add(parameter.name);
+        if (!VARIABLE_TYPES.has(parameter?.type)) errors.push(issue('subflow.parameter_type_invalid', `Invalid subflow parameter type ${parameter?.type}`, `${parameterPath}.type`));
+        if (!['input', 'output'].includes(parameter?.direction)) errors.push(issue('subflow.parameter_direction_invalid', `Invalid subflow parameter direction ${parameter?.direction}`, `${parameterPath}.direction`));
+      }
+    }
   }
 
   for (const node of nodes) {

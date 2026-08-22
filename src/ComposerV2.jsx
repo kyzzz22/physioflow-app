@@ -209,7 +209,7 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
           try { commit(removeVariable(protocol, name)); }
           catch (error) { setMessage(error.message); }
         }} />}
-        {editorMode !== 'quick' && <GroupCatalog groups={protocol.graph.groups || []} locked={locked} onUpdate={(groupId, changes) => commit(updateNodeGroup(protocol, groupId, changes))} onRemove={groupId => commit(removeNodeGroup(protocol, groupId))} />}
+        {editorMode !== 'quick' && <GroupCatalog groups={protocol.graph.groups || []} nodes={protocol.graph.nodes} locked={locked} onUpdate={(groupId, changes) => commit(updateNodeGroup(protocol, groupId, changes))} onRemove={groupId => commit(removeNodeGroup(protocol, groupId))} />}
       </aside>
       <section className="composer-canvas-wrap">
         <div className="composer-canvas-toolbar">
@@ -299,14 +299,29 @@ function NodeInspector({ node, definition, variables, groups, mode, onUpdate, on
   </div>;
 }
 
-function GroupCatalog({ groups, locked, onUpdate, onRemove }) {
+function GroupCatalog({ groups, nodes, locked, onUpdate, onRemove }) {
   return <section className="group-catalog">
     <h3>Groups</h3>
     <p>Visual containers organize related nodes without creating a second execution model.</p>
     {!groups.length && <small>No groups yet. Select a node and create one from its Inspector.</small>}
     {groups.map(group => <article key={group.id}>
       <input disabled={locked} aria-label={`${group.name} group name`} value={group.name} onChange={event => onUpdate(group.id, { name: event.target.value })} />
+      <select disabled={locked} aria-label={`${group.name} group kind`} value={group.kind || 'container'} onChange={event => {
+        const kind = event.target.value;
+        onUpdate(group.id, kind === 'subflow' ? { kind, entryNodeId: group.entryNodeId || group.nodeIds[0], exitNodeIds: group.exitNodeIds?.length ? group.exitNodeIds : [group.nodeIds.at(-1)] } : { kind, entryNodeId: null, exitNodeIds: [] });
+      }}><option value="container">container</option><option value="subflow">subflow</option></select>
       <small>{group.nodeIds.length} node(s) · {group.kind}</small>
+      {group.kind === 'subflow' && <div className="subflow-settings">
+        <label>Entry<select disabled={locked} aria-label={`${group.name} subflow entry`} value={group.entryNodeId || ''} onChange={event => onUpdate(group.id, { entryNodeId: event.target.value })}>{group.nodeIds.map(nodeId => <option key={nodeId} value={nodeId}>{nodes.find(node => node.id === nodeId)?.label || nodeId}</option>)}</select></label>
+        <fieldset className="subflow-exits"><legend>Exits</legend>{group.nodeIds.map(nodeId => <label key={nodeId}><input disabled={locked} type="checkbox" checked={(group.exitNodeIds || []).includes(nodeId)} onChange={event => onUpdate(group.id, { exitNodeIds: event.target.checked ? [...(group.exitNodeIds || []), nodeId] : (group.exitNodeIds || []).filter(id => id !== nodeId) })} />{nodes.find(node => node.id === nodeId)?.label || nodeId}</label>)}</fieldset>
+        {(group.parameters || []).map((parameter, index) => <div className="subflow-parameter" key={index}>
+          <input disabled={locked} aria-label={`${group.name} parameter ${index + 1} name`} value={parameter.name} onChange={event => onUpdate(group.id, { parameters: group.parameters.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item) })} />
+          <select disabled={locked} aria-label={`${group.name} parameter ${index + 1} type`} value={parameter.type} onChange={event => onUpdate(group.id, { parameters: group.parameters.map((item, itemIndex) => itemIndex === index ? { ...item, type: event.target.value } : item) })}>{['string', 'number', 'boolean', 'enum', 'object', 'array', 'unknown'].map(type => <option key={type}>{type}</option>)}</select>
+          <select disabled={locked} aria-label={`${group.name} parameter ${index + 1} direction`} value={parameter.direction} onChange={event => onUpdate(group.id, { parameters: group.parameters.map((item, itemIndex) => itemIndex === index ? { ...item, direction: event.target.value } : item) })}><option value="input">input</option><option value="output">output</option></select>
+          <button disabled={locked} aria-label={`Delete parameter ${parameter.name}`} onClick={() => onUpdate(group.id, { parameters: group.parameters.filter((_, itemIndex) => itemIndex !== index) })}>×</button>
+        </div>)}
+        <button disabled={locked} onClick={() => onUpdate(group.id, { parameters: [...(group.parameters || []), { name: `parameter_${(group.parameters || []).length + 1}`, type: 'string', direction: 'input' }] })}>Add parameter</button>
+      </div>}
       <button disabled={locked} aria-label={`Delete group ${group.name}`} onClick={() => onRemove(group.id)}>×</button>
     </article>)}
   </section>;

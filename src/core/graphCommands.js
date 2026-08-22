@@ -35,7 +35,12 @@ export function removeNode(protocol, nodeId, options = {}) {
   const next = cloneProtocol(protocol);
   next.graph.nodes = next.graph.nodes.filter(item => item.id !== nodeId);
   next.graph.edges = next.graph.edges.filter(edge => edge.source.nodeId !== nodeId && edge.target.nodeId !== nodeId);
-  next.graph.groups = (next.graph.groups || []).map(group => ({ ...group, nodeIds: group.nodeIds.filter(id => id !== nodeId) }));
+  next.graph.groups = (next.graph.groups || []).map(group => ({
+    ...group,
+    nodeIds: group.nodeIds.filter(id => id !== nodeId),
+    entryNodeId: group.entryNodeId === nodeId ? null : group.entryNodeId,
+    exitNodeIds: (group.exitNodeIds || []).filter(id => id !== nodeId),
+  }));
   return touch(next, options.now);
 }
 

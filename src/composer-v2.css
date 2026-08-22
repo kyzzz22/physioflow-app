@@ -88,9 +88,18 @@
 .variable-create button { padding: 6px; border: 1px solid #6c63ff; border-radius: 6px; background: #6c63ff12; color: #5249d7; }
 .group-catalog { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border, #dfe3e8); }
 .group-catalog > p, .group-catalog > small { color: var(--muted, #667085); font-size: .68rem; line-height: 1.4; }
-.group-catalog article { display: grid; grid-template-columns: 1fr 24px; gap: 4px; margin: 7px 0; padding: 7px; border: 1px solid var(--border, #dfe3e8); border-radius: 7px; }
-.group-catalog article input { min-width: 0; padding: 5px; border: 1px solid var(--border, #dfe3e8); border-radius: 5px; background: var(--surface, #fff); color: inherit; font-size: .65rem; }
-.group-catalog article small { grid-column: 1; color: var(--muted, #667085); }
-.group-catalog article button { grid-column: 2; grid-row: 1 / 3; border: 0; background: transparent; color: #a32e25; }
+.group-catalog article { display: grid; grid-template-columns: minmax(0, 1fr) 84px 24px; gap: 4px; margin: 7px 0; padding: 7px; border: 1px solid var(--border, #dfe3e8); border-radius: 7px; }
+.group-catalog article input, .group-catalog article select { min-width: 0; padding: 5px; border: 1px solid var(--border, #dfe3e8); border-radius: 5px; background: var(--surface, #fff); color: inherit; font-size: .65rem; }
+.group-catalog article small { grid-column: 1 / 3; color: var(--muted, #667085); }
+.group-catalog article > button { grid-column: 3; grid-row: 1 / 3; border: 0; background: transparent; color: #a32e25; }
+.subflow-settings { grid-column: 1 / 4; display: grid; gap: 6px; padding-top: 6px; border-top: 1px solid var(--border, #dfe3e8); }
+.subflow-settings label { display: grid; gap: 3px; color: var(--muted, #667085); font-size: .62rem; }
+.subflow-exits { display: flex; flex-wrap: wrap; gap: 4px 8px; margin: 0; padding: 5px; border: 1px solid var(--border, #dfe3e8); border-radius: 5px; }
+.subflow-exits legend { color: var(--muted, #667085); font-size: .62rem; }
+.subflow-exits label { display: flex; align-items: center; gap: 3px; }
+.subflow-exits input { width: auto; margin: 0; padding: 0; }
+.subflow-settings > button { position: static; grid-column: auto !important; grid-row: auto !important; padding: 5px !important; border: 1px solid #6c63ff !important; border-radius: 5px; color: #5249d7 !important; }
+.subflow-parameter { display: grid; grid-template-columns: 1fr 70px 70px 20px; gap: 3px; }
+.subflow-parameter button { grid-column: 4 !important; grid-row: 1 !important; }
 .composer-v2.locked .composer-palette, .composer-v2.locked .composer-inspector .inspector-card, .composer-v2.locked .composer-node { pointer-events: none; opacity: .72; }
 .migration-review-warning { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; padding: 9px; border: 1px solid #e2ba7b; border-radius: 7px; background: #fff7e8; color: #7a4a00; font-size: .68rem; }

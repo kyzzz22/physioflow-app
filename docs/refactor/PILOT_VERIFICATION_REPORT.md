@@ -11,12 +11,13 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 - Inserted a Rating component, confirmed its editable participant UI tree, selected a value, and submitted it. Runtime V2 completed with 7 contiguous events, 1 response, and 13 export files.
 - Switched between Quick, Design, and Advanced Composer modes; created a typed session variable; bound it to a Condition through the variable picker; and confirmed the unconnected false branch remained a blocking issue.
 - Duplicated a Screen inline and confirmed the graph rewired from 3 nodes / 2 connections to 4 nodes / 3 connections while preserving a valid participant UI configuration.
+- Promoted a persisted node group to a subflow, selected its entry and exit boundaries, added a typed input parameter, and confirmed the controls survived the live Composer update.
 - Migrated the representative Emotion protocol from the Dashboard into Composer V2. The migration produced 22 nodes and 21 edges, preserved all 20 steps, reported 100% native mapping, and kept formal collection behind the explicit migration-review gate.
 - Re-ran the automated release gate after immutable-version, required-port, participant binding/action, lifecycle-event, response-time, and independent export-validator hardening.
 
 ## Acceptance evidence
 
-- Automated tests: 101 passing.
+- Automated tests: 102 passing.
 - Production build: passing.
 - Lint: zero errors; 20 warnings remain only in legacy transition files.
 - Representative migration tests: Emotion, Stroop, and Go/No-Go each meet the native coverage threshold.
@@ -24,6 +25,7 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 - Data behavior: Runtime V2 records contiguous event sequences, value changes, UI actions, response submission, media lifecycle events, response reaction time, snapshots, raw records, normalized tables, manifests, a dictionary, and a quality report.
 - Randomization behavior: Composer exposes both required branches and probability/seed-salt settings; Runtime V2 records a deterministic decision and reproduces it with the same seed.
 - Grouping behavior: created a group from the selected Random split node, confirmed the typed group selector, and verified the canvas container displayed the group name and live node count.
+- Subflow contract behavior: Composer exposes member-only entry/exit selection and typed input/output parameters; validation rejects missing boundaries and malformed parameter contracts.
 - Registry-dispatch regression: after moving participant execution metadata into the component registry, ran a fresh Rating session to completion with 7 events, 1 response, and 13 export files.
 - Automated end-to-end gate: composed a Screen and Rating graph, validated and froze it, ran through snapshot/restore, and verified the completed export and quality report.
 - Performance gate: the 500-node validation/edit fixture and 10,000-event export fixture both pass their enforced thresholds.

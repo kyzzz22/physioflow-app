@@ -19,6 +19,8 @@ export function createNodeGroup(protocol, nodeIds = [], options = {}) {
     name: String(options.name || 'New group').trim() || 'New group',
     kind: options.kind || 'container',
     nodeIds: uniqueNodeIds,
+    entryNodeId: options.entryNodeId || null,
+    exitNodeIds: [...(options.exitNodeIds || [])],
     parameters: structuredClone(options.parameters || []),
     metadata: structuredClone(options.metadata || {}),
   };

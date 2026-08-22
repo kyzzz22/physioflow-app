@@ -219,6 +219,24 @@ test('graph validation rejects missing and multiply grouped nodes', () => {
   assert.ok(check.errors.some(error => error.code === 'group.node_missing'));
 });
 
+test('parameterized subflow boundaries and contracts are validated', () => {
+  const first = addNode(buildGraph(), 'display.screen', { id: 'subflow_entry' }).protocol;
+  const second = addNode(first, 'input.rating', { id: 'subflow_exit' }).protocol;
+  const created = createNodeGroup(second, ['subflow_entry', 'subflow_exit'], {
+    id: 'subflow_1', name: 'Rating subflow', kind: 'subflow', entryNodeId: 'subflow_entry', exitNodeIds: ['subflow_exit'],
+    parameters: [{ name: 'prompt', type: 'string', direction: 'input' }, { name: 'score', type: 'number', direction: 'output' }],
+  });
+  let check = validateProtocolGraph(created.protocol, createCoreComponentRegistry());
+  assert.ok(!check.errors.some(error => error.code.startsWith('subflow.')));
+
+  const invalid = updateNodeGroup(created.protocol, 'subflow_1', { entryNodeId: 'missing', parameters: [{ name: 'bad name', type: 'mystery', direction: 'sideways' }] });
+  check = validateProtocolGraph(invalid, createCoreComponentRegistry());
+  assert.ok(check.errors.some(error => error.code === 'subflow.entry_invalid'));
+  assert.ok(check.errors.some(error => error.code === 'subflow.parameter_name_invalid'));
+  assert.ok(check.errors.some(error => error.code === 'subflow.parameter_type_invalid'));
+  assert.ok(check.errors.some(error => error.code === 'subflow.parameter_direction_invalid'));
+});
+
 test('validation reports unknown components and missing edge endpoints', () => {
   const protocol = buildGraph();
   protocol.graph.nodes.push(createNode('unknown.component', { id: 'node_unknown' }));
