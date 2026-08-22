@@ -12,7 +12,7 @@ The planned MVP refactor phases 0–6 are implemented on the `demo` branch.
 | 5 — Data | Raw JSONL, normalized CSV, snapshots, manifests, data dictionary, quality report, full package download, participant/media/device lifecycle events, reaction times, device provenance, and independently tested validator |
 | 6 — Migration/Pilot | In-app and CLI migration, migration reports, native Questionnaire adapter, review gate, freeze hashes, three representative migration tests, operator guide, and release gate |
 
-Current automated gate: 119 tests pass, production build passes without bundle warnings, and lint reports zero errors and zero warnings.
+Current automated gate: 121 tests pass, production build passes without bundle warnings, and lint reports zero errors and zero warnings.
 
 Composer V2 now includes a typed variable catalog with scope, source, default value, and export policy, plus a variable picker for condition inputs. Variable renames update node and participant-UI bindings atomically; referenced variables cannot be removed accidentally.
 
@@ -39,6 +39,8 @@ The release gate includes two self-hosted browser tests. The legacy compatibilit
 The production bundle now loads Composer V2, the legacy visual workspace, Session Review, Guide, Analytics, and both runtime runners as view-level chunks while keeping the first-screen Dashboard synchronous. This removes the ineffective dynamic-import warning and reduces the initial JavaScript chunk from roughly 749 kB to 489 kB without changing local-first behavior.
 
 Returning from either runtime runner now reloads the saved session index before showing Dashboard. A completed local session is therefore visible immediately instead of appearing only after a full application reload.
+
+Formal usability evidence has a checked-in JSON template and verifier. It enforces two cohorts of at least five participants, all five representative tasks per participant, the 600-second/8-operation/80%-without-help thresholds, resolved critical defects, and designer/operator/data-analyst sign-off. The release remains explicitly incomplete until real participant results pass this verifier.
 
 The final hardening pass makes frozen protocols immutable: editing always creates a new draft protocol version with a distinct ID. Formal validation now checks participant UI completion paths, media sources, durations, rating ranges, migration review, and every required condition/loop control exit before preview or freeze.
 

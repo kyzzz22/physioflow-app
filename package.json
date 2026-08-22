@@ -18,6 +18,7 @@
     "test:e2e:refactor-browser": "node tests/e2e-composer-v2-self-hosted.mjs",
     "test:performance": "node --test tests/performance-gates.test.js",
     "validate:graph-export": "node scripts/validate-graph-export.mjs",
+    "verify:usability-study": "node scripts/verify-usability-study.mjs",
     "migrate:v1": "node scripts/migrate-protocol-v1.mjs",
     "quality:refactor": "npm test && npm run build && npm run lint"
   },

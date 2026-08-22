@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "1.0.0",
+  "appCommit": "replace-with-tested-commit-sha",
+  "environment": {
+    "browser": "replace-with-browser-and-version",
+    "viewport": "1280x800",
+    "observer": "replace-with-observer-code"
+  },
+  "observations": [],
+  "defects": [],
+  "signoffs": {
+    "designer": { "accepted": false, "reviewer": "" },
+    "operator": { "accepted": false, "reviewer": "" },
+    "dataAnalyst": { "accepted": false, "reviewer": "" }
+  }
+}

@@ -34,7 +34,7 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 
 | Item | Status | Acceptance evidence still required |
 | --- | --- | --- |
-| Formal usability study | Requires human participants | Run `USABILITY_STUDY_PROTOCOL.md`: timed novice/experienced tasks and three-role sign-off against the plan metrics |
+| Formal usability study | Requires human participants | Run `USABILITY_STUDY_PROTOCOL.md`; the checked-in verifier must report complete evidence and `passed: true` |
 | Remote upload | Locally blocked | GitHub HTTPS/SSH authentication and remote branch verification |
 
 Hardware-specific adapters can now be added behind the connector port without changing protocol/runtime semantics. Human usability evidence and authenticated remote upload require external state beyond source changes.

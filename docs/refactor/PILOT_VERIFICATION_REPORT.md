@@ -25,7 +25,7 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 
 ## Acceptance evidence
 
-- Automated tests: 119 passing.
+- Automated tests: 121 passing.
 - Production build: passing.
 - Lint: zero errors and zero warnings.
 - Production bundle: no build warnings; view-level loading keeps the initial JavaScript chunk below the configured 500 kB warning threshold.
@@ -43,6 +43,7 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 - Component SDK behavior: tests cover package/schema validation, explicit permission approval, rejection of executable control kinds, uninstall dependency protection, project registry dispatch, runtime execution, and variable-read enforcement.
 - Device connector behavior: tests cover permission-gated installation and I/O, immutable provenance events, typed sample/marker channels, failed connection attempts, successful recovery, and device-event export tables.
 - Control handler behavior: tests cover trusted versioned registration, deterministic routing, deeply frozen cloned context, synchronous-only execution, event allow-lists and undeclared branch rejection.
+- Usability evidence behavior: tests cover complete passing cohorts as well as insufficient participants, failed thresholds, unresolved data-integrity defects, and missing sign-offs.
 - Browser release behavior: `npm run test:e2e` and `npm run test:e2e:refactor-browser` pass locally and `.github/workflows/refactor-quality.yml` runs both after the full quality gate on pushes and pull requests.
 
 ## Known transition scope

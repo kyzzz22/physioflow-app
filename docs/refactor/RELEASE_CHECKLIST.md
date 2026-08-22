@@ -9,5 +9,5 @@
 - [x] Self-hosted legacy and Composer V2 browser gates pass from clean profiles.
 - [x] Complete session package includes all raw, normalized, metadata, dictionary, manifest, and quality files.
 - [x] Emotion, Stroop, and Go/No-Go migrations exceed 90% native mapping and retain every source payload.
-- [ ] A human pilot follows `OPERATOR_PILOT_GUIDE.md` and `USABILITY_STUDY_PROTOCOL.md`, then records acceptance or defects.
+- [ ] A human pilot follows `OPERATOR_PILOT_GUIDE.md` and `USABILITY_STUDY_PROTOCOL.md`; `npm run verify:usability-study -- <results.json>` returns `passed: true`.
 - [x] Legacy protocols remain untouched and readable during the transition period.
