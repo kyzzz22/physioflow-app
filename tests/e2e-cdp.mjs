@@ -21,12 +21,23 @@ if (!chrome) throw new Error('Chrome/Chromium is required; set CHROME_BIN to its
 
 const profileDirectory = mkdtempSync(join(tmpdir(), 'physioflow-legacy-e2e-'));
 const children = [];
-const cleanup = () => {
+const terminateChildren = () => {
   children.forEach(child => { if (!child.killed) child.kill('SIGKILL'); });
+};
+const waitForChildExit = child => {
+  if (child.exitCode != null || child.signalCode != null) return Promise.resolve();
+  return new Promise(resolve => {
+    const timeout = setTimeout(resolve, 5000);
+    child.once('exit', () => { clearTimeout(timeout); resolve(); });
+    if (!child.killed) child.kill('SIGKILL');
+  });
+};
+const cleanup = async () => {
+  await Promise.all(children.map(waitForChildExit));
   rmSync(profileDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 };
-process.on('exit', cleanup);
-process.on('SIGINT', () => { cleanup(); process.exit(130); });
+process.on('exit', terminateChildren);
+process.on('SIGINT', async () => { await cleanup(); process.exit(130); });
 
 async function waitForUrl(url, label, timeout = 15000) {
   const started = Date.now();
@@ -185,7 +196,7 @@ assert.equal(details[0].run_mode, 'preview');
 assert.ok(details[0].events.some(event => event.event_type === 'session_completed'));
 
 socket.close();
-cleanup();
+await cleanup();
 console.log(JSON.stringify({
   status: 'passed',
   formal_gate: 'blocked_without_local_folder',

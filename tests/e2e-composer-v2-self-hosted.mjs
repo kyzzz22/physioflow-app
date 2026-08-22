@@ -21,12 +21,23 @@ if (!chrome) throw new Error('Chrome/Chromium is required; set CHROME_BIN to its
 
 const profileDirectory = mkdtempSync(join(tmpdir(), 'physioflow-e2e-'));
 const children = [];
-const cleanup = () => {
+const terminateChildren = () => {
   children.forEach(child => { if (!child.killed) child.kill('SIGKILL'); });
+};
+const waitForChildExit = child => {
+  if (child.exitCode != null || child.signalCode != null) return Promise.resolve();
+  return new Promise(resolve => {
+    const timeout = setTimeout(resolve, 5000);
+    child.once('exit', () => { clearTimeout(timeout); resolve(); });
+    if (!child.killed) child.kill('SIGKILL');
+  });
+};
+const cleanup = async () => {
+  await Promise.all(children.map(waitForChildExit));
   rmSync(profileDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 };
-process.on('exit', cleanup);
-process.on('SIGINT', () => { cleanup(); process.exit(130); });
+process.on('exit', terminateChildren);
+process.on('SIGINT', async () => { await cleanup(); process.exit(130); });
 
 async function waitForUrl(url, label, timeout = 15000) {
   const started = Date.now();
@@ -127,5 +138,5 @@ try {
   console.log(JSON.stringify({ status: 'passed', composer: 'v2', nodes: 5, reusableSubflow: true, controlHandler: 'core.value-switch@1.0.0', sdkComponent: 'example.reaction-button@1.0.0', deviceConnector: 'org.physioflow.simulated-sensor@1.0.0' }, null, 2));
 } finally {
   socket.close();
-  cleanup();
+  await cleanup();
 }
