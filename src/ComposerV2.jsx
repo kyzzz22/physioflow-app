@@ -1,13 +1,17 @@
 import { useMemo, useRef, useState } from 'react';
 import {
+  addVariable,
   addNode,
   connect,
   createCoreComponentRegistry,
   disconnect,
+  duplicateNode,
   insertNodeOnControlEdge,
   moveNodes,
   protocolNameOf,
+  removeVariable,
   removeNode,
+  updateVariable,
   updateNode,
   validateProtocolGraphConfiguration,
 } from './core/index.js';
@@ -53,6 +57,7 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
   const [selectedEdgeId, setSelectedEdgeId] = useState(null);
   const [pendingPort, setPendingPort] = useState(null);
   const [message, setMessage] = useState('');
+  const [editorMode, setEditorMode] = useState('quick');
   const canvasRef = useRef(null);
   const dragRef = useRef(null);
   const validation = useMemo(() => validateProtocolGraphConfiguration(protocol, registry), [protocol]);
@@ -143,10 +148,30 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
     } catch (error) { setMessage(error.message); }
   };
 
+  const duplicateSelection = () => {
+    if (!selectedNode) return;
+    const definition = registry.get(selectedNode.component.type, selectedNode.component.version);
+    const inputPort = definition?.ports.find(port => port.kind === 'control' && port.direction === 'input');
+    const nextPort = definition?.ports.find(port => port.kind === 'control' && port.direction === 'output' && port.id === 'next');
+    try {
+      const result = duplicateNode(protocol, selectedNode.id, {
+        insertAfter: Boolean(inputPort && nextPort),
+        inputPortId: inputPort?.id,
+        outputPortId: nextPort?.id,
+      });
+      commit(result.protocol);
+      setSelectedNodeId(result.node.id);
+      setMessage(inputPort && nextPort ? 'Node duplicated in the flow' : 'Node duplicated; connect its ports to use it');
+    } catch (error) { setMessage(error.message); }
+  };
+
   return <main className={`composer-v2 ${locked ? 'locked' : ''}`}>
     <header className="composer-header">
       <div className="brand"><span>PF</span> Composer V2 {hasUnsaved && <small className="unsaved-dot">●</small>}</div>
       <input disabled={locked} className="composer-title" aria-label="Protocol name" value={protocolNameOf(protocol)} onChange={event => onChange({ ...protocol, metadata: { ...protocol.metadata, name: event.target.value }, audit: { ...protocol.audit, updatedAt: new Date().toISOString() } }, true)} />
+      <div className="composer-mode-switch" aria-label="Editor mode">
+        {['quick', 'design', 'advanced'].map(mode => <button key={mode} aria-pressed={editorMode === mode} className={editorMode === mode ? 'active' : ''} onClick={() => setEditorMode(mode)}>{mode[0].toUpperCase() + mode.slice(1)}</button>)}
+      </div>
       <div className="header-tools">
         <button disabled={!canUndo} onClick={onUndo}>↩ Undo</button>
         <button disabled={!canRedo} onClick={onRedo}>↪ Redo</button>
@@ -166,6 +191,10 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
           <h3>{category}</h3>
           {definitions.map(definition => <button key={definition.type} onClick={() => addComponent(definition)}><b>{definition.label}</b><small>{definition.type}</small></button>)}
         </section>)}
+        {editorMode !== 'quick' && <VariableCatalog mode={editorMode} variables={protocol.variables || []} locked={locked} onError={error => setMessage(error.message || String(error))} onAdd={variable => commit(addVariable(protocol, variable))} onUpdate={(name, changes) => commit(updateVariable(protocol, name, changes))} onRemove={name => {
+          try { commit(removeVariable(protocol, name)); }
+          catch (error) { setMessage(error.message); }
+        }} />}
       </aside>
       <section className="composer-canvas-wrap">
         <div className="composer-canvas-toolbar">
@@ -200,10 +229,11 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
       <aside className="composer-inspector">
         <h2>Inspector</h2>
         {migrationReviewRequired && <div className="migration-review-warning"><b>Migration review required</b><span>{protocol.legacy.migrationReport.issues.length} item(s) must be checked before this draft can be frozen.</span></div>}
-        {selectedNode && <NodeInspector node={selectedNode} definition={registry.get(selectedNode.component.type, selectedNode.component.version)} onUpdate={updateSelected} />}
+        {selectedNode && <NodeInspector node={selectedNode} definition={registry.get(selectedNode.component.type, selectedNode.component.version)} variables={protocol.variables || []} mode={editorMode} onUpdate={updateSelected} />}
         {selectedEdge && <div className="inspector-card"><b>{selectedEdge.kind} connection</b><code>{selectedEdge.source.portId} → {selectedEdge.target.portId}</code><button className="danger" onClick={deleteSelection}>Delete connection</button></div>}
         {!selectedNode && !selectedEdge && <p>Select a node or connection to configure it.</p>}
-        {selectedNode && selectedNode.component.type !== 'core.start' && <button className="danger" onClick={deleteSelection}>Delete node</button>}
+        {!locked && selectedNode && !['core.start', 'core.end'].includes(selectedNode.component.type) && <button onClick={duplicateSelection}>Duplicate node</button>}
+        {!locked && selectedNode && selectedNode.component.type !== 'core.start' && <button className="danger" onClick={deleteSelection}>Delete node</button>}
         <section className={`composer-validation ${validation.valid ? 'valid' : 'invalid'}`}>
           <h3>{validation.valid ? '✓ Graph valid' : `${validation.errors.length} blocking issues`}</h3>
           {[...validation.errors, ...validation.warnings].slice(0, 8).map((issue, index) => <button key={`${issue.code}-${index}`} onClick={() => issue.nodeId && setSelectedNodeId(issue.nodeId)}><b>{issue.code}</b><span>{issue.message}</span></button>)}
@@ -213,7 +243,7 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
   </main>;
 }
 
-function NodeInspector({ node, definition, onUpdate }) {
+function NodeInspector({ node, definition, variables, mode, onUpdate }) {
   return <div className="inspector-card">
     <label>Label<input value={node.label} onChange={event => onUpdate({ label: event.target.value })} /></label>
     <small>{node.component.type}@{node.component.version}</small>
@@ -231,8 +261,48 @@ function NodeInspector({ node, definition, onUpdate }) {
               : <input type={field.type} min={field.min} value={value ?? ''} onChange={event => change(event.target.value)} />}
       </label>;
     })}
-    {node.config?.ui && <ParticipantUiBuilder schema={node.config.ui} onChange={ui => onUpdate({ config: { ...node.config, ui } })} />}
-    <details className="component-events"><summary>Recorded events ({definition?.events?.length || 0})</summary>{(definition?.events || []).map(eventType => <code key={eventType}>{eventType}</code>)}</details>
-    <details><summary>Node ID</summary><code>{node.id}</code></details>
+    {node.component.type === 'logic.condition' && <label>Input variable<select aria-label="Condition input variable" value={node.bindings?.value?.kind === 'variable' ? node.bindings.value.variable : ''} onChange={event => onUpdate({ bindings: event.target.value ? { ...node.bindings, value: { kind: 'variable', variable: event.target.value } } : Object.fromEntries(Object.entries(node.bindings || {}).filter(([key]) => key !== 'value')) })}>
+      <option value="">Choose a variable…</option>
+      {variables.map(variable => <option key={variable.name} value={variable.name}>{variable.name} · {variable.type} / {variable.scope}</option>)}
+    </select></label>}
+    {mode !== 'quick' && node.config?.ui && <ParticipantUiBuilder schema={node.config.ui} onChange={ui => onUpdate({ config: { ...node.config, ui } })} />}
+    {mode === 'advanced' && <><details className="component-events"><summary>Recorded events ({definition?.events?.length || 0})</summary>{(definition?.events || []).map(eventType => <code key={eventType}>{eventType}</code>)}</details>
+      <details><summary>Node ID</summary><code>{node.id}</code></details><details><summary>Node JSON</summary><pre>{JSON.stringify(node, null, 2)}</pre></details></>}
   </div>;
+}
+
+function VariableCatalog({ variables, locked, mode, onAdd, onUpdate, onRemove, onError }) {
+  const [draft, setDraft] = useState({ name: '', type: 'string', scope: 'session', defaultValue: '' });
+  const submit = () => {
+    let defaultValue = draft.defaultValue;
+    if (draft.type === 'number') defaultValue = draft.defaultValue === '' ? 0 : Number(draft.defaultValue);
+    if (draft.type === 'boolean') defaultValue = draft.defaultValue === 'true';
+    try {
+      onAdd({ ...draft, defaultValue });
+      setDraft({ name: '', type: 'string', scope: 'session', defaultValue: '' });
+    } catch (error) { onError(error); }
+  };
+  return <section className="variable-catalog">
+    <h3>Variables</h3>
+    <p>Typed values available to conditions and participant UI bindings.</p>
+    {variables.map(variable => <article key={variable.name}>
+      <input disabled={locked} aria-label={`${variable.name} variable name`} value={variable.name} onChange={event => {
+        try { onUpdate(variable.name, { name: event.target.value }); } catch { /* keep editing stable until valid */ }
+      }} />
+      <select disabled={locked} aria-label={`${variable.name} variable type`} value={variable.type} onChange={event => { try { onUpdate(variable.name, { type: event.target.value }); } catch (error) { onError(error); } }}>{['string', 'number', 'boolean', 'enum', 'object', 'array', 'unknown'].map(type => <option key={type}>{type}</option>)}</select>
+      <select disabled={locked} aria-label={`${variable.name} variable scope`} value={variable.scope} onChange={event => onUpdate(variable.name, { scope: event.target.value })}>{['session', 'trial', 'component', 'container', 'project'].map(scope => <option key={scope}>{scope}</option>)}</select>
+      {variable.type === 'boolean' ? <select disabled={locked} aria-label={`${variable.name} default value`} value={String(Boolean(variable.defaultValue))} onChange={event => onUpdate(variable.name, { defaultValue: event.target.value === 'true' })}><option value="false">false</option><option value="true">true</option></select>
+        : <input disabled={locked} aria-label={`${variable.name} default value`} value={typeof variable.defaultValue === 'object' ? JSON.stringify(variable.defaultValue) : variable.defaultValue ?? ''} onChange={event => onUpdate(variable.name, { defaultValue: variable.type === 'number' ? Number(event.target.value) : event.target.value })} />}
+      {mode === 'advanced' && <><select disabled={locked} aria-label={`${variable.name} variable source`} value={variable.source || 'manual'} onChange={event => onUpdate(variable.name, { source: event.target.value })}><option value="manual">manual</option><option value="participant">participant</option><option value="component">component</option><option value="computed">computed</option></select>
+        <select disabled={locked} aria-label={`${variable.name} export policy`} value={variable.exportPolicy || 'include'} onChange={event => onUpdate(variable.name, { exportPolicy: event.target.value })}><option value="include">include</option><option value="exclude">exclude</option><option value="hash">hash</option></select></>}
+      <button disabled={locked} aria-label={`Delete variable ${variable.name}`} onClick={() => onRemove(variable.name)}>×</button>
+    </article>)}
+    {!locked && <div className="variable-create">
+      <input aria-label="New variable name" placeholder="variable_name" value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} />
+      <select aria-label="New variable type" value={draft.type} onChange={event => setDraft({ ...draft, type: event.target.value })}>{['string', 'number', 'boolean', 'enum'].map(type => <option key={type}>{type}</option>)}</select>
+      <select aria-label="New variable scope" value={draft.scope} onChange={event => setDraft({ ...draft, scope: event.target.value })}>{['session', 'trial', 'component', 'container', 'project'].map(scope => <option key={scope}>{scope}</option>)}</select>
+      <input aria-label="New variable default" placeholder="Default" value={draft.defaultValue} onChange={event => setDraft({ ...draft, defaultValue: event.target.value })} />
+      <button disabled={!draft.name.trim()} onClick={submit}>Add variable</button>
+    </div>}
+  </section>;
 }

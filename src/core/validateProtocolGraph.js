@@ -97,13 +97,30 @@ export function validateProtocolGraph(protocol, registry) {
   }
 
   const variableNames = new Set();
+  const variableByName = new Map();
   for (const [index, variable] of (protocol.variables || []).entries()) {
     const path = `variables.${index}`;
     if (!variable?.name?.trim()) errors.push(issue('variable.name_missing', 'Variable name is required', `${path}.name`));
     else if (variableNames.has(variable.name)) errors.push(issue('variable.name_duplicate', `Duplicate variable ${variable.name}`, `${path}.name`));
-    else variableNames.add(variable.name);
+    else { variableNames.add(variable.name); variableByName.set(variable.name, variable); }
     if (!VARIABLE_TYPES.has(variable?.type)) errors.push(issue('variable.type_invalid', `Invalid variable type ${variable?.type}`, `${path}.type`));
     if (!VARIABLE_SCOPES.has(variable?.scope)) errors.push(issue('variable.scope_invalid', `Invalid variable scope ${variable?.scope}`, `${path}.scope`));
+  }
+
+  for (const node of nodes) {
+    const definition = registry?.get(node.component?.type, node.component?.version);
+    for (const [portId, binding] of Object.entries(node.bindings || {})) {
+      if (binding?.kind !== 'variable') continue;
+      const variable = variableByName.get(binding.variable);
+      if (!variable) {
+        errors.push(issue('binding.variable_missing', `Binding references undeclared variable ${binding.variable || '(missing)'}`, `graph.nodes.${node.id}.bindings.${portId}`, { nodeId: node.id }));
+        continue;
+      }
+      const port = definition?.ports.find(item => item.id === portId && item.kind === 'data' && item.direction === 'input');
+      if (port && port.dataType !== 'unknown' && variable.type !== 'unknown' && port.dataType !== variable.type) {
+        errors.push(issue('binding.variable_type_mismatch', `Variable ${variable.name} (${variable.type}) cannot bind to ${portId} (${port.dataType})`, `graph.nodes.${node.id}.bindings.${portId}`, { nodeId: node.id }));
+      }
+    }
   }
 
   if (protocol.graph?.entryNodeId && nodeById.has(protocol.graph.entryNodeId)) {

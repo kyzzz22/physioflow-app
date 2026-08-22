@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  addVariable,
   addNode,
   ComponentRegistry,
   connect,
@@ -10,15 +11,18 @@ import {
   createSequentialIdFactory,
   createNextGraphProtocolVersion,
   duplicateGraphProtocolAsProject,
+  duplicateNode,
   freezeProtocolGraph,
   hashProtocolGraph,
   insertNodeOnControlEdge,
   participantUiTemplate,
   removeNode,
+  removeVariable,
   serializeProtocolGraph,
   validateComponentDefinition,
   validateProtocolGraph,
   validateProtocolGraphConfiguration,
+  updateVariable,
 } from '../src/core/index.js';
 import { inspectLegacyProtocolV1, migrateLegacyProtocolV1 } from '../src/legacy/migrateProtocolV1.js';
 
@@ -138,6 +142,42 @@ test('graph commands are immutable and remove attached edges with a node', () =>
   const removed = removeNode(inserted.protocol, inserted.node.id, { now: '2026-08-22T00:00:02.000Z' });
   assert.equal(removed.graph.nodes.length, 2);
   assert.equal(removed.graph.edges.length, 0);
+});
+
+test('inline node duplication preserves config and rewires the linear flow', () => {
+  const source = buildGraph();
+  const inserted = insertNodeOnControlEdge(source, source.graph.edges[0].id, 'display.screen', {
+    idFactory: createSequentialIdFactory(100),
+    config: { ui: participantUiTemplate('instruction'), completion: { mode: 'manual' } },
+  });
+  const duplicated = duplicateNode(inserted.protocol, inserted.node.id, { idFactory: createSequentialIdFactory(200), insertAfter: true });
+  assert.equal(duplicated.protocol.graph.nodes.length, 4);
+  assert.equal(duplicated.protocol.graph.edges.length, 3);
+  assert.notEqual(duplicated.node.id, inserted.node.id);
+  assert.deepEqual(duplicated.node.config, inserted.node.config);
+  const check = validateProtocolGraphConfiguration(duplicated.protocol, createCoreComponentRegistry());
+  assert.equal(check.valid, true, JSON.stringify(check.errors));
+  duplicated.node.config.completion.mode = 'fixed';
+  assert.equal(inserted.node.config.completion.mode, 'manual');
+});
+
+test('typed variable commands rename bindings and protect referenced variables', () => {
+  let protocol = addVariable(buildGraph(), { name: 'score', type: 'number', scope: 'session', defaultValue: 0 }, { now: '2026-08-22T01:00:00.000Z' });
+  const condition = addNode(protocol, 'logic.condition', { id: 'condition_variable', bindings: { value: { kind: 'variable', variable: 'score' } } }).protocol;
+  const screen = addNode(condition, 'display.screen', { id: 'screen_variable', config: { ui: participantUiTemplate('instruction') } }).protocol;
+  screen.graph.nodes.find(node => node.id === 'screen_variable').config.ui.root.children[0].bindings = { text: 'variables.score' };
+
+  protocol = updateVariable(screen, 'score', { name: 'attention_score' }, { now: '2026-08-22T02:00:00.000Z' });
+  assert.equal(protocol.graph.nodes.find(node => node.id === 'condition_variable').bindings.value.variable, 'attention_score');
+  assert.equal(protocol.graph.nodes.find(node => node.id === 'screen_variable').config.ui.root.children[0].bindings.text, 'variables.attention_score');
+  assert.throws(() => removeVariable(protocol, 'attention_score'), /still used/);
+  assert.throws(() => addVariable(protocol, { name: 'attention_score', type: 'number' }), /already exists/);
+});
+
+test('graph validation rejects undeclared variable bindings', () => {
+  const protocol = addNode(buildGraph(), 'logic.condition', { id: 'condition_missing', bindings: { value: { kind: 'variable', variable: 'missing_score' } } }).protocol;
+  const check = validateProtocolGraph(protocol, createCoreComponentRegistry());
+  assert.ok(check.errors.some(error => error.code === 'binding.variable_missing'));
 });
 
 test('validation reports unknown components and missing edge endpoints', () => {

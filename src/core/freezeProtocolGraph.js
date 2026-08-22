@@ -42,6 +42,13 @@ export function validateProtocolGraphConfiguration(protocol, registry) {
       errors.push(...ui.errors.map(issue => ({ ...issue, code: `config.${issue.code}`, path: `${path}.ui.${issue.path}`, nodeId: node.id })));
       warnings.push(...ui.warnings.map(issue => ({ ...issue, code: `config.${issue.code}`, path: `${path}.ui.${issue.path}`, nodeId: node.id })));
       const elements = uiElements(node.config.ui);
+      const variableNames = new Set((protocol.variables || []).map(variable => variable.name));
+      for (const element of elements) {
+        for (const binding of Object.values(element.bindings || {})) {
+          const match = typeof binding === 'string' && binding.match(/^variables\.([A-Za-z_][A-Za-z0-9_]*)$/);
+          if (match && !variableNames.has(match[1])) errors.push({ code: 'config.ui_variable_missing', message: `${node.label} UI references undeclared variable ${match[1]}`, path: `${path}.ui`, nodeId: node.id });
+        }
+      }
       const requiresInput = ['input.rating', 'input.text', 'input.questionnaire'].includes(node.component?.type);
       if (requiresInput && !elements.some(element => element.type === 'Input')) {
         errors.push({ code: 'config.input_missing', message: `${node.label} needs at least one participant input`, path: `${path}.ui`, nodeId: node.id });

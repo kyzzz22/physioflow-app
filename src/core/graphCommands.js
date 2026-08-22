@@ -82,3 +82,32 @@ export function insertNodeOnControlEdge(protocol, edgeId, componentType, options
   next = connect(next, 'control', { nodeId: added.node.id, portId: options.outputPortId || 'next' }, existing.target, options).protocol;
   return { protocol: next, node: added.node };
 }
+
+export function duplicateNode(protocol, nodeId, options = {}) {
+  const source = protocol.graph.nodes.find(node => node.id === nodeId);
+  if (!source) throw new Error(`Node ${nodeId} does not exist`);
+  if (source.component?.type === 'core.start' || source.component?.type === 'core.end') throw new Error('Start and End nodes cannot be duplicated');
+  const idFactory = options.idFactory;
+  const added = addNode(protocol, source.component.type, {
+    id: options.id,
+    idFactory,
+    componentVersion: source.component.version,
+    label: options.label || `${source.label} copy`,
+    config: source.config,
+    bindings: source.bindings,
+    metadata: source.metadata,
+    layout: options.layout || { ...source.layout, x: source.layout.x + 220, y: source.layout.y + 28 },
+    now: options.now,
+  });
+  if (!options.insertAfter) return added;
+  const outputPortId = options.outputPortId || 'next';
+  const inputPortId = options.inputPortId || 'in';
+  const outgoing = protocol.graph.edges.filter(edge => edge.kind === 'control' && edge.source.nodeId === nodeId && edge.source.portId === outputPortId);
+  if (outgoing.length !== 1) throw new Error(`Inline duplication requires exactly one ${outputPortId} connection`);
+  const originalEdge = outgoing[0];
+  const edgeOptions = { idFactory: options.idFactory, now: options.now };
+  let next = disconnect(added.protocol, originalEdge.id, edgeOptions);
+  next = connect(next, 'control', { nodeId, portId: outputPortId }, { nodeId: added.node.id, portId: inputPortId }, edgeOptions).protocol;
+  next = connect(next, 'control', { nodeId: added.node.id, portId: outputPortId }, originalEdge.target, edgeOptions).protocol;
+  return { protocol: next, node: added.node };
+}
