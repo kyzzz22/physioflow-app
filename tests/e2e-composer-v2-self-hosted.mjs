@@ -4,8 +4,8 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const APP_PORT = 4177;
-const DEBUG_PORT = 9223;
+const APP_PORT = Number(process.env.PHYSIOFLOW_E2E_PORT || 10000 + process.pid % 20000);
+const DEBUG_PORT = APP_PORT + 1;
 const appUrl = `http://127.0.0.1:${APP_PORT}`;
 const debugUrl = `http://127.0.0.1:${DEBUG_PORT}`;
 const chromeCandidates = [
@@ -22,7 +22,7 @@ if (!chrome) throw new Error('Chrome/Chromium is required; set CHROME_BIN to its
 const profileDirectory = mkdtempSync(join(tmpdir(), 'physioflow-e2e-'));
 const children = [];
 const cleanup = () => {
-  children.forEach(child => { if (!child.killed) child.kill('SIGTERM'); });
+  children.forEach(child => { if (!child.killed) child.kill('SIGKILL'); });
   rmSync(profileDirectory, { recursive: true, force: true });
 };
 process.on('exit', cleanup);
@@ -111,6 +111,10 @@ try {
   await clickText('Create instance');
   await waitFor(`document.body.textContent.includes('Created Rating group instance')`, 'subflow instance');
   assert.equal(await evaluate(`document.querySelectorAll('.composer-node').length`), 4);
+  await clickText('logic.value-switch');
+  await waitFor(`document.body.textContent.includes('Match value')`, 'Value switch inspector');
+  assert.equal(await evaluate(`[...document.querySelectorAll('.composer-node')].some(node => node.textContent.includes('Value switch'))`), true);
+  assert.equal(await evaluate(`document.body.textContent.includes('Match') && document.body.textContent.includes('Default')`), true);
 
   await clickText('Advanced');
   await clickText('Install Reaction Button example');
@@ -120,7 +124,7 @@ try {
   await waitFor(`document.body.textContent.includes('org.physioflow.simulated-sensor@1.0.0')`, 'device connector installation');
   assert.equal(await evaluate(`document.body.textContent.includes('input signal:number') && document.body.textContent.includes('device.connect, device.read, device.write')`), true);
 
-  console.log(JSON.stringify({ status: 'passed', composer: 'v2', nodes: 4, reusableSubflow: true, sdkComponent: 'example.reaction-button@1.0.0', deviceConnector: 'org.physioflow.simulated-sensor@1.0.0' }, null, 2));
+  console.log(JSON.stringify({ status: 'passed', composer: 'v2', nodes: 5, reusableSubflow: true, controlHandler: 'core.value-switch@1.0.0', sdkComponent: 'example.reaction-button@1.0.0', deviceConnector: 'org.physioflow.simulated-sensor@1.0.0' }, null, 2));
 } finally {
   socket.close();
   cleanup();

@@ -192,6 +192,20 @@ function advanceAutomatic(initialState, protocol, registry, services, startNodeI
         currentNodeId = chooseControlTarget(protocol, node, selectedPort);
         continue;
       }
+      if (runtimeKind === 'handler') {
+        const handlerId = definition.runtime?.handlerId;
+        const handlerVersion = definition.runtime?.handlerVersion || '1.0.0';
+        if (!services.controlHandlers?.execute) throw new Error(`Control handler registry is unavailable for ${handlerId}`);
+        const inputs = Object.fromEntries(definition.ports.filter(port => port.kind === 'data' && port.direction === 'input').map(port => [port.id, resolveNodeInput(protocol, node, port.id, state)]));
+        const result = services.controlHandlers.execute(handlerId, handlerVersion, { nodeId: node.id, component: node.component, config: node.config || {}, inputs, variables: state.variables, outputs: state.outputs });
+        const output = definition.ports.find(port => port.id === result.selectedPort && port.kind === 'control' && port.direction === 'output');
+        if (!output) throw new Error(`Control handler ${handlerId} selected undeclared port ${result.selectedPort}`);
+        const emitted = appendEvent(state, protocol, result.eventType || 'control_handler_evaluated', services, { node, payload: { handlerId, handlerVersion, selectedPort: result.selectedPort, ...result.payload } });
+        state = emitted.state;
+        events.push(emitted.event);
+        currentNodeId = chooseControlTarget(protocol, node, result.selectedPort);
+        continue;
+      }
       return enterExecutableNode(state, protocol, node, services, events);
     } catch (error) {
       return failRuntime(state, protocol, services, error, node, events);

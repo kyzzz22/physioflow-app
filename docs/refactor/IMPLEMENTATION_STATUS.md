@@ -12,7 +12,7 @@ The planned MVP refactor phases 0–6 are implemented on the `demo` branch.
 | 5 — Data | Raw JSONL, normalized CSV, snapshots, manifests, data dictionary, quality report, full package download, participant/media/device lifecycle events, reaction times, device provenance, and independently tested validator |
 | 6 — Migration/Pilot | In-app and CLI migration, migration reports, native Questionnaire adapter, review gate, freeze hashes, three representative migration tests, operator guide, and release gate |
 
-Current automated gate: 115 tests pass, production build passes, and lint reports no errors. Nineteen warnings remain in legacy editor/runner files and are tracked as transition debt; no new V2 file adds a warning.
+Current automated gate: 119 tests pass, production build passes, and lint reports no errors. Nineteen warnings remain in legacy editor/runner files and are tracked as transition debt; no new V2 file adds a warning.
 
 Composer V2 now includes a typed variable catalog with scope, source, default value, and export policy, plus a variable picker for condition inputs. Variable renames update node and participant-UI bindings atomically; referenced variables cannot be removed accidentally.
 
@@ -30,10 +30,12 @@ The declarative Component SDK 1.0 and project component library support versione
 
 The External Device Connector Contract 1.0 stores versioned, permission-approved typed channel manifests in the protocol while injecting trusted hardware adapters at runtime. The connector session records connection, samples, markers, failure, retry, recovery and disconnection with connector/device provenance. Raw and normalized device event tables are included in every graph export; see `DEVICE_CONNECTORS.md`.
 
+Trusted Control Handler Contract 1.0 lets host-installed, versioned handlers add deterministic routing without accepting executable code from protocol JSON. Runtime gives handlers cloned, deeply frozen inputs and accepts only synchronous results targeting declared control outputs; custom events are allow-listed. The built-in Value switch is the reference implementation; see `CONTROL_HANDLERS.md`.
+
 The release gate includes a deterministic refactor E2E test (compose → validate → freeze → run → snapshot/restore → export) and explicit performance gates. Current local measurements validate/edit a 500-node graph in about 36 ms and export 10,000 events in about 39 ms, well below the enforced 2 s / 3 s limits.
 
 The release gate also includes a self-hosted Composer V2 browser test. It launches an isolated Vite server and headless Chrome, then creates a typed variable, publishes and instantiates a reusable subflow, installs an SDK component, and installs a typed device connector. GitHub Actions runs the complete quality gate and this browser flow for `demo` pushes and pull requests.
 
 The final hardening pass makes frozen protocols immutable: editing always creates a new draft protocol version with a distinct ID. Formal validation now checks participant UI completion paths, media sources, durations, rating ranges, migration review, and every required condition/loop control exit before preview or freeze.
 
-The legacy editor and runner remain available during transition. New blank protocols use Protocol Graph and Composer V2. Advanced extension work—third-party component SDK, external-device plugins, collaboration, and cloud execution—remains intentionally outside this MVP and belongs to the continuous Stage 7 roadmap.
+The legacy editor and runner remain available during transition. New blank protocols use Protocol Graph and Composer V2. Real-time collaboration and cloud execution remain intentionally outside this MVP and belong to the continuous Stage 7 roadmap.

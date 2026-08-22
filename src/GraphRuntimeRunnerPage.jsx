@@ -3,6 +3,7 @@ import ParticipantRenderer from './ParticipantRenderer.jsx';
 import { createUiElement, participantUiTemplate, protocolNameOf, protocolStatusOf, protocolVersionOf } from './core/index.js';
 import {
   completeCurrentNode,
+  createCoreControlHandlerRegistry,
   createRuntimeState,
   pauseRuntime,
   recordRuntimeEvent,
@@ -22,6 +23,7 @@ function runtimeServices() {
   return {
     idFactory: prefix => `${prefix}_${crypto.randomUUID()}`,
     clock: { now: () => { const epochMs = Date.now(); return { epochMs, monotonicMs: performance.now(), iso: new Date(epochMs).toISOString() }; } },
+    controlHandlers: createCoreControlHandlerRegistry(),
   };
 }
 

@@ -2,7 +2,7 @@ import { participantUiTemplate } from './participantUi.js';
 
 const PORT_KINDS = new Set(['control', 'data']);
 const PORT_DIRECTIONS = new Set(['input', 'output']);
-const RUNTIME_KINDS = new Set(['start', 'end', 'condition', 'loop', 'random', 'participant']);
+const RUNTIME_KINDS = new Set(['start', 'end', 'condition', 'loop', 'random', 'handler', 'participant']);
 
 function waitParticipantUi() {
   const schema = participantUiTemplate('instruction');
@@ -31,6 +31,7 @@ export function validateComponentDefinition(definition) {
   if (!definition.version?.trim()) errors.push('Component version is required');
   if (!definition.label?.trim()) errors.push('Component label is required');
   if (definition.runtime?.kind && !RUNTIME_KINDS.has(definition.runtime.kind)) errors.push(`Runtime kind ${definition.runtime.kind} is invalid`);
+  if (definition.runtime?.kind === 'handler' && !definition.runtime.handlerId?.trim()) errors.push('Handler runtime components need a handlerId');
 
   const portIds = new Set();
   for (const port of definition.ports || []) {
@@ -208,6 +209,20 @@ export function createCoreComponentRegistry() {
     ],
     events: ['randomization_evaluated'],
     dataFields: ['seed', 'draw_index', 'random_value', 'selected_port'],
+  });
+  registry.register({
+    type: 'logic.value-switch', version: '1.0.0', label: 'Value switch', category: 'control',
+    runtime: { kind: 'handler', handlerId: 'core.value-switch', handlerVersion: '1.0.0' },
+    ports: [
+      controlInput,
+      { id: 'value', kind: 'data', direction: 'input', dataType: 'unknown', required: true },
+      { id: 'match', label: 'Match', kind: 'control', direction: 'output', required: true },
+      { id: 'default', label: 'Default', kind: 'control', direction: 'output', required: true },
+    ],
+    defaultConfig: { match: '' },
+    editorFields: [{ path: 'match', label: 'Match value', type: 'text' }],
+    events: ['control_handler_evaluated'],
+    dataFields: ['actual', 'expected', 'matched', 'handler_id'],
   });
   registry.register({
     type: 'logic.loop', version: '1.0.0', label: 'Loop', category: 'control',
