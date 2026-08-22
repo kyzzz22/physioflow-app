@@ -88,14 +88,14 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     const prev = undoStack.current.pop();
     onChange({ ...trialRef.current, flow: prev.flow, steps: prev.steps });
     setSelectedNodeIds(new Set()); setSelectedEdgeId(null);
-  }, [disabled, onChange]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [disabled, onChange]);
   const performRedo = useCallback(() => {
     if (redoStack.current.length === 0 || disabled) return;
     undoStack.current.push({ flow: structuredClone(flowRef.current), steps: structuredClone(trialRef.current.steps) });
     const next = redoStack.current.pop();
     onChange({ ...trialRef.current, flow: next.flow, steps: next.steps });
     setSelectedNodeIds(new Set()); setSelectedEdgeId(null);
-  }, [disabled, onChange]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [disabled, onChange]);
   const check = validateFlow(flow, trial.steps || []);
   const unplacedSteps = useMemo(() => {
     const placed = new Set(flow.nodes.filter(node => node.type === 'event').map(node => node.step_id));
@@ -430,14 +430,14 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     setSelectedNodeIds(prev => { const next = new Set(prev); next.delete(id); return next; });
     setSelectedEdgeId(null);
     setContextMenu(null);
-  }, [flow, updateFlow, onChange]);
+  }, [flow, updateFlow, onChange, pushUndo]);
 
   const deleteEdge = useCallback((edgeId) => {
     if (!edgeId) return;
     pushUndo();
     updateFlow({ ...flow, edges: flow.edges.filter(e => e.id !== edgeId) });
     setSelectedEdgeId(null); setContextMenu(null);
-  }, [flow, updateFlow]);
+  }, [flow, updateFlow, pushUndo]);
 
   useEffect(() => {
     const handler = e => {

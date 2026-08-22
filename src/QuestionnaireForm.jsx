@@ -11,12 +11,11 @@ export default function QuestionnaireForm({ questionnaire, step = {}, session = 
   const [externalOpened, setExternalOpened] = useState(false);
   const [externalConfirmed, setExternalConfirmed] = useState(false);
   const [timeLeft, setTimeLeft] = useState({});
-  const [history, setHistory] = useState([]); // track answered question order for "back"
   const firstInputRef = useRef(null);
   const formRef = useRef(null);
   const externalMode = (step.questionnaire_mode || 'internal') === 'external';
 
-  const allQuestions = questionnaire?.questions || [];
+  const allQuestions = useMemo(() => questionnaire?.questions || [], [questionnaire?.questions]);
   const enabledQuestions = useMemo(() => {
     return allQuestions.filter(q => {
       if (!q.show_if?.question_id) return true;
@@ -50,7 +49,7 @@ export default function QuestionnaireForm({ questionnaire, step = {}, session = 
   useEffect(() => {
     setAnswers({}); setErrors({}); setSubmitted(false);
     setExternalOpened(false); setExternalConfirmed(false);
-    setTimeLeft({}); setHistory([]); setCurrentStep(0);
+    setTimeLeft({}); setCurrentStep(0);
     if (firstInputRef.current) firstInputRef.current.focus();
   }, [questionnaire?.questionnaire_id, step.step_id, externalMode]);
 
@@ -72,7 +71,7 @@ export default function QuestionnaireForm({ questionnaire, step = {}, session = 
       }
     });
     return () => intervals.forEach(clearInterval);
-  }, [orderedQuestions, submitted]);
+  }, [orderedQuestions, submitted, answers]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -159,7 +158,6 @@ export default function QuestionnaireForm({ questionnaire, step = {}, session = 
 
   const nextStep = () => {
     if (currentStep < orderedQuestions.length - 1) {
-      setHistory(prev => [...prev, currentStep]);
       setCurrentStep(prev => prev + 1);
     }
   };
@@ -240,7 +238,7 @@ function QuestionInput({ question: q, language, value, onChange, inputRef, shuff
       for (let i = arr.length - 1; i > 0; i--) { seed = (seed * 1664525 + 1013904223) >>> 0; const j = seed % (i + 1); [arr[i], arr[j]] = [arr[j], arr[i]]; }
       setShuffled(arr);
     } else setShuffled(null);
-  }, [q.question_id, shuffle, language]);
+  }, [q.question_id, q.options_i18n, q.type, shuffle, language]);
 
   const options = shuffled || (q.options_i18n?.[language] || q.options_i18n?.en || []);
 
@@ -276,7 +274,7 @@ function LikertScale({ q, language, value, onChange, inputRef }) {
   return (
     <div className="likert-bar-group" role="radiogroup" aria-label={q.prompt_i18n?.[language] || ''}>
       <div className="likert-bars">
-        {numbers.map((n, i) => (
+        {numbers.map(n => (
           <button
             key={n}
             type="button"
@@ -344,12 +342,12 @@ function VasSlider({ q, language, value, onChange, inputRef }) {
   const [dragging, setDragging] = useState(false);
   const pct = value != null ? ((value - min) / (max - min)) * 100 : 50;
 
-  const updateFromEvent = (e) => {
+  const updateFromEvent = useCallback((e) => {
     if (!trackRef.current) return;
     const rect = trackRef.current.getBoundingClientRect();
     const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     onChange(Math.round(min + x * (max - min)));
-  };
+  }, [max, min, onChange]);
 
   const handlePointerDown = (e) => {
     e.preventDefault();
@@ -367,7 +365,7 @@ function VasSlider({ q, language, value, onChange, inputRef }) {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
     };
-  }, [dragging, min, max]);
+  }, [dragging, updateFromEvent]);
 
   return (
     <div className="vas-custom">

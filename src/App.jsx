@@ -3,18 +3,13 @@ import { applyThemeToDOM, resetThemeToDOM } from './theme.js';
 import { block, createNextProtocolVersion, duplicateProtocolAsProject, emotionTemplate, freezeProtocol, gonogoTemplate, stroopTemplate, unfreezeProtocol, STEP_TYPES, step, trial, validateProtocol, moveItem, stepContentIssues } from './domain';
 import { clearCurrentRun, getStorageInfo, loadCurrentRunAsync, loadProtocols, loadSessions, openDataDirectory, saveProtocols, selectDataDirectory } from './storage';
 import { saveAsset } from './fsStorage.js';
-import RunnerPage from './RuntimeRunnerPage';
 import { LanguageToggle, DarkModeToggle, useLanguage } from './i18n';
 import QuestionnaireDesigner, { createQuestionnaire } from './QuestionnaireDesigner';
-import FlowWorkspaceOverlay from './FlowWorkspaceOverlay';
-import Dashboard from './Dashboard';
-import SessionManager from './SessionManager';
+import Dashboard from './Dashboard.jsx';
 import { ConfirmDialog, AlertDialog, PromptDialog } from './Modal.jsx';
 import PreRunChecklist from './PreRunChecklist.jsx';
 import { STEP_DEFAULTS } from './constants.js';
 import Onboarding from './Onboarding.jsx';
-import ComposerV2 from './ComposerV2.jsx';
-import GraphRuntimeRunnerPage from './GraphRuntimeRunnerPage.jsx';
 import {
   archiveProtocol,
   createNextGraphProtocolVersion,
@@ -37,6 +32,11 @@ import { migrateLegacyProtocolV1 } from './legacy/migrateProtocolV1.js';
 // Lazy-loaded for code splitting
 const Analytics = lazy(() => import('./Analytics.jsx'));
 const GuidePanel = lazy(() => import('./GuidePanel.jsx'));
+const ComposerV2 = lazy(() => import('./ComposerV2.jsx'));
+const FlowWorkspaceOverlay = lazy(() => import('./FlowWorkspaceOverlay.jsx'));
+const GraphRuntimeRunnerPage = lazy(() => import('./GraphRuntimeRunnerPage.jsx'));
+const RunnerPage = lazy(() => import('./RuntimeRunnerPage.jsx'));
+const SessionManager = lazy(() => import('./SessionManager.jsx'));
 
 const LoadingFallback = () => <div style={{ position:'fixed',inset:0,zIndex:2000,display:'grid',placeItems:'center',background:'var(--surface)' }}><span style={{ color:'var(--muted)',fontSize:'.9rem' }}>Loading…</span></div>;
 
@@ -386,11 +386,22 @@ export default function App() {
     setRun(preRunCheck); setView('setup'); setPreRunCheck(null);
   }, [preRunCheck]);
 
+  const handleRunDone = useCallback(async () => {
+    setRecoverable(null);
+    try {
+      setSessions(await loadSessions());
+    } catch (error) {
+      setAlert({ title: 'Session list unavailable', message: error.message || 'The completed session was saved, but the dashboard could not refresh its session list.' });
+    } finally {
+      setView('home');
+    }
+  }, []);
+
 
   if (view === 'builder' && current) {
     if (isGraphProtocol(current)) {
       return <>
-        <ComposerV2
+        <Suspense fallback={<LoadingFallback />}><ComposerV2
           protocol={current}
           onChange={(next, shouldRecord = true) => {
             if (shouldRecord) {
@@ -422,7 +433,7 @@ export default function App() {
           canRedo={redoStack.length > 0}
           hasUnsaved={hasUnsaved}
           saveAnim={saveAnim}
-        />
+        /></Suspense>
         {deleteConfirm && <ConfirmDialog {...deleteConfirm} />}
         {alertState && <AlertDialog {...alertState} onClose={() => setAlert(null)} />}
         {promptState && <PromptDialog {...promptState} />}
@@ -430,7 +441,7 @@ export default function App() {
     }
     if (viewMode === 'visual') {
       return <div className="visual-editor-shell">
-        <FlowWorkspaceOverlay
+        <Suspense fallback={<LoadingFallback />}><FlowWorkspaceOverlay
           protocol={current} onChange={(cv, shouldRecord = true) => {
             if (shouldRecord) {
               const now = Date.now();
@@ -471,7 +482,7 @@ export default function App() {
           saveAnim={saveAnim}
           onGuide={openGuide}
           focusTarget={builderFocusTarget}
-        />
+        /></Suspense>
         {deleteConfirm && <ConfirmDialog {...deleteConfirm} />}
         {alertState && <AlertDialog {...alertState} onClose={() => setAlert(null)} />}
         {promptState && <PromptDialog {...promptState} />}
@@ -536,7 +547,7 @@ export default function App() {
 
   if (view === 'runner' && run?.protocol) {
     const RunnerComponent = isGraphProtocol(run.protocol) ? GraphRuntimeRunnerPage : RunnerPage;
-    return <RunnerComponent data={run} onDone={() => { setRecoverable(null); setView('home'); }} />;
+    return <Suspense fallback={<LoadingFallback />}><RunnerComponent data={run} onDone={handleRunDone} /></Suspense>;
   }
 
   if (view === 'analytics') {
@@ -568,7 +579,7 @@ export default function App() {
       onOpenDataFolder={openDataFolder}
       onGuide={openGuide}
     />
-    <SessionManager />
+    <Suspense fallback={null}><SessionManager /></Suspense>
     {recoverable && <ResumeBanner
       snapshot={recoverable}
       onResume={() => { setRun({ protocol: recoverable.protocol, session: recoverable.session, restore: recoverable }); setView('runner'); }}

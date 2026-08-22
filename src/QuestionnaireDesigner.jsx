@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { uid } from './domain';
 
 export const QUESTION_TYPES = ['likert','single_choice','multiple_choice','vas_slider','sam_valence','sam_arousal','number','short_text','long_text'];
@@ -33,8 +33,8 @@ export const PRESETS = {
 };
 
 export default function QuestionnaireDesigner({ value, onChange, disabled }) {
-  const questionnaire = value || createQuestionnaire();
-  const qs = questionnaire.questions || [];
+  const questionnaire = useMemo(() => value || createQuestionnaire(), [value]);
+  const qs = useMemo(() => questionnaire.questions || [], [questionnaire.questions]);
 
   const updateQuestion = (index, key, next) => onChange({ ...questionnaire, questions: qs.map((q, i) => i === index ? { ...q, [key]: next } : q) });
   const removeQuestion = index => onChange({ ...questionnaire, questions: qs.filter((_, i) => i !== index) });

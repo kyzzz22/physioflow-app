@@ -74,7 +74,7 @@ export default function RuntimeRunnerPage({ data, onDone }) {
   useEffect(() => {
     if (protocol.theme) applyThemeToDOM(protocol.theme);
     return () => resetThemeToDOM();
-  }, [protocol.protocol_id]);
+  }, [protocol.protocol_id, protocol.theme]);
 
   const log = (type, context = {}, metadata = {}) => {
     const event = logger.current.append(type, context, metadata);

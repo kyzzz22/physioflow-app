@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { bundle, bundleSimple, downloadBundle } from './exporter';
 import { deleteSession, loadSession, loadSessions, saveSession } from './storage';
 import { AlertDialog, PromptDialog } from './Modal.jsx';
-import GuidePanel from './GuidePanel.jsx';
 import { OUTPUT_FILES } from './constants.js';
 import { isGraphProtocol } from './core/protocolSelectors.js';
 import { createRuntimeReplay } from './runtime/replayRuntime.js';
+
+const GuidePanel = lazy(() => import('./GuidePanel.jsx'));
 
 export default function SessionManager() {
   const [open, setOpen] = useState(false);
@@ -167,7 +168,7 @@ export default function SessionManager() {
     </div>}
     {alertState && <AlertDialog {...alertState} onClose={() => setAlert(null)} />}
     {deletePrompt && <PromptDialog {...deletePrompt} />}
-    {guideTab && <GuidePanel initialTab={guideTab} onClose={() => setGuideTab(null)} />}
+    {guideTab && <Suspense fallback={null}><GuidePanel initialTab={guideTab} onClose={() => setGuideTab(null)} /></Suspense>}
   </>;
 }
 

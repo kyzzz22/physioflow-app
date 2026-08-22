@@ -1,8 +1,52 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-const targets = await fetch('http://localhost:9222/json/list').then(response => response.json());
-const target = targets.find(item => item.type === 'page' && item.url.includes('localhost:5174')) || targets.find(item => item.type === 'page');
-if (!target) throw new Error('No Chrome page target found. Start Chrome with --remote-debugging-port=9222 and open http://localhost:5174');
+const APP_PORT = Number(process.env.PHYSIOFLOW_LEGACY_E2E_PORT || 12000 + process.pid % 16000);
+const DEBUG_PORT = APP_PORT + 1;
+const appUrl = `http://127.0.0.1:${APP_PORT}`;
+const debugUrl = `http://127.0.0.1:${DEBUG_PORT}`;
+const chromeCandidates = [
+  process.env.CHROME_BIN,
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/usr/bin/google-chrome',
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/chromium',
+  '/usr/bin/chromium-browser',
+].filter(Boolean);
+const chrome = chromeCandidates.find(executable => existsSync(executable));
+if (!chrome) throw new Error('Chrome/Chromium is required; set CHROME_BIN to its executable path');
+
+const profileDirectory = mkdtempSync(join(tmpdir(), 'physioflow-legacy-e2e-'));
+const children = [];
+const cleanup = () => {
+  children.forEach(child => { if (!child.killed) child.kill('SIGKILL'); });
+  rmSync(profileDirectory, { recursive: true, force: true });
+};
+process.on('exit', cleanup);
+process.on('SIGINT', () => { cleanup(); process.exit(130); });
+
+async function waitForUrl(url, label, timeout = 15000) {
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    try { const response = await fetch(url); if (response.ok) return; } catch {}
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  throw new Error(`Timed out waiting for ${label}`);
+}
+
+const vite = spawn(process.execPath, ['./node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', String(APP_PORT)], { stdio: ['ignore', 'pipe', 'pipe'] });
+children.push(vite);
+await waitForUrl(appUrl, 'Vite');
+const chromeProcess = spawn(chrome, ['--headless=new', '--no-sandbox', '--disable-gpu', `--remote-debugging-port=${DEBUG_PORT}`, `--user-data-dir=${profileDirectory}`, appUrl], { stdio: ['ignore', 'pipe', 'pipe'] });
+children.push(chromeProcess);
+await waitForUrl(`${debugUrl}/json/list`, 'Chrome DevTools');
+
+const targets = await fetch(`${debugUrl}/json/list`).then(response => response.json());
+const target = targets.find(item => item.type === 'page' && item.url.startsWith(appUrl));
+if (!target) throw new Error('Legacy E2E page target was not created');
 
 const socket = new WebSocket(target.webSocketDebuggerUrl);
 const pending = new Map();
@@ -36,12 +80,13 @@ const waitFor = async (expression, label, timeout = 8000) => {
     if (await evaluate(expression)) return;
     await new Promise(resolve => setTimeout(resolve, 80));
   }
-  throw new Error(`Timed out waiting for ${label}`);
+  const pageText = await evaluate(`document.body.innerText.slice(0, 1200)`);
+  throw new Error(`Timed out waiting for ${label}. Page text: ${pageText}`);
 };
 const clickText = async (text, selector = 'button') => {
   const clicked = await evaluate(`(() => {
     const element = [...document.querySelectorAll(${JSON.stringify(selector)})]
-      .find(item => item.textContent.trim().includes(${JSON.stringify(text)}));
+      .find(item => item.textContent.trim().includes(${JSON.stringify(text)}) && !item.disabled && item.getClientRects().length > 0);
     if (!element) return false;
     element.click();
     return true;
@@ -98,13 +143,15 @@ await send('Runtime.enable');
 await resetWorkspace();
 await seedProtocol('E2E formal storage gate', true);
 assert.equal(await evaluate(`document.body.textContent.includes('blocked')`), true);
+await new Promise(resolve => setTimeout(resolve, 300));
 await clickText('Run latest');
-await waitFor(`document.body.textContent.includes('LOCAL DATA STORAGE')`, 'formal storage gate');
-assert.equal(await evaluate(`document.body.textContent.includes('Formal sessions must write to a selected local data folder')`), true);
-assert.equal(await evaluate(`[...document.querySelectorAll('button')].some(button => button.textContent.includes('Continue to session setup'))`), false);
+await waitFor(`document.body.textContent.includes('需要选择本地数据文件夹')`, 'formal storage gate');
+assert.equal(await evaluate(`document.body.textContent.includes('正式采集必须写入你选择的本地文件夹')`), true);
+assert.equal(await evaluate(`[...document.querySelectorAll('button')].some(button => button.textContent.includes('继续到 Session 设置'))`), false);
 
 await resetWorkspace();
 await seedProtocol('E2E preview fallback', false);
+await new Promise(resolve => setTimeout(resolve, 300));
 await clickText('Edit draft');
 await waitFor(`document.body.textContent.includes('Save flow')`, 'visual editor');
 await clickText('Run');
@@ -138,6 +185,7 @@ assert.equal(details[0].run_mode, 'preview');
 assert.ok(details[0].events.some(event => event.event_type === 'session_completed'));
 
 socket.close();
+cleanup();
 console.log(JSON.stringify({
   status: 'passed',
   formal_gate: 'blocked_without_local_folder',

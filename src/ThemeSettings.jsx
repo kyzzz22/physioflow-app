@@ -1,16 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { THEME_PRESETS, LAYOUT_PRESETS, applyThemeToDOM, resetThemeToDOM } from './theme.js';
 
 export default function ThemeSettings({ value, onChange, onClose, disabled }) {
-  const theme = value || {};
-  const [previewApplied, setPreviewApplied] = useState(false);
+  const theme = useMemo(() => value || {}, [value]);
 
   // Apply theme on mount for preview
   useEffect(() => {
     if (Object.keys(theme).length > 0) applyThemeToDOM(theme);
-    setPreviewApplied(true);
     return () => { resetThemeToDOM(); };
-  }, []);
+  }, [theme]);
 
   const update = (key, val) => {
     const next = { ...theme, [key]: val };
@@ -21,7 +19,7 @@ export default function ThemeSettings({ value, onChange, onClose, disabled }) {
   const applyPreset = (key) => {
     const preset = THEME_PRESETS[key];
     if (!preset) return;
-    const { name, description, ...themeValues } = preset;
+    const { name: _name, description: _description, ...themeValues } = preset;
     applyThemeToDOM(themeValues);
     onChange({ ...theme, ...themeValues });
   };

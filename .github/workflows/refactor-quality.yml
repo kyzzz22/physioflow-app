@@ -18,4 +18,5 @@ jobs:
       - run: npm ci
       - run: npm run quality:refactor
       - uses: browser-actions/setup-chrome@v1
+      - run: npm run test:e2e
       - run: npm run test:e2e:refactor-browser

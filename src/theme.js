@@ -27,19 +27,9 @@ function hslToHex(h, s, l) {
   return `#${[f(0), f(8), f(4)].map(x => x.toString(16).padStart(2, '0')).join('')}`;
 }
 
-function lighten(hex, amount) {
-  const { h, s, l } = hexToHsl(hex);
-  return hslToHex(h, s, Math.min(100, l + amount));
-}
-
 function darken(hex, amount) {
   const { h, s, l } = hexToHsl(hex);
   return hslToHex(h, s, Math.max(0, l - amount));
-}
-
-function alphaHex(hex, opacity) {
-  const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r},${g},${b},${opacity})`;
 }
 
 // ── Apply theme to DOM by setting CSS custom properties ──
