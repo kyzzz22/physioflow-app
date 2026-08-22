@@ -2,6 +2,7 @@ import { stepContentIssues } from './domain';
 import { createQuestionnaire } from './QuestionnaireDesigner';
 import { MEDIA_TYPES, PALETTE, STEP_DEFAULTS } from './constants.js';
 import MediaSettings from './MediaSettings.jsx';
+import { NodeGlyph, nodeBadgeStyle } from './flowIcons.jsx';
 
 const stepDefaultExtras = defaults => Object.fromEntries(Object.entries(defaults).filter(([key]) => !['name', 'duration_mode', 'planned_duration_ms', 'recovery_behavior'].includes(key)));
 
@@ -21,7 +22,7 @@ export function Inspector({ node, edge, trial, stimuli, questionnaires, updateNo
 
   const _stepIssues = resolvedItem && !disabled ? stepContentIssues(resolvedItem, stimuli, questionnaires) : [];
   return <aside className="studio-inspector">
-    <div className="inspector-title"><span>{node.type.toUpperCase()} NODE</span><h3>{node.label}</h3></div>
+    <div className="inspector-title"><span>{node.type.toUpperCase()} NODE</span><h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><i style={{ ...nodeBadgeStyle(node.type), display: 'grid', placeItems: 'center', width: 22, height: 22, borderRadius: 5, flexShrink: 0, fontStyle: 'normal' }}><NodeGlyph type={node.type} /></i>{node.label}</h3></div>
     <label>Label<input value={node.label || ''} disabled={disabled} onChange={e => updateNode({ label: e.target.value })} /></label>
     {_stepIssues.length > 0 && (
       <div className={`inspector-issues ${_stepIssues.some(i => i.kind === 'error') ? 'error' : 'warning'}`}>

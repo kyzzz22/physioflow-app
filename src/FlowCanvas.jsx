@@ -5,9 +5,12 @@ import { Inspector } from './Inspector';
 import { PALETTE } from './constants.js';
 import RuntimeContent from './RuntimeContent';
 import QuestionnaireWorkspace from './QuestionnaireWorkspace';
+import FlowJsonEditor from './FlowJsonEditor.jsx';
+import { NodeGlyph, nodeBadgeStyle, nodeColor, tint } from './flowIcons.jsx';
 
-const nodeIcons = { start: 'START', end: 'END', condition: 'IF', loop: 'LOOP', event: 'STEP', note: '✎', junction: '●' };
-const branchesFor = node => node.type === 'note' ? [] : node.type === 'condition' ? ['true', 'false'] : node.type === 'loop' ? ['body', 'exit'] : ['next'];
+const branchesFor = node => ['note', 'group'].includes(node.type) ? [] : node.type === 'condition' ? ['true', 'false'] : node.type === 'loop' ? ['body', 'exit'] : ['next'];
+const nodeWidth = n => n.type === 'note' ? (n.width || 180) : n.type === 'junction' ? 20 : n.type === 'group' ? (n.width || 240) : 180;
+const nodeHeight = n => n.type === 'note' ? (n.height || 100) : n.type === 'junction' ? 20 : n.type === 'group' ? (n.height || 160) : 55;
 
 const GRID_SIZE = 24;
 const SNAP_THRESHOLD = 4;
@@ -32,6 +35,8 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   const [focusHighlightStepId, setFocusHighlightStepId] = useState(null);
   const [snapEnabled, setSnapEnabled] = useState(() => { try { return localStorage.getItem('physioflow.snap') !== '0'; } catch { return true; } });
   const [searchQuery, setSearchQuery] = useState('');
+  const [paletteSearch, setPaletteSearch] = useState('');
+  const [viewMode, setViewMode] = useState('canvas'); // 'canvas' | 'code'
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [snapshots, setSnapshots] = useState(() => {
     try { return JSON.parse(localStorage.getItem(`physioflow.snapshots.${trial.trial_id}`) || '[]'); }
@@ -171,27 +176,120 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     setFocusMessage('');
   };
 
-  const addEvent = type => {
+  const addEventAt = useCallback((type, x, y) => {
+    if (disabled) return;
     pushUndo();
     const item = createStep(type, { name: type[0].toUpperCase() + type.slice(1).replace('_', ' ') });
-    const node = { id: `node_${item.step_id}`, type: 'event', step_id: item.step_id, label: item.name, x: 260, y: 140 + flow.nodes.length * 24 };
-    onChange({ ...trial, steps: [...trial.steps, item], flow: { ...flow, nodes: [...flow.nodes, node] } });
+    const node = { id: `node_${item.step_id}`, type: 'event', step_id: item.step_id, label: item.name, x, y };
+    onChange({ ...trialRef.current, steps: [...trialRef.current.steps, item], flow: { ...flowRef.current, nodes: [...flowRef.current.nodes, node] } });
+    setSelectedNodeIds(new Set([node.id]));
+  }, [disabled, onChange, pushUndo]);
+  const addEvent = type => addEventAt(type, 260, 140 + flow.nodes.length * 24);
+
+  // Palette → canvas drag-and-drop (AWS Infrastructure Composer style)
+  const onPaletteDragStart = (e, type) => {
+    e.dataTransfer.setData('application/x-physioflow-step', type);
+    e.dataTransfer.effectAllowed = 'copy';
+  };
+  const onCanvasDrop = e => {
+    e.preventDefault();
+    const type = e.dataTransfer.getData('application/x-physioflow-step');
+    if (!type) return;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect || !rect.width || !rect.height) return;
+    const rawX = (e.clientX - rect.left - pan.x) / zoom;
+    const rawY = (e.clientY - rect.top - pan.y) / zoom;
+    const x = Math.max(20, snapEnabled ? Math.round(rawX / GRID_SIZE) * GRID_SIZE : Math.round(rawX));
+    const y = Math.max(20, snapEnabled ? Math.round(rawY / GRID_SIZE) * GRID_SIZE : Math.round(rawY));
+    if (type === 'condition' || type === 'loop') addLogic(type, x, y);
+    else if (type === 'note') addNote(x, y);
+    else if (type === 'junction') addJunction(x, y);
+    else addEventAt(type, x, y);
+  };
+  const addLogic = (type, x = 480, y = 180) => {
+    pushUndo();
+    const node = { id: `${type}_${crypto.randomUUID()}`, type, label: type === 'condition' ? 'Condition' : 'Repeat', x, y, ...(type === 'condition' ? { rule: { variable: 'participant_language', operator: 'equals', value: 'zh' } } : { max_iterations: 3, rule: { variable: '', operator: 'equals', value: '' } }) };
+    updateFlow({ ...flowRef.current, nodes: [...flowRef.current.nodes, node] });
     setSelectedNodeIds(new Set([node.id]));
   };
-  const addLogic = type => {
-    const node = { id: `${type}_${crypto.randomUUID()}`, type, label: type === 'condition' ? 'Condition' : 'Repeat', x: 480, y: 180, ...(type === 'condition' ? { rule: { variable: 'participant_language', operator: 'equals', value: 'zh' } } : { max_iterations: 3, rule: { variable: '', operator: 'equals', value: '' } }) };
-    updateFlow({ ...flow, nodes: [...flow.nodes, node] });
+  const addNote = (x, y) => {
+    pushUndo();
+    const nx = x ?? 260;
+    const ny = y ?? 140 + flowRef.current.nodes.length * 24;
+    const node = { id: `note_${crypto.randomUUID()}`, type: 'note', label: 'Note', content: '', color: '#fff9c4', x: nx, y: ny, width: 180, height: 100 };
+    updateFlow({ ...flowRef.current, nodes: [...flowRef.current.nodes, node] });
     setSelectedNodeIds(new Set([node.id]));
   };
-  const addNote = () => {
-    const node = { id: `note_${crypto.randomUUID()}`, type: 'note', label: 'Note', content: '', color: '#fff9c4', x: 260, y: 140 + flow.nodes.length * 24, width: 180, height: 100 };
-    updateFlow({ ...flow, nodes: [...flow.nodes, node] });
+  const addJunction = (x = 480, y = 180) => {
+    pushUndo();
+    const node = { id: `junction_${crypto.randomUUID()}`, type: 'junction', label: '●', x, y };
+    updateFlow({ ...flowRef.current, nodes: [...flowRef.current.nodes, node] });
     setSelectedNodeIds(new Set([node.id]));
   };
-  const addJunction = () => {
-    const node = { id: `junction_${crypto.randomUUID()}`, type: 'junction', label: '●', x: 480, y: 180 };
-    updateFlow({ ...flow, nodes: [...flow.nodes, node] });
-    setSelectedNodeIds(new Set([node.id]));
+
+  // ── Group (visual container, AWS Infrastructure Composer style) ──
+  const groupSelected = useCallback(() => {
+    if (disabled || selectedNodeIds.size < 2) return;
+    pushUndo();
+    const members = flowRef.current.nodes.filter(n => selectedNodeIds.has(n.id) && n.type !== 'group' && !['start', 'end'].includes(n.type));
+    if (members.length < 2) return;
+    const minX = Math.min(...members.map(n => n.x));
+    const minY = Math.min(...members.map(n => n.y));
+    const maxX = Math.max(...members.map(n => n.x + nodeWidth(n)));
+    const maxY = Math.max(...members.map(n => n.y + nodeHeight(n)));
+    const pad = 44;
+    const groupId = `group_${crypto.randomUUID()}`;
+    const group = { id: groupId, type: 'group', label: 'Group', x: minX - pad, y: minY - pad, width: (maxX - minX) + pad * 2, height: (maxY - minY) + pad * 2, color: '#0ea5e9', collapsed: false };
+    updateFlow({ ...flowRef.current, nodes: [...flowRef.current.nodes.map(n => members.some(m => m.id === n.id) ? { ...n, group_id: groupId } : n), group] });
+    setSelectedNodeIds(new Set());
+    setSelectedEdgeId(null);
+    setContextMenu(null);
+  }, [disabled, selectedNodeIds, updateFlow, pushUndo]);
+
+  const ungroupNode = useCallback(groupId => {
+    if (disabled) return;
+    pushUndo();
+    updateFlow({
+      ...flowRef.current,
+      nodes: flowRef.current.nodes.filter(n => n.id !== groupId).map(n => n.group_id === groupId ? { ...n, group_id: undefined } : n),
+    });
+  }, [disabled, updateFlow, pushUndo]);
+
+  const toggleGroupCollapse = useCallback(groupId => {
+    if (disabled) return;
+    updateFlow({ ...flowRef.current, nodes: flowRef.current.nodes.map(n => n.id === groupId ? { ...n, collapsed: !n.collapsed } : n) });
+  }, [disabled, updateFlow]);
+
+  const renameGroup = useCallback(groupId => {
+    if (disabled) return;
+    const group = flowRef.current.nodes.find(n => n.id === groupId);
+    if (!group) return;
+    const name = window.prompt('Group name:', group.label);
+    if (name) updateFlow({ ...flowRef.current, nodes: flowRef.current.nodes.map(n => n.id === groupId ? { ...n, label: name } : n) });
+  }, [disabled, updateFlow]);
+
+  const beginGroupDrag = (e, group) => {
+    if (disabled) return;
+    e.stopPropagation(); e.preventDefault();
+    pushUndo();
+    const startX = e.clientX, startY = e.clientY;
+    const memberIds = new Set(flowRef.current.nodes.filter(n => n.group_id === group.id).map(n => n.id));
+    const startPositions = new Map(flowRef.current.nodes.map(n => [n.id, { x: n.x, y: n.y }]));
+    const move = ev => {
+      const deltaX = (ev.clientX - startX) / zoom;
+      const deltaY = (ev.clientY - startY) / zoom;
+      updateFlow({
+        ...flowRef.current,
+        nodes: flowRef.current.nodes.map(n => {
+          const s = startPositions.get(n.id);
+          if (s && (n.id === group.id || memberIds.has(n.id))) return { ...n, x: Math.max(20, s.x + deltaX), y: Math.max(20, s.y + deltaY) };
+          return n;
+        }),
+      });
+    };
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
   };
 
   // ── Full-screen node preview ──
@@ -367,7 +465,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     const queue = [start.id]; let qhead = 0;
     while (qhead < queue.length) { const id = queue[qhead++], lvl = levels.get(id); flow.edges.filter(e => e.source === id).forEach(e => { if (!levels.has(e.target)) { levels.set(e.target, lvl + 1); queue.push(e.target); } }); }
     const counts = {};
-    const nodes = flow.nodes.map((n, i) => { const lvl = levels.get(n.id) ?? i; counts[lvl] = (counts[lvl] || 0) + 1; return { ...n, x: 80 + lvl * 250, y: 90 + (counts[lvl] - 1) * 150 }; });
+    const nodes = flow.nodes.map((n, i) => { if (n.type === 'group' || n.group_id) return n; const lvl = levels.get(n.id) ?? i; counts[lvl] = (counts[lvl] || 0) + 1; return { ...n, x: 80 + lvl * 250, y: 90 + (counts[lvl] - 1) * 150 }; });
     updateFlow({ ...flow, nodes });
   }, [flow, updateFlow]);
 
@@ -630,8 +728,8 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
         const minX = Math.min(prev.x1, prev.x2), maxX = Math.max(prev.x1, prev.x2);
         const minY = Math.min(prev.y1, prev.y2), maxY = Math.max(prev.y1, prev.y2);
         const inside = flowRef.current.nodes.filter(n => {
-          const nw = n.type === 'note' ? (n.width || 180) : n.type === 'junction' ? 20 : 180;
-          const nh = n.type === 'note' ? (n.height || 100) : n.type === 'junction' ? 20 : 55;
+          const nw = nodeWidth(n);
+          const nh = nodeHeight(n);
           return n.x + nw > minX && n.x < maxX && n.y + nh > minY && n.y < maxY;
         }).map(n => n.id);
         if (inside.length > 0) setSelectedNodeIds(new Set(inside));
@@ -651,11 +749,22 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   const bounds = useMemo(() => {
     if (!flow.nodes.length) return { minX: 0, minY: 0, maxX: 400, maxY: 300 };
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    flow.nodes.forEach(n => { const w = n.type === 'note' ? (n.width || 180) : n.type === 'junction' ? 20 : 180; const h = n.type === 'note' ? (n.height || 100) : n.type === 'junction' ? 20 : 55; minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); maxX = Math.max(maxX, n.x + w); maxY = Math.max(maxY, n.y + h); });
+    flow.nodes.forEach(n => { const w = nodeWidth(n); const h = nodeHeight(n); minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); maxX = Math.max(maxX, n.x + w); maxY = Math.max(maxY, n.y + h); });
     return { minX: minX - 40, minY: minY - 40, maxX: maxX + 40, maxY: maxY + 40 };
   }, [flow.nodes]);
   const worldW = bounds.maxX - bounds.minX;
   const worldH = bounds.maxY - bounds.minY;
+
+  const fitView = () => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect || !rect.width || !rect.height || !flow.nodes.length) return;
+    const scale = Math.min(rect.width / worldW, rect.height / worldH, 1.25);
+    const newZoom = Math.max(0.3, Math.min(2, scale));
+    const cx = (bounds.minX + bounds.maxX) / 2;
+    const cy = (bounds.minY + bounds.maxY) / 2;
+    setZoom(newZoom);
+    setPan({ x: rect.width / 2 - cx * newZoom, y: rect.height / 2 - cy * newZoom });
+  };
 
   const selectedNode = (selectedNodeIds.size === 1) ? flow.nodes.find(n => selectedNodeIds.has(n.id)) : null;
   const selectedEdge = flow.edges.find(e => e.id === selectedEdgeId);
@@ -667,12 +776,23 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     return flow.nodes.filter(n => n.label?.toLowerCase().includes(q) || (n.type === 'event' && trial.steps.find(s => s.step_id === n.step_id)?.name?.toLowerCase().includes(q)));
   }, [flow.nodes, searchQuery, trial.steps]);
 
+  const filteredPalette = useMemo(() => {
+    const q = paletteSearch.trim().toLowerCase();
+    if (!q) return PALETTE;
+    return PALETTE.map(group => ({ ...group, items: group.items.filter(([type, , label]) => type.toLowerCase().includes(q) || label.toLowerCase().includes(q)) })).filter(group => group.items.length > 0);
+  }, [paletteSearch]);
+  const paletteQuery = paletteSearch.trim().toLowerCase();
+  const flowControlMatches = ['condition', 'loop'].some(t => t.includes(paletteQuery));
+  const utilControlMatches = ['note', 'junction'].some(t => t.includes(paletteQuery));
+
   return <div className="studio">
     {!paletteCollapsed && <aside className="studio-palette">
       <div className="studio-brand"><span>＋</span><div><b>Add to flow</b><small>Drag nodes to arrange</small></div></div>
-      {PALETTE.map(group => <section key={group.title}><h4>{group.title}</h4>{group.items.map(([type, icon, label]) => <button key={type} disabled={disabled} onClick={() => addEvent(type)}><i>{icon}</i><span>{label}</span></button>)}</section>)}
-      <section><h4>Flow</h4><button disabled={disabled} onClick={() => addLogic('condition')}><i>◇</i><span>Condition</span></button><button disabled={disabled} onClick={() => addLogic('loop')}><i>↻</i><span>Loop</span></button></section>
-      <section><h4>Utils</h4><button disabled={disabled} onClick={addNote}><i>✎</i><span>Note</span></button><button disabled={disabled} onClick={addJunction}><i>●</i><span>Junction</span></button></section>
+      <div className="palette-search"><input value={paletteSearch} placeholder="Search steps…" onChange={e => setPaletteSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setPaletteSearch(''); }} /></div>
+      {filteredPalette.length === 0 && <p className="palette-empty">No steps match “{paletteSearch}”</p>}
+      {filteredPalette.map(group => <section key={group.title}><h4>{group.title}</h4><div className="palette-grid">{group.items.map(([type, , label]) => <button key={type} className="palette-card" draggable={!disabled} onDragStart={e => onPaletteDragStart(e, type)} disabled={disabled} onClick={() => addEvent(type)} title="Drag to canvas, or click to add"><i style={nodeBadgeStyle(type)}><NodeGlyph type={type} /></i><span>{label}</span></button>)}</div></section>)}
+      {(!paletteQuery || flowControlMatches) && <section><h4>Flow</h4><div className="palette-grid"><button className="palette-card" draggable={!disabled} onDragStart={e => onPaletteDragStart(e, 'condition')} disabled={disabled} onClick={() => addLogic('condition')}><i style={nodeBadgeStyle('condition')}><NodeGlyph type="condition" /></i><span>Condition</span></button><button className="palette-card" draggable={!disabled} onDragStart={e => onPaletteDragStart(e, 'loop')} disabled={disabled} onClick={() => addLogic('loop')}><i style={nodeBadgeStyle('loop')}><NodeGlyph type="loop" /></i><span>Loop</span></button></div></section>}
+      {(!paletteQuery || utilControlMatches) && <section><h4>Utils</h4><div className="palette-grid"><button className="palette-card" draggable={!disabled} onDragStart={e => onPaletteDragStart(e, 'note')} disabled={disabled} onClick={addNote}><i style={nodeBadgeStyle('note')}><NodeGlyph type="note" /></i><span>Note</span></button><button className="palette-card" draggable={!disabled} onDragStart={e => onPaletteDragStart(e, 'junction')} disabled={disabled} onClick={addJunction}><i style={nodeBadgeStyle('junction')}><NodeGlyph type="junction" /></i><span>Junction</span></button></div></section>}
     </aside>}
     <button
       className="panel-toggle palette-toggle"
@@ -683,6 +803,10 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
 
     <section className="studio-center">
       <div className="canvas-bar">
+        <div className="view-toggle" role="tablist" aria-label="Editor view">
+          <button type="button" role="tab" aria-selected={viewMode === 'canvas'} className={viewMode === 'canvas' ? 'active' : ''} onClick={() => setViewMode('canvas')}>Canvas</button>
+          <button type="button" role="tab" aria-selected={viewMode === 'code'} className={viewMode === 'code' ? 'active' : ''} onClick={() => setViewMode('code')}>Code</button>
+        </div>
         <div><b>{trial.name}</b><span>{flow.nodes.length} nodes · {flow.edges.length} connections</span></div>
         <div className={`connection-hint ${focusMessage ? 'focus-warning' : ''}`}>
           {focusMessage ? <span>{focusMessage} {focusHighlightStepId && <button onClick={() => { setFocusHighlightStepId(null); setFocusMessage(''); }} style={{ fontSize: '.7rem', padding: '.15rem .5rem', marginLeft: '.5rem' }}>知道了</button>}</span> : dragConnection ? <>Connect <strong>{dragConnection.branch}</strong> → <button onClick={() => setDragConnection(null)}>Cancel</button></> : null}
@@ -690,7 +814,10 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
         <label className="check-row">
           <input type="checkbox" checked={snapEnabled} onChange={e => { setSnapEnabled(e.target.checked); try { localStorage.setItem('physioflow.snap', e.target.checked ? '1' : '0'); } catch {} }} /> Snap
         </label>
+        <button onClick={performUndo} title="Undo (⌘Z)">↶</button>
+        <button onClick={performRedo} title="Redo (⌘⇧Z)">↷</button>
         <button onClick={autoLayout}>Auto layout</button>
+        <button onClick={fitView} title="Fit view">⤢</button>
         <div style={{ position: 'relative' }}>
           <button onClick={() => setSnapshotsOpen(o => !o)} title="Flow snapshots">{snapshots.length > 0 ? `📸 ${snapshots.length}` : '📸'}</button>
           {snapshotsOpen && <div className="snapshots-dropdown" style={{ position: 'absolute', top: '100%', right: 0, zIndex: 50, background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: 8, padding: '.5rem', minWidth: 240, maxHeight: 320, overflowY: 'auto', boxShadow: 'var(--shadow-md)' }}>
@@ -712,13 +839,14 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
         </div>
         <span className={check.valid ? 'flow-status valid' : 'flow-status invalid'} title={check.errors.concat(check.warnings).slice(0, 5).join('\n')}>{check.valid ? '✓ Ready' : `! ${check.errors.length} issues`}</span>
       </div>
-      {searchQuery !== '' && (
+      {viewMode === 'code' && <FlowJsonEditor trial={trial} onChange={onChange} disabled={disabled} />}
+      {viewMode === 'canvas' && searchQuery !== '' && (
         <div className="node-search-bar">
           <input autoFocus value={searchQuery} placeholder="Find node by name..." onChange={e => setSearchQuery(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setSearchQuery(''); if (e.key === 'Enter' && filteredNodes.length > 0) { const node = filteredNodes[0]; setSelectedNodeIds(new Set([node.id])); setPan({ x: 120 - node.x, y: 160 - node.y }); setZoom(1); } }} />
           <span>{searchQuery ? `${filteredNodes.length} match${filteredNodes.length !== 1 ? 'es' : ''}` : ''}</span>
         </div>
       )}
-      {unplacedSteps.length > 0 && !disabled && (
+      {viewMode === 'canvas' && unplacedSteps.length > 0 && !disabled && (
         <div className={`unplaced-step-panel${focusHighlightStepId ? ' focus-active' : ''}`} role="status">
           <b>Steps outside flow · {unplacedSteps.length}</b>
           <span>{focusHighlightStepId ? '已定位到以下步骤，请点击 Insert 放入流程图' : 'These steps exist in the Trial but will not run until placed in the graph.'}</span>
@@ -734,7 +862,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
           </div>
         </div>
       )}
-      <div className="clean-canvas" ref={canvasRef}
+      {viewMode === 'canvas' && <div className="clean-canvas" ref={canvasRef}
         onPointerDown={e => {
           if (e.target === canvasRef.current || e.target.classList.contains('flow-bg') || e.target.closest('svg.flow-bg')) {
             if (e.button === 0 && !e.shiftKey) beginMarquee(e);
@@ -748,6 +876,8 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
             setContextMenu({ x: e.clientX, y: e.clientY, type: 'canvas' });
           }
         }}
+        onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
+        onDrop={onCanvasDrop}
         style={{ cursor: panDragRef.current ? 'grabbing' : spaceHeld.current ? 'grab' : '' }}
       >
         <svg className="flow-bg" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
@@ -822,7 +952,27 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
           return <div style={{ position: 'absolute', left: x, top: y, width: w, height: h, border: '1px dashed var(--green)', background: 'rgba(25,116,83,0.06)', pointerEvents: 'none', zIndex: 40 }} />;
         })()}
         <div style={{ transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})`, transformOrigin: '0 0', position: 'relative', width: worldW + 200, height: worldH + 200, pointerEvents: 'none' }}>
+          {/* Groups — drawn behind member nodes */}
+          {flow.nodes.filter(n => n.type === 'group').map(group => {
+            const memberCount = flow.nodes.filter(n => n.group_id === group.id).length;
+            return (
+              <div key={group.id} className={`clean-group${group.collapsed ? ' collapsed' : ''}`}
+                style={{ left: group.x, top: group.y, width: group.width, height: group.height, borderColor: group.color }}>
+                <div className="clean-group-header" style={{ background: tint(group.color, 0.12) }}
+                  onPointerDown={e => beginGroupDrag(e, group)}
+                  onDoubleClick={e => { e.stopPropagation(); renameGroup(group.id); }}>
+                  <span className="clean-group-dot" style={{ background: group.color }} />
+                  <span className="clean-group-title">{group.label}</span>
+                  <span className="clean-group-count">{memberCount} step{memberCount !== 1 ? 's' : ''}</span>
+                  <button className="clean-group-btn" title={group.collapsed ? 'Expand' : 'Collapse'} onClick={e => { e.stopPropagation(); toggleGroupCollapse(group.id); }}>{group.collapsed ? '▸' : '▾'}</button>
+                  <button className="clean-group-btn danger" title="Ungroup" onClick={e => { e.stopPropagation(); ungroupNode(group.id); }}>✕</button>
+                </div>
+              </div>
+            );
+          })}
           {flow.nodes.map(node => {
+            if (node.type === 'group') return null;
+            if (node.group_id && flow.nodes.some(g => g.type === 'group' && g.id === node.group_id && g.collapsed)) return null;
             const step = node.type === 'event' ? trial.steps.find(s => s.step_id === node.step_id) : null;
             const nodeIssues = (step && !disabled) ? stepContentIssues(step, stimuli, questionnaires) : [];
             const nodeHasError = nodeIssues.some(i => i.kind === 'error');
@@ -875,8 +1025,14 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
               onContextMenu={e => { e.stopPropagation(); setSelectedNodeIds(new Set([node.id])); setSelectedEdgeId(null); }}
             >
               {!['start', 'end'].includes(node.type) && <button className={`node-input ${dragConnection ? 'awaiting' : ''}`} title="Connect a wire to here" onClick={e => { e.stopPropagation(); finishConnection(node.id); }} />}
+              {!['start', 'end'].includes(node.type) && (
+                <div className="node-hover-actions" onClick={e => e.stopPropagation()}>
+                  <button title="Duplicate (⌘D)" onClick={e => { e.stopPropagation(); duplicateNode(node); }}>⧉</button>
+                  <button className="danger" title="Delete" onClick={e => { e.stopPropagation(); removeNode(node.id); }}>✕</button>
+                </div>
+              )}
               <div className="node-title">
-                <i style={node.color ? { background: `${node.color}20`, color: node.color } : {}}>{nodeIcons[node.type]}</i>
+                <i style={nodeBadgeStyle(node.type)}><NodeGlyph type={node.type} /></i>
                 <div><small>{node.type}</small><b>{node.label}</b></div>
               </div>
               {ruleText && <div className="rule-caption" title={ruleText}>{ruleText}</div>}
@@ -918,7 +1074,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
             }}>
             <svg viewBox={`${bounds.minX} ${bounds.minY} ${worldW} ${worldH}`}>
               <rect x={bounds.minX} y={bounds.minY} width={worldW} height={worldH} fill="#1a2e2420" rx="4" />
-              {flow.nodes.map(n => <rect key={n.id} x={n.x} y={n.y} width={n.type === 'junction' ? 20 : n.type === 'note' ? (n.width || 180) : 180} height={n.type === 'junction' ? 20 : n.type === 'note' ? (n.height || 100) : 35} rx="4" fill={n.type === 'event' ? '#5ee0a660' : n.type === 'condition' ? '#f4d77e60' : n.type === 'loop' ? '#89c4f460' : n.type === 'note' ? '#ffe08260' : n.type === 'junction' ? '#ce93d860' : '#bec8c160'} />)}
+              {flow.nodes.map(n => <rect key={n.id} x={n.x} y={n.y} width={nodeWidth(n)} height={n.type === 'group' ? (n.height || 120) : n.type === 'note' ? (n.height || 100) : n.type === 'junction' ? 20 : 35} rx="4" fill={tint(nodeColor(n.type), 0.4)} />)}
               <rect className="viewport" x={-(pan.x / zoom) + bounds.minX} y={-(pan.y / zoom) + bounds.minY} width={(canvasRef.current?.clientWidth || 800) / zoom} height={(canvasRef.current?.clientHeight || 600) / zoom} onPointerDown={e => { e.stopPropagation(); e.preventDefault(); const minimap = e.target.closest('.flow-minimap'); if (minimap?._drag) minimap._drag(e); }} style={{ cursor: 'grab', pointerEvents: 'auto' }} />
             </svg>
           </div>
@@ -930,7 +1086,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
           <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} title="Reset zoom" style={{ fontSize: '.65rem' }}>1:1</button>
           <span style={{ fontSize: '.65rem', padding: '.35rem .5rem', color: '#7b867f' }}>{Math.round(zoom * 100)}%</span>
         </div>
-      </div>
+      </div>}
 
       {contextMenu && contextMenu.type === 'edge' && (
         <div className="context-menu" style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y, zIndex: 999 }}>
@@ -951,6 +1107,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
             <button onClick={() => { addJunction(); setContextMenu(null); }} style={{ fontSize: '12px', padding: '4px 8px' }}>● Junction</button>
           </div>
           {clipboardNode && <button onClick={() => { pasteNode(); setContextMenu(null); }}>Paste {clipboardNode.label || clipboardNode.type}</button>}
+          {selectedNodeIds.size >= 2 && <button onClick={() => { groupSelected(); }}>Group selected ({selectedNodeIds.size})</button>}
           <button onClick={() => { setSelectedNodeIds(new Set(flow.nodes.map(n => n.id))); setContextMenu(null); }}>Select all</button>
           <button onClick={() => { autoLayout(); setContextMenu(null); }}>Auto layout</button>
         </div>

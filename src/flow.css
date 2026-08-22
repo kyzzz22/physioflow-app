@@ -142,6 +142,18 @@
   font-size: 13px;
   line-height: 1.45;
 }
+.palette-search { padding: 10px 3px 0; }
+.palette-search input {
+  width: 100%; border: 1px solid var(--line); border-radius: 6px;
+  padding: .4rem .5rem; font-size: .78rem;
+  background: var(--paper-soft); color: var(--ink); outline: none;
+}
+.palette-search input:focus { border-color: var(--green); background: var(--paper); }
+.palette-empty {
+  padding: 12px 4px; color: var(--muted); font-size: 12px;
+  text-align: center;
+}
+.dark-mode .palette-search input { background: #111a16; border-color: var(--line); color: var(--ink); }
 .studio-palette section { padding-top: 13px; }
 .studio-palette h4 { font-size: 12px; color: var(--muted-strong); letter-spacing: .12em; text-transform: uppercase; margin: 0 4px 7px; font-weight: 800; }
 .studio-palette section button {
@@ -1273,3 +1285,118 @@
     display: none;
   }
 }
+
+/* ── Canvas / Code view toggle ── */
+.view-toggle {
+  display: flex; gap: 2px; padding: 1px;
+  background: var(--paper-soft); border: 1px solid var(--line); border-radius: 6px;
+  flex-shrink: 0;
+}
+.view-toggle button {
+  padding: 2px 8px; font-size: .68rem; font-weight: 600;
+  border: 0; border-radius: 4px; background: transparent; color: var(--muted-strong);
+  cursor: pointer;
+}
+.view-toggle button.active { background: var(--green); color: #fff; }
+.dark-mode .view-toggle { background: #1b2721; border-color: var(--line); }
+.dark-mode .view-toggle button.active { color: #0d1712; }
+
+/* ── JSON code view ── */
+.flow-json-editor {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+  background: var(--paper);
+}
+.flow-json-toolbar {
+  display: flex; align-items: center; gap: .6rem;
+  padding: .5rem .75rem; border-bottom: 1px solid var(--line);
+  background: var(--paper-soft);
+}
+.flow-json-title { font-size: .78rem; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.flow-json-title small { font-weight: 400; color: var(--muted); margin-left: .3rem; }
+.flow-json-status { font-size: .72rem; margin-left: auto; white-space: nowrap; }
+.flow-json-status.ok { color: var(--green-strong); }
+.flow-json-status.error { color: var(--danger); font-weight: 700; }
+.flow-json-toolbar button { flex-shrink: 0; font-size: .74rem; padding: .3rem .7rem; }
+.flow-json-error {
+  padding: .4rem .75rem; font-size: .74rem; color: var(--danger);
+  background: #fff6f5; border-bottom: 1px solid #efcac6;
+  font-family: 'SF Mono', 'Cascadia Code', monospace;
+}
+.flow-json-textarea {
+  flex: 1; min-height: 0; width: 100%; resize: none;
+  border: 0; padding: .9rem 1rem; margin: 0;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 12.5px; line-height: 1.55; tab-size: 2;
+  background: #0f1713; color: #d8e6df; outline: none;
+  white-space: pre; overflow: auto;
+}
+.flow-json-issues {
+  max-height: 140px; overflow: auto; padding: .5rem .75rem;
+  border-top: 1px solid var(--line); background: var(--paper-soft);
+  font-size: .72rem; display: grid; gap: 3px;
+}
+.flow-json-issues .error { color: var(--danger); }
+.flow-json-issues .warn { color: #b8860b; }
+.dark-mode .flow-json-error { background: #2a1918; border-color: #61302c; }
+
+/* ── Group containers (visual organization) ── */
+.clean-group {
+  position: absolute; z-index: 0;
+  border: 2px dashed #0ea5e9; border-radius: 14px;
+  background: #0ea5e908;
+  pointer-events: none; /* body doesn't block canvas; header is interactive */
+}
+.clean-group-header {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: flex; align-items: center; gap: 6px;
+  height: 26px; padding: 0 8px;
+  border-radius: 12px 12px 0 0;
+  pointer-events: auto; cursor: grab; user-select: none;
+}
+.clean-group-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.clean-group-title { font-size: 12px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.clean-group-count { font-size: 10px; color: var(--muted); white-space: nowrap; }
+.clean-group-btn {
+  flex-shrink: 0; width: 20px; height: 20px; padding: 0; margin-left: auto;
+  border: 0; background: transparent; color: var(--muted-strong);
+  border-radius: 4px; font-size: 12px; line-height: 1; cursor: pointer;
+}
+.clean-group-btn:first-of-type { margin-left: 0; }
+.clean-group-btn:hover { background: #ffffff55; color: var(--ink); }
+.clean-group-btn.danger:hover { color: var(--danger); }
+.clean-group.collapsed { background: #0ea5e918; }
+.dark-mode .clean-group { background: #0ea5e90f; }
+.dark-mode .clean-group.collapsed { background: #0ea5e91c; }
+.dark-mode .clean-group-btn:hover { background: #ffffff1f; }
+
+/* ── Palette card grid (AWS Infrastructure Composer resource palette style) ── */
+.palette-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.studio-palette section button.palette-card {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  grid-template-columns: none;
+  min-height: 0; padding: 7px 4px; margin: 0;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--paper-soft); text-align: center;
+}
+.studio-palette section button.palette-card:hover { background: var(--paper); border-color: var(--green); }
+.studio-palette button.palette-card > i { width: 26px; height: 26px; border-radius: 7px; }
+.studio-palette button.palette-card span { font-size: 11px; font-weight: 600; }
+.dark-mode .studio-palette button.palette-card { background: #1b2721; border-color: var(--line); }
+.dark-mode .studio-palette button.palette-card:hover { background: #223129; border-color: var(--green); }
+
+/* ── Node hover actions (Details / Duplicate / Delete) ── */
+.node-hover-actions {
+  position: absolute; top: 4px; right: 4px; z-index: 3;
+  display: flex; gap: 3px; opacity: 0; transition: opacity .12s;
+}
+.clean-node:hover .node-hover-actions { opacity: 1; }
+.node-hover-actions button {
+  width: 18px; height: 18px; padding: 0;
+  font-size: 10px; line-height: 1;
+  border: 1px solid var(--line); border-radius: 4px;
+  background: var(--paper); color: var(--muted-strong);
+  cursor: pointer; display: grid; place-items: center;
+}
+.node-hover-actions button:hover { border-color: var(--green); color: var(--green-strong); }
+.node-hover-actions button.danger:hover { border-color: var(--danger); color: var(--danger); }
+.dark-mode .node-hover-actions button { background: #18231e; border-color: var(--line); color: var(--muted); }

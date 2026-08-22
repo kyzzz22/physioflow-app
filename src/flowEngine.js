@@ -1,4 +1,4 @@
-export const CONTROL_NODE_TYPES = ['start', 'condition', 'loop', 'end', 'note', 'junction'];
+export const CONTROL_NODE_TYPES = ['start', 'condition', 'loop', 'end', 'note', 'junction', 'group'];
 
 export function createLinearFlow(steps = []) {
   const start = { id: 'start', type: 'start', x: 60, y: 160, label: 'Start' };
@@ -56,8 +56,8 @@ export function compileTrialFlow(trial, runtimeValues = {}) {
       current = edge ? nodes.get(edge.target) : null;
       continue;
     }
-    // Skip note nodes (purely visual)
-    if (current.type === 'note') {
+    // Skip note/group nodes (purely visual)
+    if (current.type === 'note' || current.type === 'group') {
       const edges = outgoing(current.id);
       const edge = edges[0];
       current = edge ? nodes.get(edge.target) : null;
@@ -97,9 +97,9 @@ export function validateFlow(flow, steps = []) {
   steps.forEach(step => { if (!referencedSteps.has(step.step_id)) warnings.push(`Step ${step.name} is not placed in the flow`); });
   nodes.forEach(node => {
     const outgoing = edges.filter(edge => edge.source === node.id);
-    // Note nodes: no edge requirements (purely visual annotations)
-    if (node.type === 'note') {
-      if (outgoing.length) warnings.push(`Note ${node.label || node.id} has outgoing connections that will be ignored`);
+    // Note / group nodes: no edge requirements (purely visual annotations)
+    if (node.type === 'note' || node.type === 'group') {
+      if (outgoing.length) warnings.push(`${node.type === 'note' ? 'Note' : 'Group'} ${node.label || node.id} has outgoing connections that will be ignored`);
       return;
     }
     // Junction nodes: need at least one input and one output
@@ -122,7 +122,7 @@ export function validateFlow(flow, steps = []) {
   if (starts.length === 1) {
     const reachable = new Set(), queue = [starts[0].id];
     let qhead = 0; while (qhead < queue.length) { const id = queue[qhead++]; if(reachable.has(id)) continue; reachable.add(id); edges.filter(edge=>edge.source===id).forEach(edge=>queue.push(edge.target)); }
-    nodes.forEach(node => { if (!reachable.has(node.id)) errors.push(`Node ${node.label || node.id} is unreachable`); });
+    nodes.forEach(node => { if (!reachable.has(node.id) && !['note', 'group'].includes(node.type)) errors.push(`Node ${node.label || node.id} is unreachable`); });
     if (!ends.some(node => reachable.has(node.id))) errors.push('No End node is reachable from Start');
   }
   // Iterative DFS with path tracking to prevent stack overflow on deep flows
