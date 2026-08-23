@@ -25,6 +25,7 @@ import ParticipantUiBuilder from './ParticipantUiBuilder.jsx';
 import { createProjectComponentRegistry, exampleReactionButtonPackage, installComponentPackage, uninstallComponentPackage } from './sdk/index.js';
 import { exampleSimulatedConnector, installDeviceConnector, uninstallDeviceConnector } from './devices/index.js';
 import { createProtocolChangeSet, mergeProtocolChangeSet } from './collaboration/index.js';
+import { createDeploymentBundle, validateDeploymentBundle } from './deployment/index.js';
 
 const NODE_WIDTH = 188;
 const NODE_HEIGHT = 112;
@@ -254,6 +255,7 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
           catch (error) { setMessage(error.message); }
         }} />}
         {editorMode === 'advanced' && <CollaborationCatalog protocol={protocol} baseline={collaborationBaseline} locked={locked} onSetBaseline={() => { setCollaborationBaseline(structuredClone(protocol)); setMessage('Collaboration baseline updated'); }} onApply={next => { commit(next); setCollaborationBaseline(structuredClone(next)); setMessage('Collaboration change set applied'); }} onMessage={setMessage} />}
+        {editorMode === 'advanced' && <DeploymentCatalog protocol={protocol} onMessage={setMessage} />}
         {editorMode !== 'quick' && <SubflowTemplateCatalog templates={protocol.subflowTemplates || []} variables={protocol.variables || []} locked={locked} onInstantiate={(templateId, parameterMappings) => {
           try { const result = instantiateSubflowTemplate(protocol, templateId, { parameterMappings, position: { x: 320, y: 180 + (protocol.graph.groups?.length || 0) * 170 } }); commit(result.protocol); setSelectedNodeId(result.group.entryNodeId); setMessage(`Created ${result.group.name}`); }
           catch (error) { setMessage(error.message); }
@@ -489,6 +491,48 @@ function CollaborationCatalog({ protocol, baseline, locked, onSetBaseline, onApp
       <div><button disabled={locked || preview.unresolved > 0} onClick={() => { onApply(preview.protocol); setPending(null); setResolutions({}); }}>Apply change set</button><button onClick={() => { setPending(null); setResolutions({}); }}>Cancel</button></div>
     </article>}
     <details><summary>Applied history ({history.length})</summary>{history.map(item => <small key={`${item.changeSetId}:${item.appliedAt}`}>{item.changeSetId} · {item.author?.name || item.author?.id} · {item.appliedOperations} applied · {item.appliedAt}</small>)}</details>
+  </section>;
+}
+
+function DeploymentCatalog({ protocol, onMessage }) {
+  const [providerId, setProviderId] = useState('org.physioflow.portable');
+  const [environment, setEnvironment] = useState('portable');
+  const [error, setError] = useState('');
+  const [inspection, setInspection] = useState(null);
+  const frozen = protocol.version?.status === 'frozen';
+  const exportBundle = async () => {
+    try {
+      const bundle = await createDeploymentBundle(protocol, { providerId: providerId.trim(), environment: environment.trim(), createdBy: 'local-operator' });
+      downloadJson(`${protocol.metadata?.name || 'protocol'}.deployment.json`, bundle);
+      setError('');
+      onMessage(`Exported deployment bundle ${bundle.bundleId}`);
+    } catch (nextError) { setError(nextError.message); }
+  };
+  const inspectBundle = async event => {
+    try {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      const bundle = JSON.parse(await file.text());
+      const result = await validateDeploymentBundle(bundle);
+      setInspection({ bundle, result });
+      setError('');
+    } catch (nextError) { setInspection(null); setError(nextError.message); }
+    event.target.value = '';
+  };
+  return <section className="deployment-catalog">
+    <h3>Portable deployment</h3>
+    <p>Package one frozen protocol, its dependency manifest, execution policy, and integrity hashes for a compatible local or remote execution provider.</p>
+    <label>Provider ID<input value={providerId} onChange={event => setProviderId(event.target.value)} /></label>
+    <label>Environment<input value={environment} onChange={event => setEnvironment(event.target.value)} /></label>
+    <button disabled={!frozen} onClick={exportBundle}>Export deployment bundle</button>
+    {!frozen && <small>Freeze this protocol version before deployment.</small>}
+    <label className="deployment-import">Inspect deployment bundle<input type="file" accept="application/json,.json" onChange={inspectBundle} /></label>
+    {error && <small className="package-error">{error}</small>}
+    {inspection && <article className={inspection.result.valid ? 'deployment-valid' : 'deployment-invalid'}>
+      <b>{inspection.result.valid ? 'Bundle integrity verified' : 'Bundle rejected'}</b>
+      <small>{inspection.bundle.bundleId || 'Unknown bundle'} · {inspection.bundle.target?.providerId || 'Unknown provider'}</small>
+      {inspection.result.errors.map(item => <small key={item}>{item}</small>)}
+    </article>}
   </section>;
 }
 

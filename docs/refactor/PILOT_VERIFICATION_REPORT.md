@@ -25,7 +25,7 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 
 ## Acceptance evidence
 
-- Automated tests: 125 passing.
+- Automated tests: 128 passing.
 - Production build: passing.
 - Lint: zero errors and zero warnings.
 - Production bundle: no build warnings; view-level loading keeps the initial JavaScript chunk below the configured 500 kB warning threshold.
@@ -45,9 +45,10 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 - Control handler behavior: tests cover trusted versioned registration, deterministic routing, deeply frozen cloned context, synchronous-only execution, event allow-lists and undeclared branch rejection.
 - Usability evidence behavior: tests cover complete passing cohorts as well as insufficient participants, failed thresholds, unresolved data-integrity defects, and missing sign-offs.
 - Collaboration behavior: tests cover portable field/entity operations, clean merging of independent edits, mandatory local/incoming resolution for same-field conflicts, audit history, frozen/cross-version rejection and prototype-path safety.
+- Portable deployment behavior: tests prove frozen-snapshot and outer-manifest integrity, draft rejection, provider registration, job submission/status and cancellation.
 - Browser release behavior: `npm run test:e2e` and `npm run test:e2e:refactor-browser` pass locally and `.github/workflows/refactor-quality.yml` runs both after the full quality gate on pushes and pull requests.
 - Unified release behavior: `npm run quality:release` is the single entry point used locally and by GitHub Actions, so tests, build, strict lint and both browser gates cannot drift into different release definitions.
 
 ## Known transition scope
 
-The legacy editor and runner remain available for existing protocols. Real-time collaboration and cloud execution are Stage 7 extension work and are not part of the refactor MVP release gate.
+The legacy editor and runner remain available for existing protocols. Hosted collaboration, authentication, public participant links and a managed cloud runtime remain Stage 7 infrastructure work; the transport-neutral collaboration and deployment contracts now provide their application boundaries.

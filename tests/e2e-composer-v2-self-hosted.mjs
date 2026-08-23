@@ -129,6 +129,8 @@ try {
 
   await clickText('Advanced');
   await waitFor(`document.body.textContent.includes('Collaboration change sets')`, 'collaboration change-set panel');
+  await waitFor(`document.body.textContent.includes('Portable deployment')`, 'portable deployment panel');
+  assert.equal(await evaluate(`[...document.querySelectorAll('button')].some(button => button.textContent.includes('Export deployment bundle') && button.disabled)`), true);
   await clickText('Use current as baseline');
   await waitFor(`document.body.textContent.includes('Collaboration baseline updated')`, 'collaboration baseline');
   await clickText('Install Reaction Button example');
@@ -140,7 +142,7 @@ try {
   await clickText('Export changes');
   await waitFor(`document.body.textContent.includes('Exported') && document.body.textContent.includes('collaboration operation')`, 'collaboration change-set export');
 
-  console.log(JSON.stringify({ status: 'passed', composer: 'v2', nodes: 5, reusableSubflow: true, controlHandler: 'core.value-switch@1.0.0', collaborationChangeSet: true, sdkComponent: 'example.reaction-button@1.0.0', deviceConnector: 'org.physioflow.simulated-sensor@1.0.0' }, null, 2));
+  console.log(JSON.stringify({ status: 'passed', composer: 'v2', nodes: 5, reusableSubflow: true, controlHandler: 'core.value-switch@1.0.0', collaborationChangeSet: true, portableDeployment: true, sdkComponent: 'example.reaction-button@1.0.0', deviceConnector: 'org.physioflow.simulated-sensor@1.0.0' }, null, 2));
 } finally {
   socket.close();
   await cleanup();

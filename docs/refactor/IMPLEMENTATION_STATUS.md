@@ -12,7 +12,7 @@ The planned MVP refactor phases 0–6 are implemented on the `demo` branch.
 | 5 — Data | Raw JSONL, normalized CSV, snapshots, manifests, data dictionary, quality report, full package download, participant/media/device lifecycle events, reaction times, device provenance, and independently tested validator |
 | 6 — Migration/Pilot | In-app and CLI migration, migration reports, native Questionnaire adapter, review gate, freeze hashes, three representative migration tests, operator guide, and release gate |
 
-Current automated gate: `npm run quality:release` passes as one authoritative local/CI command: 125 tests, a production build without bundle warnings, strict zero-warning lint, and both isolated browser flows.
+Current automated gate: `npm run quality:release` passes as one authoritative local/CI command: 128 tests, a production build without bundle warnings, strict zero-warning lint, and both isolated browser flows.
 
 Composer V2 now includes a typed variable catalog with scope, source, default value, and export policy, plus a variable picker for condition inputs. Variable renames update node and participant-UI bindings atomically; referenced variables cannot be removed accidentally.
 
@@ -43,6 +43,8 @@ Returning from either runtime runner now reloads the saved session index before 
 Formal usability evidence has a checked-in JSON template and verifier. It enforces two cohorts of at least five participants, all five representative tasks per participant, the 600-second/8-operation/80%-without-help thresholds, resolved critical defects, and designer/operator/data-analyst sign-off. The release remains explicitly incomplete until real participant results pass this verifier.
 
 Local-first Collaboration Change Sets 1.0 add transport-neutral team editing without requiring a server. Composer Advanced establishes a baseline, exports field-level operations with base/result hashes, imports changes for the same protocol version, automatically merges independent edits, requires explicit same-field conflict resolution, and records application provenance. See `COLLABORATION_CHANGE_SETS.md`. Online presence and cloud synchronization remain separate deployment capabilities.
+
+Portable Deployment Contract 1.0 packages a frozen Protocol Graph snapshot, exact configuration hash, dependency manifest, execution policy, and provider target under an outer integrity hash. Composer Advanced exports and verifies bundles; a versioned provider registry plus in-memory reference provider prove the transport boundary through submit/status/cancel operations. See `PORTABLE_DEPLOYMENT.md`. A hosted backend remains a separate infrastructure deliverable.
 
 The final hardening pass makes frozen protocols immutable: editing always creates a new draft protocol version with a distinct ID. Formal validation now checks participant UI completion paths, media sources, durations, rating ranges, migration review, and every required condition/loop control exit before preview or freeze.
 
