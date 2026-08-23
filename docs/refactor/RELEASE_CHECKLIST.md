@@ -13,6 +13,7 @@
 - [x] Runtime V2 retries hosted event/snapshot acknowledgements without duplication and completes the remote session exactly once.
 - [x] `/participant` redeems fragment credentials, validates Bootstrap, resumes from a hosted checkpoint without local recovery data, and completes through an explicitly allowed CORS origin.
 - [x] Hosted HTTP transport and persistent-state recovery preserve authentication boundaries, idempotency, session data and audit history.
+- [x] Single-node Node hosting restores atomic file state after restart and rejects corrupt state, unsafe asset paths, checksum mismatches, expired links and signature tampering.
 - [x] Participant launch tokens enforce expiry, quotas, revocation and deployment deactivation without interrupting active sessions.
 - [x] Participant bootstrap verifies the frozen graph, omits credentials and marks unsafe or unresolved resources unavailable.
 - [x] Complete session package includes all raw, normalized, metadata, dictionary, manifest, and quality files.

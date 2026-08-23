@@ -68,4 +68,22 @@ export default defineConfig([
       parserOptions: { ecmaVersion: 2024, ecmaFeatures: { jsx: true }, sourceType: 'module' },
     },
   },
+  {
+    files: ['server/**/*.mjs'],
+    rules: {
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'no-undef': 'error',
+    },
+    languageOptions: {
+      globals: {
+        Buffer: 'readonly',
+        URL: 'readonly',
+        Request: 'readonly',
+        Response: 'readonly',
+        console: 'readonly',
+        process: 'readonly',
+      },
+      parserOptions: { ecmaVersion: 2024, sourceType: 'module' },
+    },
+  },
 ]);

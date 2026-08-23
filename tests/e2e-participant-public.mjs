@@ -96,8 +96,13 @@ const waitFor = async (expression, label, timeout = 10000) => {
   throw new Error(`Timed out waiting for ${label}: ${JSON.stringify(diagnostic)}`);
 };
 const clickText = async text => {
-  const clicked = await evaluate(`(() => { const button = [...document.querySelectorAll('button')].find(item => item.textContent.includes(${JSON.stringify(text)}) && !item.disabled); if (!button) return false; button.click(); return true; })()`);
-  assert.equal(clicked, true, `Missing enabled button containing ${text}`);
+  const started = Date.now();
+  while (Date.now() - started < 5000) {
+    const clicked = await evaluate(`(() => { const button = [...document.querySelectorAll('button')].find(item => item.textContent.includes(${JSON.stringify(text)}) && !item.disabled); if (!button) return false; button.click(); return true; })()`);
+    if (clicked) return;
+    await new Promise(resolve => setTimeout(resolve, 60));
+  }
+  assert.fail(`Missing enabled button containing ${text}`);
 };
 
 try {
@@ -111,7 +116,7 @@ try {
   assert.ok([...service.sessions.values()][0]?.runtimeSnapshot, 'Hosted recovery snapshot was not synchronized');
   await evaluate(`new Promise((resolve, reject) => { const request = indexedDB.open('physioflow-data-v1', 1); request.onsuccess = () => { const transaction = request.result.transaction('current', 'readwrite'); transaction.objectStore('current').delete('active'); transaction.oncomplete = resolve; transaction.onerror = () => reject(transaction.error); }; request.onerror = () => reject(request.error); }).then(() => localStorage.removeItem('physioflow.current-run-pointer.v2'))`);
   await send('Page.reload', { ignoreCache: true });
-  await waitFor(`document.body.textContent.includes('Welcome') && document.body.textContent.includes('Continue') && !document.body.textContent.includes('RUNTIME V2 READY')`, 'participant refresh recovery');
+  await waitFor(`document.body.textContent.includes('Welcome') && !document.body.textContent.includes('RUNTIME V2 READY') && [...document.querySelectorAll('button')].some(button => button.textContent.includes('Continue') && !button.disabled)`, 'participant refresh recovery');
   await clickText('Continue');
   await waitFor(`document.body.textContent.includes('SESSION COMPLETE') && document.body.textContent.includes('Hosted sync complete')`, 'public participant completion');
   assert.equal(service.launchLinks.get(link.launchLinkId).useCount, 1);

@@ -33,6 +33,7 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 | Governed participant launch | Opaque public launch tokens, idempotent redemption, per-link expiry/use limits, deployment expiry/session quotas, revocation, deactivation, persistence and audit provenance |
 | Participant bootstrap and resource delivery | Scoped bootstrap permission, exact frozen snapshot, nested integrity checks, bundle/dependency provenance, safe URL filtering, signed asset-resolver boundary, HTTP endpoint and Composer consumption |
 | Standalone public participant application | Dedicated `/participant` entry, fragment launch credentials, deterministic redemption, bootstrap verification, explicit CORS allow-list, current-revision synchronization, local/server checkpoint selection and full browser refresh-recovery gate |
+| Single-node self-hosting adapter | Native Node HTTP/static server, health endpoint, validated atomic mode-`0600` file state, restart recovery, pre-provisioned asset convention, checksum verification, expiring HMAC delivery and real-network test |
 | Self-hosted browser release gates | Scripts launch Vite and isolated headless Chrome themselves, exercise legacy and Composer workflows plus a real cross-origin public participant server with server-only refresh recovery, and run in the demo push/PR GitHub Actions job |
 | Reproducible formal versions | Pre-freeze validation, migration review gate, config hash, immutable frozen record, new-version editing |
 | Complete session data | Raw events/responses, normalized CSV, snapshots, manifest, dictionary, quality report and independent validator |
@@ -47,4 +48,4 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 
 Hardware-specific adapters can now be added behind the connector port without changing protocol/runtime semantics. Human usability evidence requires external participation beyond source changes.
 
-Online presence, managed identity, live cursors, durable multi-tenant hosting and remote data storage remain outside the local-first MVP boundary. Collaboration, portable deployment and hosted-service contracts now provide transport-neutral application boundaries for those services.
+Managed identity, live cursors, durable multi-tenant hosting and remote database/object storage remain outside the single-node boundary. Collaboration, portable deployment and hosted-service contracts provide transport-neutral application boundaries for those services.

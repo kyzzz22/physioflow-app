@@ -39,6 +39,7 @@ Hosted state has its own versioned schema. It contains deployments, launch-link 
 `createPersistentHostedExecutionService` serializes mutations through a `load`/`save` store and validates restored relationships before accepting traffic. The included stores are:
 
 - `MemoryHostedStateStore` for tests and embedded processes;
-- `WebStorageHostedStateStore` for a durable single-browser sandbox.
+- `WebStorageHostedStateStore` for a durable single-browser sandbox;
+- `FileHostedStateStore` in the Node adapter for validated, mode-`0600`, atomic single-process persistence.
 
-A production store can implement the same interface with transactional SQL, an append-only event database, object storage, or another durable backend. Encryption, tenant isolation, secret hashing, backups, retention enforcement, rate limiting, and operational monitoring remain responsibilities of that adapter and its hosting environment.
+A production store can implement the same interface with transactional SQL, an append-only event database, object storage, or another durable backend. The included Node server also serves the participant application and signed filesystem assets; see `SELF_HOSTING.md`. Encryption, tenant isolation, secret hashing, backups, retention enforcement, rate limiting, and operational monitoring remain responsibilities of that adapter and its hosting environment.

@@ -26,7 +26,7 @@ Refreshing or reopening the same launch link repeats redemption safely without c
 
 ## Hosting requirements
 
-For cross-origin deployment, configure `createHostedHttpHandler(..., { allowedOrigins })` with the exact participant application origins. The default exposes no CORS permission. Production hosting must additionally supply durable state, HTTPS, rate limiting, monitoring, managed secrets/identity, retention enforcement, and a signed asset resolver or CDN.
+For cross-origin deployment, configure `createHostedHttpHandler(..., { allowedOrigins })` with the exact participant application origins. The default exposes no CORS permission. A single-node reference deployment with atomic state and signed filesystem assets is documented in `SELF_HOSTING.md`. Production hosting must additionally supply HTTPS, rate limiting, monitoring, managed secrets/identity, retention enforcement, and backups.
 
 ## Verification
 

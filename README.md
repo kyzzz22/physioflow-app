@@ -123,7 +123,9 @@ npm run desktop:dev  # Tauri hot-reload
 npm run desktop:build  # → src-tauri/target/release/bundle/
 
 # Tests & lint
-npm test             # 55 unit tests
+npm test             # 155 automated tests
 npm run lint         # ESLint
-npm run test:e2e     # Chrome CDP smoke test
+npm run quality:release  # build + lint + all tests and browser gates
 ```
+
+For a single-node hosted service with the public `/participant` application, atomic state persistence, and signed filesystem assets, see [Single-Node Self-Hosting](./docs/refactor/SELF_HOSTING.md).

@@ -12,7 +12,7 @@ The planned MVP refactor phases 0–6 are implemented on the `demo` branch.
 | 5 — Data | Raw JSONL, normalized CSV, snapshots, manifests, data dictionary, quality report, full package download, participant/media/device lifecycle events, reaction times, device provenance, and independently tested validator |
 | 6 — Migration/Pilot | In-app and CLI migration, migration reports, native Questionnaire adapter, review gate, freeze hashes, three representative migration tests, operator guide, and release gate |
 
-Current automated gate: `npm run quality:release` passes as one authoritative local/CI command: 153 tests, a production build without bundle warnings, strict zero-warning lint, and three isolated browser flows.
+Current automated gate: `npm run quality:release` passes as one authoritative local/CI command: 155 tests, a production build without bundle warnings, strict zero-warning lint, and three isolated browser flows.
 
 Composer V2 now includes a typed variable catalog with scope, source, default value, and export policy, plus a variable picker for condition inputs. Variable renames update node and participant-UI bindings atomically; referenced variables cannot be removed accidentally.
 
@@ -57,6 +57,8 @@ Public participant entry is now controlled by opaque launch tokens rather than e
 Participant Bootstrap Contract 1.0 lets a scoped session retrieve the exact frozen graph and an explicit safe-resource manifest. Service and client independently verify protocol/bootstrap hashes; unsafe URLs become unavailable records, workspace assets route through an injected signed-URL resolver, tokens stay out of response bodies, and viewer access does not imply bootstrap access. Composer launches hosted Runtime V2 from this returned snapshot, and media components resolve only ready manifest entries instead of bypassing delivery policy. See `PARTICIPANT_BOOTSTRAP.md`.
 
 The standalone participant application now provides the real public execution surface at `/participant`. Launch credentials remain in the URL fragment, HTTP redemption is deterministic and idempotent across refreshes, CORS origins are explicitly configured, current hosted revisions are fetched before synchronization, and the newest local or server checkpoint resumes Runtime V2 without opening any researcher interface. See `PUBLIC_PARTICIPANT_APP.md`.
+
+The single-node Node adapter makes the hosted boundary directly runnable: it serves the built researcher/participant application, exposes health and API routes, restores validated state from an atomic mode-`0600` JSON store, and resolves pre-provisioned workspace assets to expiring HMAC-signed URLs after SHA-256 verification. Its real-network test publishes, restarts, redeems, bootstraps, downloads an asset, and rejects a tampered signature. See `SELF_HOSTING.md`.
 
 The final hardening pass makes frozen protocols immutable: editing always creates a new draft protocol version with a distinct ID. Formal validation now checks participant UI completion paths, media sources, durations, rating ranges, migration review, and every required condition/loop control exit before preview or freeze.
 
