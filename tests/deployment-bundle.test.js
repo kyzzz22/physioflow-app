@@ -10,12 +10,21 @@ async function frozenProtocol() {
 
 test('deployment bundle preserves frozen protocol identity, dependencies and integrity', async () => {
   const protocol = await frozenProtocol();
-  const bundle = await createDeploymentBundle(protocol, { bundleId: 'deployment_one', createdAt: '2026-08-23T02:00:00.000Z', createdBy: 'researcher-1', providerId: 'org.example.lab', environment: 'pilot' });
+  const bundle = await createDeploymentBundle(protocol, { bundleId: 'deployment_one', createdAt: '2026-08-23T02:00:00.000Z', createdBy: 'researcher-1', providerId: 'org.example.lab', environment: 'pilot', dataRetentionDays: 365 });
   assert.equal(bundle.protocol.configHash, protocol.freeze.configHash);
   assert.equal(bundle.protocol.snapshot.protocolId, protocol.protocolId);
   assert.equal(bundle.target.providerId, 'org.example.lab');
+  assert.equal(bundle.executionPolicy.dataRetentionDays, 365);
   assert.equal(bundle.bundleHash.length, 64);
   assert.deepEqual(await validateDeploymentBundle(bundle), { valid: true, errors: [] });
+});
+
+test('deployment data retention is opt-in and bounded', async () => {
+  const protocol = await frozenProtocol();
+  assert.equal((await createDeploymentBundle(protocol, { bundleId: 'retention_default' })).executionPolicy.dataRetentionDays, null);
+  await assert.rejects(() => createDeploymentBundle(protocol, { bundleId: 'retention_zero', dataRetentionDays: 0 }), /integer from 1 to 36500/);
+  await assert.rejects(() => createDeploymentBundle(protocol, { bundleId: 'retention_fraction', dataRetentionDays: 1.5 }), /integer from 1 to 36500/);
+  await assert.rejects(() => createDeploymentBundle(protocol, { bundleId: 'retention_large', dataRetentionDays: 36501 }), /integer from 1 to 36500/);
 });
 
 test('deployment bundle rejects drafts and detects protocol or manifest tampering', async () => {

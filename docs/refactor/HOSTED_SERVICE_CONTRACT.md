@@ -18,6 +18,7 @@ The hosted service layer turns a portable deployment bundle into a controlled ex
 - Immutable, sequential audit entries for publication, processing, session creation, ingestion, synchronization, and completion.
 - Deployment-level session quotas, optional expiry and explicit deactivation.
 - Opaque participant launch tokens with independent expiry, use quotas, idempotent redemption and immediate revocation.
+- Opt-in deployment retention periods with owner-only plan/confirm pseudonymization and durable purge tombstones.
 
 Composer Advanced includes a local hosted sandbox. A frozen version can be published, processed to ready, and used to create a participant session without a network service. This proves the application workflow while keeping development and offline use possible.
 
@@ -38,10 +39,11 @@ The standalone participant surface consumes this contract at `/participant`, wit
 - append event batch;
 - synchronize runtime state;
 - complete session;
+- preview and execute governed retention cleanup;
 - read session data, export all deployment data, and inspect audit history.
 
 ## Security boundary
 
-The local hosted service is a deterministic reference and test sandbox, not a production identity provider. Its injected opaque tokens and in-memory records must be replaced by durable storage, encrypted transport, managed secrets, rate limiting, tenant isolation, retention enforcement, and an audited authentication system before internet exposure.
+The local hosted service is a deterministic reference and test sandbox, not a production identity provider. Its injected opaque tokens and in-memory records must be replaced by durable storage, encrypted transport, managed secrets, rate limiting, tenant isolation, audited authentication, and operational retention scheduling before internet exposure. The reference contract does enforce explicit live-state retention plans and purge invariants; see `DATA_RETENTION.md` for its backup and downstream-copy boundary.
 
 The framework-neutral HTTP v1 handler/client and versioned persistent-state store boundary are implemented; see `HOSTED_HTTP_API.md`. They make network deployment and durable adapters possible without changing Runtime V2, but do not themselves supply managed infrastructure or production identity.

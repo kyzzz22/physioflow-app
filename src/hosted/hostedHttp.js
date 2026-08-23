@@ -45,7 +45,7 @@ function errorResponse(error) {
   const message = error?.message || String(error);
   if (/permission .* required/i.test(message)) return json({ error: { code: 'forbidden', message } }, 403);
   if (/^Unknown hosted/i.test(message)) return json({ error: { code: 'not_found', message } }, 404);
-  if (/conflict|already used with different|already registered|expired|deactivated|quota|exhausted|not ready/i.test(message)) return json({ error: { code: 'conflict', message } }, 409);
+  if (/conflict|already used with different|already registered|expired|deactivated|quota|exhausted|not ready|no session data eligible|no data retention policy/i.test(message)) return json({ error: { code: 'conflict', message } }, 409);
   if (/requires|required|invalid|does not match|unsupported|not ready|incomplete|backwards|must be/i.test(message)) return json({ error: { code: 'invalid_request', message } }, 400);
   return json({ error: { code: 'internal_error', message: 'Hosted service request failed' } }, 500);
 }
@@ -96,6 +96,14 @@ export function createHostedHttpHandler(service, options = {}) {
       if (method === 'GET' && match) return json(await service.getDeployment(decodeURIComponent(match[1]), context));
       match = path.match(/^\/v1\/deployments\/([^/]+)\/data$/);
       if (method === 'GET' && match) return json(await service.readDeploymentData(decodeURIComponent(match[1]), context));
+      match = path.match(/^\/v1\/deployments\/([^/]+)\/retention-plan$/);
+      if (method === 'GET' && match) return json(await service.planDataRetention(decodeURIComponent(match[1]), { asOf: url.searchParams.get('asOf') || undefined }, context));
+      match = path.match(/^\/v1\/deployments\/([^/]+)\/purge-data$/);
+      if (method === 'POST' && match) {
+        const body = await readJson(request, maximumBytes);
+        const idempotencyKey = request.headers.get('idempotency-key') || body.idempotencyKey;
+        return json(await service.purgeExpiredSessionData(decodeURIComponent(match[1]), { ...body, idempotencyKey }, context));
+      }
       match = path.match(/^\/v1\/deployments\/([^/]+)\/deactivate$/);
       if (method === 'POST' && match) {
         const body = await readJson(request, maximumBytes);
@@ -194,6 +202,11 @@ export class HostedHttpClient {
   publish(bundle, options = {}) { return this.request('POST', '/deployments', { bundle, options }, options); }
   deployment(id) { return this.request('GET', `/deployments/${encodeURIComponent(id)}`); }
   deploymentData(id) { return this.request('GET', `/deployments/${encodeURIComponent(id)}/data`); }
+  retentionPlan(id, options = {}) {
+    const query = options.asOf ? `?asOf=${encodeURIComponent(options.asOf)}` : '';
+    return this.request('GET', `/deployments/${encodeURIComponent(id)}/retention-plan${query}`);
+  }
+  purgeExpiredData(id, request = {}) { return this.request('POST', `/deployments/${encodeURIComponent(id)}/purge-data`, request, request); }
   processNextDeployment() { return this.request('POST', '/deployments/process-next'); }
   createSession(id, request = {}) { return this.request('POST', `/deployments/${encodeURIComponent(id)}/sessions`, request, request); }
   deploymentAssets(id) { return this.request('GET', `/deployments/${encodeURIComponent(id)}/assets`); }

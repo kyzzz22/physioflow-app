@@ -49,6 +49,7 @@ export async function createDeploymentBundle(protocol, options = {}) {
   if (!PROVIDER_ID.test(providerId)) throw new Error('Deployment provider ID must use lowercase dot/dash notation');
   if (options.maximumSessions !== undefined && options.maximumSessions !== null && (!Number.isInteger(options.maximumSessions) || options.maximumSessions < 1)) throw new Error('Deployment maximum sessions must be a positive integer');
   if (options.expiresAt && !Number.isFinite(Date.parse(options.expiresAt))) throw new Error('Deployment expiry must be a valid timestamp');
+  if (options.dataRetentionDays !== undefined && options.dataRetentionDays !== null && (!Number.isInteger(options.dataRetentionDays) || options.dataRetentionDays < 1 || options.dataRetentionDays > 36500)) throw new Error('Deployment data retention days must be an integer from 1 to 36500');
   const dependencies = dependencyManifest(protocol);
   for (const asset of dependencies.assets) {
     if (!ASSET_ID.test(asset.id || '')) throw new Error('Deployment asset IDs may contain only letters, numbers, dot, dash and underscore');
@@ -77,6 +78,7 @@ export async function createDeploymentBundle(protocol, options = {}) {
       mode: options.mode || 'participant-browser',
       maximumSessions: options.maximumSessions ?? null,
       expiresAt: options.expiresAt || null,
+      dataRetentionDays: options.dataRetentionDays ?? null,
     },
   };
   bundle.bundleHash = await sha256(bundle);
@@ -108,6 +110,7 @@ export async function validateDeploymentBundle(bundle) {
   else if (await sha256(unsignedBundle(bundle)) !== bundle.bundleHash) errors.push('Deployment bundle content does not match its hash');
   if (bundle.executionPolicy?.maximumSessions !== null && bundle.executionPolicy?.maximumSessions !== undefined && (!Number.isInteger(bundle.executionPolicy.maximumSessions) || bundle.executionPolicy.maximumSessions < 1)) errors.push('Deployment maximum sessions must be a positive integer');
   if (bundle.executionPolicy?.expiresAt && !Number.isFinite(Date.parse(bundle.executionPolicy.expiresAt))) errors.push('Deployment expiry must be a valid timestamp');
+  if (bundle.executionPolicy?.dataRetentionDays !== null && bundle.executionPolicy?.dataRetentionDays !== undefined && (!Number.isInteger(bundle.executionPolicy.dataRetentionDays) || bundle.executionPolicy.dataRetentionDays < 1 || bundle.executionPolicy.dataRetentionDays > 36500)) errors.push('Deployment data retention days must be an integer from 1 to 36500');
   return { valid: errors.length === 0, errors };
 }
 

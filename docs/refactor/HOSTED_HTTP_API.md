@@ -22,6 +22,8 @@ The single-node adapter additionally exposes unauthenticated `GET /healthz` for 
 | POST | `/v1/deployments/process-next` | `deployment.manage` | Advance the next queued deployment to ready |
 | GET | `/v1/deployments/:id` | `deployment.read` | Read deployment metadata |
 | GET | `/v1/deployments/:id/data` | `data.read` | Export every session record, frozen provenance and related audit entry |
+| GET | `/v1/deployments/:id/retention-plan?asOf=...` | `data.purge` | Preview terminal session data eligible under the frozen retention policy |
+| POST | `/v1/deployments/:id/purge-data` | `data.purge` | Confirm and idempotently pseudonymize the exact previewed set |
 | GET | `/v1/deployments/:id/assets` | `deployment.read` | Inspect workspace-asset readiness |
 | PUT | `/v1/deployments/:id/assets/:assetId` | `deployment.asset.write` | Upload one checksum-locked workspace binary |
 | POST | `/v1/deployments/:id/sessions` | `session.start` | Create a scoped participant session |
@@ -47,4 +49,4 @@ Hosted state has its own versioned schema. It contains deployments, launch-link 
 - `WebStorageHostedStateStore` for a durable single-browser sandbox;
 - `FileHostedStateStore` in the Node adapter for validated, mode-`0600`, atomic single-process persistence.
 
-A production store can implement the same interface with transactional SQL, an append-only event database, object storage, or another durable backend. The included Node server also serves the participant application and signed filesystem assets; see `SELF_HOSTING.md`. Deployment-level research export is documented in `HOSTED_DATA_EXPORT.md`. Encryption, tenant isolation, secret hashing, backups, retention enforcement, rate limiting, and operational monitoring remain responsibilities of that adapter and its hosting environment.
+A production store can implement the same interface with transactional SQL, an append-only event database, object storage, or another durable backend. The included Node server also serves the participant application and signed filesystem assets; see `SELF_HOSTING.md`. Deployment-level research export is documented in `HOSTED_DATA_EXPORT.md`; explicit live-state pseudonymization is documented in `DATA_RETENTION.md`. Encryption, tenant isolation, secret hashing, backup expiry, retention scheduling, rate limiting, and operational monitoring remain responsibilities of that adapter and its hosting environment.

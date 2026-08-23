@@ -26,7 +26,7 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 
 ## Acceptance evidence
 
-- Automated tests: 153 passing.
+- Automated tests: 156 passing.
 - Production build: passing.
 - Lint: zero errors and zero warnings.
 - Production bundle: no build warnings; view-level loading keeps the initial JavaScript chunk below the configured 500 kB warning threshold.
@@ -58,6 +58,7 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 - Hosted data-export behavior: the HTTP test exports the exact frozen bundle, every session event and snapshot, related audit provenance and aggregate counts, confirms integrity, rejects viewer access, and proves participant bearer credentials are absent.
 - Backup/recovery behavior: tests create a private checksum-inventoried state/asset snapshot, verify and restore it, reject overwrite, tampering and symbolic links, and prove `/readyz` degrades when a processed asset changes.
 - Operations behavior: unit and real-network tests prove independent bounded rate windows, 429/retry headers, default rejection of spoofed forwarded addresses, health exemption, owner-only metrics and aggregate-only metric content.
+- Retention behavior: tests prove opt-in policy bounds, owner-only preview/confirmation, cutoff eligibility, confirmation conflicts, idempotent purge, credential/identity/event/snapshot/cache removal, audit continuity, pseudonymized export totals and durable restart recovery.
 
 ## Known transition scope
 

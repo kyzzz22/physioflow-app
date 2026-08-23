@@ -12,6 +12,7 @@ const MUTATIONS = new Set([
   'appendEvents',
   'syncSessionState',
   'completeSession',
+  'purgeExpiredSessionData',
 ]);
 
 function clone(value) { return value === undefined ? undefined : structuredClone(value); }
@@ -31,11 +32,24 @@ export function validateHostedState(state) {
     deploymentIds.add(deployment.deploymentId);
   }
   const sessionIds = new Set();
+  const purgedSessionIds = new Set();
   for (const session of state.sessions || []) {
     if (!session.sessionId || sessionIds.has(session.sessionId)) errors.push('Hosted session IDs must be present and unique');
     sessionIds.add(session.sessionId);
     if (!deploymentIds.has(session.deploymentId)) errors.push(`Hosted session ${session.sessionId || '(missing)'} references an unknown deployment`);
     if (!Array.isArray(session.idempotency)) errors.push(`Hosted session ${session.sessionId || '(missing)'} idempotency state must be an array`);
+    if (session.dataPurgedAt) {
+      purgedSessionIds.add(session.sessionId);
+      if (session.participantId !== null || session.participantAccessToken !== null) errors.push(`Purged hosted session ${session.sessionId} must not retain participant identity or access token`);
+      if (!Array.isArray(session.events) || session.events.length !== 0 || session.eventCount !== 0) errors.push(`Purged hosted session ${session.sessionId} must not retain events`);
+      if (session.runtimeSnapshot !== null) errors.push(`Purged hosted session ${session.sessionId} must not retain a runtime snapshot`);
+      if (!Array.isArray(session.idempotency) || session.idempotency.length !== 0) errors.push(`Purged hosted session ${session.sessionId} must not retain session idempotency results`);
+      if (!Number.isInteger(session.purgedEventCount) || session.purgedEventCount < 0) errors.push(`Purged hosted session ${session.sessionId} must record its removed event count`);
+    }
+  }
+  for (const entry of state.participantTokens || []) {
+    if (!Array.isArray(entry) || entry.length !== 2 || !sessionIds.has(entry[1]?.sessionId)) errors.push('Hosted participant tokens must reference a known session');
+    else if (purgedSessionIds.has(entry[1].sessionId)) errors.push(`Purged hosted session ${entry[1].sessionId} must not retain a participant token`);
   }
   const launchLinkIds = new Set();
   for (const link of state.launchLinks || []) {

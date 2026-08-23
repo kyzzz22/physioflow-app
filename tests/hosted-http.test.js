@@ -64,7 +64,7 @@ test('Hosted HTTP API carries a complete Runtime V2 session with stable errors a
   const exported = await owner.deploymentData(deployment.deploymentId);
   assert.equal(exported.schemaVersion, '1.0.0');
   assert.equal(exported.bundle.bundleHash, bundle.bundleHash);
-  assert.deepEqual(exported.summary, { sessionCount: 1, eventCount: runtime.events.length, statusCounts: { completed: 1 } });
+  assert.deepEqual(exported.summary, { sessionCount: 1, eventCount: runtime.events.length, purgedSessionCount: 0, purgedEventCount: 0, statusCounts: { completed: 1 } });
   assert.equal(exported.integrity.valid, true);
   assert.deepEqual(exported.sessions[0].events, runtime.events);
   assert.equal(exported.audit.every(entry => entry.resource.deploymentId === deployment.deploymentId || entry.resource.sessionId === session.sessionId), true);

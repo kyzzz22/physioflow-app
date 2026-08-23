@@ -11,7 +11,7 @@ PhysioFlow deployment bundles separate experiment design from the system that ho
 5. Upload every checksum-locked workspace asset and confirm deployment readiness.
 6. A provider implementing `submit`, `status`, and `cancel` can accept the same bundle without changing the runtime or protocol model.
 
-The execution policy can bound the total number of participant sessions and set an expiry timestamp. Hosted services enforce those immutable bundle limits in addition to any narrower per-link use count or expiry.
+The execution policy can bound the total number of participant sessions, set an expiry timestamp, and optionally declare a 1–36,500 day data-retention period. Retention is `null` by default and never implies hidden deletion. Hosted services enforce immutable session/expiry limits and expose the separate reviewed cleanup workflow in `DATA_RETENTION.md`.
 
 Composer can also inspect an imported deployment bundle and reports protocol or manifest tampering before any execution request is made.
 

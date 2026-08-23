@@ -7,7 +7,7 @@ export const HOSTED_DATA_EXPORT_SCHEMA_VERSION = '1.0.0';
 const LEGACY_HOSTED_STATE_SCHEMA_VERSION = '1.0.0';
 
 const ROLE_PERMISSIONS = Object.freeze({
-  owner: ['deployment.publish', 'deployment.read', 'deployment.manage', 'deployment.asset.write', 'session.start', 'session.read', 'session.bootstrap', 'session.manage', 'data.ingest', 'data.read', 'audit.read'],
+  owner: ['deployment.publish', 'deployment.read', 'deployment.manage', 'deployment.asset.write', 'session.start', 'session.read', 'session.bootstrap', 'session.manage', 'data.ingest', 'data.read', 'data.purge', 'audit.read'],
   editor: ['deployment.publish', 'deployment.read', 'deployment.asset.write', 'session.read'],
   operator: ['deployment.read', 'deployment.manage', 'deployment.asset.write', 'session.start', 'session.read', 'session.bootstrap', 'session.manage', 'data.ingest', 'data.read'],
   analyst: ['deployment.read', 'session.read', 'data.read'],
@@ -53,6 +53,40 @@ function sessionExportIntegrity(session) {
   });
   if (session.runtimeSnapshot && session.runtimeSnapshot.eventSequence !== session.events.length) issues.push(`Session ${session.sessionId} snapshot sequence does not match stored events`);
   return issues;
+}
+
+function retentionTimestamp(value, label) {
+  const epoch = Date.parse(value);
+  if (!Number.isFinite(epoch)) throw new Error(`${label} must be a valid timestamp`);
+  return epoch;
+}
+
+function redactAuditForSession(entries, sessionId) {
+  return entries.map(entry => {
+    if (entry.resource?.sessionId !== sessionId) return entry;
+    const participantActor = entry.actor?.kind === 'participant' && entry.actor.id !== null;
+    const participantDetail = Object.prototype.hasOwnProperty.call(entry.detail || {}, 'participantId') && entry.detail.participantId !== null;
+    if (!participantActor && !participantDetail) return entry;
+    return Object.freeze({
+      ...entry,
+      actor: participantActor ? { ...entry.actor, id: null, identityPurged: true } : entry.actor,
+      detail: participantDetail ? { ...entry.detail, participantId: null, identityPurged: true } : entry.detail,
+    });
+  });
+}
+
+function redactIdempotencyResult(value, sessionId, purgedAt) {
+  const result = value?.result;
+  const direct = result?.sessionId === sessionId;
+  const nested = result?.session?.sessionId === sessionId;
+  if (!direct && !nested) return value;
+  const sanitizedSession = session => ({ ...session, participantId: null, participantAccessToken: null, dataPurgedAt: purgedAt });
+  return {
+    ...value,
+    fingerprint: '[purged]',
+    purged: true,
+    result: direct ? sanitizedSession(result) : { ...result, session: sanitizedSession(result.session) },
+  };
 }
 
 function validateActor(actor) {
@@ -137,6 +171,7 @@ export class LocalHostedExecutionService {
     const idempotencyKey = `${actor.actorId}:${scope}:${key}`;
     if (this.idempotency.has(idempotencyKey)) {
       const previous = this.idempotency.get(idempotencyKey);
+      if (previous.purged) return clone(previous.result);
       if (previous.fingerprint !== fingerprint) throw new Error(`${scope} idempotency key was already used with different content`);
       return clone(previous.result);
     }
@@ -218,6 +253,7 @@ export class LocalHostedExecutionService {
         sessionCount: 0,
         maximumSessions: bundle.executionPolicy?.maximumSessions ?? null,
         expiresAt: bundle.executionPolicy?.expiresAt || null,
+        dataRetentionDays: bundle.executionPolicy?.dataRetentionDays ?? null,
         bundle: clone(bundle),
       };
       this.deployments.set(deploymentId, record);
@@ -456,6 +492,68 @@ export class LocalHostedExecutionService {
     return result;
   }
 
+  retentionPlanFor(deployment, asOf) {
+    const asOfEpoch = retentionTimestamp(asOf, 'Hosted retention plan as-of time');
+    const days = deployment.dataRetentionDays;
+    if (days === null || days === undefined) return { schemaVersion: '1.0.0', deploymentId: deployment.deploymentId, enabled: false, dataRetentionDays: null, asOf, cutoff: null, eligibleSessions: [], confirmationCode: null };
+    const cutoffEpoch = asOfEpoch - days * 24 * 60 * 60 * 1000;
+    const cutoff = new Date(cutoffEpoch).toISOString();
+    const eligibleSessions = [...this.sessions.values()]
+      .filter(session => session.deploymentId === deployment.deploymentId && TERMINAL_SESSION_STATES.has(session.status) && !session.dataPurgedAt && Number.isFinite(Date.parse(session.completedAt)) && Date.parse(session.completedAt) <= cutoffEpoch)
+      .sort((a, b) => a.sessionId.localeCompare(b.sessionId))
+      .map(session => ({ sessionId: session.sessionId, status: session.status, completedAt: session.completedAt, eventCount: session.eventCount, hasRuntimeSnapshot: Boolean(session.runtimeSnapshot) }));
+    const confirmationCode = eligibleSessions.length ? `PURGE:${deployment.deploymentId}:${cutoff}:${eligibleSessions.map(session => session.sessionId).join(',')}` : null;
+    return { schemaVersion: '1.0.0', deploymentId: deployment.deploymentId, enabled: true, dataRetentionDays: days, asOf, cutoff, eligibleSessions, confirmationCode };
+  }
+
+  planDataRetention(deploymentId, options = {}, context = {}) {
+    this.authorize(context, 'data.purge');
+    const deployment = this.deployments.get(deploymentId);
+    if (!deployment) throw new Error(`Unknown hosted deployment ${deploymentId}`);
+    return this.retentionPlanFor(deployment, options.asOf || this.clock());
+  }
+
+  purgeExpiredSessionData(deploymentId, request = {}, context = {}) {
+    const actor = this.authorize(context, 'data.purge');
+    const deployment = this.deployments.get(deploymentId);
+    if (!deployment) throw new Error(`Unknown hosted deployment ${deploymentId}`);
+    if (!request.asOf) throw new Error('Hosted retention purge requires the plan as-of time');
+    return this.idempotent(actor, `data.purge:${deploymentId}`, request.idempotencyKey, JSON.stringify({ asOf: request.asOf, confirmationCode: request.confirmationCode || null }), () => {
+      const plan = this.retentionPlanFor(deployment, request.asOf);
+      if (!plan.enabled) throw new Error(`Hosted deployment ${deploymentId} has no data retention policy`);
+      if (!plan.eligibleSessions.length) throw new Error(`Hosted deployment ${deploymentId} has no session data eligible for retention purge`);
+      if (request.confirmationCode !== plan.confirmationCode) throw new Error('Hosted retention purge confirmation conflict');
+      const purgedAt = this.clock();
+      let purgedEventCount = 0;
+      for (const candidate of plan.eligibleSessions) {
+        const record = this.sessions.get(candidate.sessionId);
+        purgedEventCount += record.eventCount;
+        if (record.participantAccessToken) this.participantTokens.delete(record.participantAccessToken);
+        this.auditEntries = redactAuditForSession(this.auditEntries, record.sessionId);
+        for (const [key, value] of this.idempotency) this.idempotency.set(key, redactIdempotencyResult(value, record.sessionId, purgedAt));
+        const next = {
+          ...record,
+          participantId: null,
+          participantAccessToken: null,
+          events: [],
+          runtimeSnapshot: null,
+          idempotency: new Map(),
+          eventCount: 0,
+          purgedEventCount: record.eventCount,
+          purgedRuntimeSnapshot: Boolean(record.runtimeSnapshot),
+          dataPurgedAt: purgedAt,
+          dataPurgedBy: actor.actorId,
+          retentionPolicyDays: plan.dataRetentionDays,
+          revision: record.revision + 1,
+          updatedAt: purgedAt,
+        };
+        this.sessions.set(record.sessionId, next);
+        this.audit('session.data_purged', actor, { deploymentId, sessionId: record.sessionId }, { eventCount: record.eventCount, runtimeSnapshot: Boolean(record.runtimeSnapshot), retentionDays: plan.dataRetentionDays });
+      }
+      return { deploymentId, purgedAt, purgedSessions: plan.eligibleSessions.map(session => session.sessionId), purgedEventCount };
+    });
+  }
+
   readSessionData(sessionId, context = {}) {
     this.authorize(context, 'data.read');
     const record = this.sessions.get(sessionId);
@@ -484,7 +582,13 @@ export class LocalHostedExecutionService {
       launchLinks,
       sessions,
       audit,
-      summary: { sessionCount: sessions.length, eventCount: sessions.reduce((total, item) => total + item.events.length, 0), statusCounts },
+      summary: {
+        sessionCount: sessions.length,
+        eventCount: sessions.reduce((total, item) => total + item.events.length, 0),
+        purgedSessionCount: sessions.filter(item => item.session.dataPurgedAt).length,
+        purgedEventCount: sessions.reduce((total, item) => total + (item.session.purgedEventCount || 0), 0),
+        statusCounts,
+      },
       integrity: { valid: issues.length === 0, issues },
     };
   }
@@ -515,6 +619,8 @@ export class HostedExecutionClient {
   appendEvents(id, events, options) { return this.service.appendEvents(id, events, options, this.context); }
   syncState(id, state, options) { return this.service.syncSessionState(id, state, options, this.context); }
   completeSession(id, options) { return this.service.completeSession(id, options, this.context); }
+  retentionPlan(id, options) { return this.service.planDataRetention(id, options, this.context); }
+  purgeExpiredData(id, request) { return this.service.purgeExpiredSessionData(id, request, this.context); }
   sessionData(id) { return this.service.readSessionData(id, this.context); }
   deploymentData(id) { return this.service.readDeploymentData(id, this.context); }
   audit() { return this.service.readAudit(this.context); }
