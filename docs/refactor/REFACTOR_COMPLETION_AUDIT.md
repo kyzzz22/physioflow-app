@@ -25,16 +25,19 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 | Declarative component SDK and project library | SDK 1.0 package contract, semantic versions, permission approval, no-code sandbox, dynamic project registry, JSON import, uninstall protection and runnable Reaction Button example |
 | External device connector framework | Versioned manifests, typed input/output channels, approved connect/read/write permissions, injected host adapters, failure/recovery lifecycle, full provenance and raw/normalized export tables |
 | Extensible custom control handlers | Versioned trusted-handler registry, frozen cloned inputs, synchronous execution, declared-branch enforcement, event allow-lists, registry-driven runtime dispatch and a working Value switch example |
+| Local-first collaboration foundation | Versioned change-set envelope, base/result hashes, stable entity and field operations, deterministic three-way conflict detection, explicit resolution, Composer import/export and protocol audit history |
 | Self-hosted Composer browser release gate | Script launches Vite and isolated headless Chrome itself, exercises V2 variable/subflow/SDK/device workflows, and runs in the demo push/PR GitHub Actions job |
 | Reproducible formal versions | Pre-freeze validation, migration review gate, config hash, immutable frozen record, new-version editing |
 | Complete session data | Raw events/responses, normalized CSV, snapshots, manifest, dictionary, quality report and independent validator |
 | Legacy migration | Copy-and-convert workflow, original payload preservation, report/review gate, CLI/in-app paths, representative coverage tests |
+| Remote demo synchronization | The completed MVP commit series was pushed to `origin/demo`; subsequent Stage 7 work remains local at the user's request |
 
 ## Remaining full-roadmap work
 
 | Item | Status | Acceptance evidence still required |
 | --- | --- | --- |
 | Formal usability study | Requires human participants | Run `USABILITY_STUDY_PROTOCOL.md`; the checked-in verifier must report complete evidence and `passed: true` |
-| Remote upload | Locally blocked | GitHub HTTPS/SSH authentication and remote branch verification |
 
-Hardware-specific adapters can now be added behind the connector port without changing protocol/runtime semantics. Human usability evidence and authenticated remote upload require external state beyond source changes.
+Hardware-specific adapters can now be added behind the connector port without changing protocol/runtime semantics. Human usability evidence requires external participation beyond source changes.
+
+Online presence, authentication, live cursors and cloud synchronization remain outside the local-first MVP boundary; the collaboration change-set contract is designed as their transport-neutral protocol foundation.

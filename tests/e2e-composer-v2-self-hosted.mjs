@@ -128,14 +128,19 @@ try {
   assert.equal(await evaluate(`document.body.textContent.includes('Match') && document.body.textContent.includes('Default')`), true);
 
   await clickText('Advanced');
+  await waitFor(`document.body.textContent.includes('Collaboration change sets')`, 'collaboration change-set panel');
+  await clickText('Use current as baseline');
+  await waitFor(`document.body.textContent.includes('Collaboration baseline updated')`, 'collaboration baseline');
   await clickText('Install Reaction Button example');
   await waitFor(`document.body.textContent.includes('org.physioflow.examples.reaction-button@1.0.0')`, 'SDK package installation');
   assert.equal(await evaluate(`[...document.querySelectorAll('button')].some(button => button.textContent.includes('example.reaction-button'))`), true);
   await clickText('Install simulated sensor');
   await waitFor(`document.body.textContent.includes('org.physioflow.simulated-sensor@1.0.0')`, 'device connector installation');
   assert.equal(await evaluate(`document.body.textContent.includes('input signal:number') && document.body.textContent.includes('device.connect, device.read, device.write')`), true);
+  await clickText('Export changes');
+  await waitFor(`document.body.textContent.includes('Exported') && document.body.textContent.includes('collaboration operation')`, 'collaboration change-set export');
 
-  console.log(JSON.stringify({ status: 'passed', composer: 'v2', nodes: 5, reusableSubflow: true, controlHandler: 'core.value-switch@1.0.0', sdkComponent: 'example.reaction-button@1.0.0', deviceConnector: 'org.physioflow.simulated-sensor@1.0.0' }, null, 2));
+  console.log(JSON.stringify({ status: 'passed', composer: 'v2', nodes: 5, reusableSubflow: true, controlHandler: 'core.value-switch@1.0.0', collaborationChangeSet: true, sdkComponent: 'example.reaction-button@1.0.0', deviceConnector: 'org.physioflow.simulated-sensor@1.0.0' }, null, 2));
 } finally {
   socket.close();
   await cleanup();

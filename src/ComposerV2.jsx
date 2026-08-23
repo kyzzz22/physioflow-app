@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   addVariable,
   addNode,
@@ -24,9 +24,18 @@ import {
 import ParticipantUiBuilder from './ParticipantUiBuilder.jsx';
 import { createProjectComponentRegistry, exampleReactionButtonPackage, installComponentPackage, uninstallComponentPackage } from './sdk/index.js';
 import { exampleSimulatedConnector, installDeviceConnector, uninstallDeviceConnector } from './devices/index.js';
+import { createProtocolChangeSet, mergeProtocolChangeSet } from './collaboration/index.js';
 
 const NODE_WIDTH = 188;
 const NODE_HEIGHT = 112;
+
+function downloadJson(name, value) {
+  const anchor = document.createElement('a');
+  anchor.href = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }));
+  anchor.download = name;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(anchor.href), 1000);
+}
 
 function getPath(value, path) {
   return path.split('.').reduce((current, key) => current?.[key], value);
@@ -72,6 +81,9 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
   const [pendingPort, setPendingPort] = useState(null);
   const [message, setMessage] = useState('');
   const [editorMode, setEditorMode] = useState('quick');
+  const [collaborationBaseline, setCollaborationBaseline] = useState(() => structuredClone(protocol));
+  const collaborationProtocolRef = useRef(protocol);
+  collaborationProtocolRef.current = protocol;
   const canvasRef = useRef(null);
   const dragRef = useRef(null);
   const registry = useMemo(() => createProjectComponentRegistry(protocol), [protocol]);
@@ -81,6 +93,10 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
   const validation = useMemo(() => validateProtocolGraphConfiguration(protocol, registry), [protocol, registry]);
   const selectedNode = protocol.graph.nodes.find(node => node.id === selectedNodeId) || null;
   const selectedEdge = protocol.graph.edges.find(edge => edge.id === selectedEdgeId) || null;
+
+  useEffect(() => {
+    setCollaborationBaseline(structuredClone(collaborationProtocolRef.current));
+  }, [protocol.protocolId, protocol.version?.number]);
 
   const locked = protocol.version?.status === 'frozen';
   const migrationReviewRequired = protocol.legacy?.migrationReport?.formalRunAllowed === false;
@@ -237,6 +253,7 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
           try { commit(uninstallDeviceConnector(protocol, connectorId, version)); }
           catch (error) { setMessage(error.message); }
         }} />}
+        {editorMode === 'advanced' && <CollaborationCatalog protocol={protocol} baseline={collaborationBaseline} locked={locked} onSetBaseline={() => { setCollaborationBaseline(structuredClone(protocol)); setMessage('Collaboration baseline updated'); }} onApply={next => { commit(next); setCollaborationBaseline(structuredClone(next)); setMessage('Collaboration change set applied'); }} onMessage={setMessage} />}
         {editorMode !== 'quick' && <SubflowTemplateCatalog templates={protocol.subflowTemplates || []} variables={protocol.variables || []} locked={locked} onInstantiate={(templateId, parameterMappings) => {
           try { const result = instantiateSubflowTemplate(protocol, templateId, { parameterMappings, position: { x: 320, y: 180 + (protocol.graph.groups?.length || 0) * 170 } }); commit(result.protocol); setSelectedNodeId(result.group.entryNodeId); setMessage(`Created ${result.group.name}`); }
           catch (error) { setMessage(error.message); }
@@ -410,6 +427,68 @@ function SubflowTemplateCatalog({ templates, variables, locked, onInstantiate, o
         <div className="subflow-template-actions"><button disabled={locked || !ready} onClick={() => onInstantiate(template.id, resolvedMappings)}>Create instance</button><button disabled={locked} onClick={() => onRemove(template.id)}>Delete template</button></div>
       </article>;
     })}
+  </section>;
+}
+
+function snapshotLabel(state) {
+  if (!state?.exists) return '(missing)';
+  const serialized = typeof state.value === 'string' ? state.value : JSON.stringify(state.value);
+  const text = serialized === undefined ? String(state.value) : serialized;
+  return text.length > 90 ? `${text.slice(0, 87)}…` : text;
+}
+
+function CollaborationCatalog({ protocol, baseline, locked, onSetBaseline, onApply, onMessage }) {
+  const [author, setAuthor] = useState('local-author');
+  const [summary, setSummary] = useState('');
+  const [pending, setPending] = useState(null);
+  const [resolutions, setResolutions] = useState({});
+  const [error, setError] = useState('');
+  const preview = useMemo(() => {
+    if (!pending) return null;
+    try { return mergeProtocolChangeSet(protocol, pending, { resolutions }); }
+    catch (nextError) { return { error: nextError.message, conflicts: [], unresolved: 0 }; }
+  }, [pending, protocol, resolutions]);
+  const exportChanges = async () => {
+    try {
+      const changeSet = await createProtocolChangeSet(baseline, protocol, { authorId: author.trim() || 'local-author', authorName: author.trim() || 'Local author', summary: summary.trim() });
+      if (!changeSet.operations.length) throw new Error('No changes exist relative to the current collaboration baseline');
+      downloadJson(`${protocol.metadata?.name || 'protocol'}.${changeSet.id}.changeset.json`, changeSet);
+      setError('');
+      onMessage(`Exported ${changeSet.operations.length} collaboration operation(s)`);
+    } catch (nextError) { setError(nextError.message); }
+  };
+  const readChangeSet = async event => {
+    try {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      setPending(JSON.parse(await file.text()));
+      setResolutions({});
+      setError('');
+    } catch (nextError) { setPending(null); setError(nextError.message); }
+    event.target.value = '';
+  };
+  const history = protocol.collaboration?.history || [];
+  return <section className="collaboration-catalog">
+    <h3>Collaboration change sets</h3>
+    <p>Exchange auditable protocol changes without requiring a server. Independent fields merge automatically; same-field edits require an explicit choice.</p>
+    <label>Author ID<input value={author} onChange={event => setAuthor(event.target.value)} /></label>
+    <label>Summary<input value={summary} onChange={event => setSummary(event.target.value)} placeholder="What changed?" /></label>
+    <small>Baseline: v{baseline.version?.number} · {baseline.audit?.updatedAt || 'unknown time'}</small>
+    <div className="collaboration-actions"><button disabled={locked} onClick={onSetBaseline}>Use current as baseline</button><button disabled={locked} onClick={exportChanges}>Export changes</button></div>
+    <label className="collaboration-import">Import change set<input disabled={locked} type="file" accept="application/json,.json" onChange={readChangeSet} /></label>
+    {error && <small className="package-error">{error}</small>}
+    {preview?.error && <small className="package-error">{preview.error}</small>}
+    {pending && !preview?.error && <article className="collaboration-preview">
+      <b>{pending.summary || pending.id}</b>
+      <small>{pending.author?.name || pending.author?.id} · {pending.operations?.length || 0} operation(s)</small>
+      <small>{preview.appliedOperations} ready · {preview.alreadyAppliedOperations} already applied · {preview.unresolved} conflict(s)</small>
+      {preview.conflicts.map(conflict => <label key={conflict.operationId} className="collaboration-conflict">
+        <span><b>{conflict.target}{conflict.entityKey ? ` · ${conflict.entityKey}` : ''}</b><small>{conflict.path.join('.') || '(whole entity)'}</small><small>Local: {snapshotLabel(conflict.local)}</small><small>Incoming: {snapshotLabel(conflict.incoming)}</small></span>
+        <select aria-label={`${conflict.operationId} conflict resolution`} value={resolutions[conflict.operationId] || ''} onChange={event => setResolutions(current => ({ ...current, [conflict.operationId]: event.target.value }))}><option value="">Resolve…</option><option value="local">Keep local</option><option value="incoming">Use incoming</option></select>
+      </label>)}
+      <div><button disabled={locked || preview.unresolved > 0} onClick={() => { onApply(preview.protocol); setPending(null); setResolutions({}); }}>Apply change set</button><button onClick={() => { setPending(null); setResolutions({}); }}>Cancel</button></div>
+    </article>}
+    <details><summary>Applied history ({history.length})</summary>{history.map(item => <small key={`${item.changeSetId}:${item.appliedAt}`}>{item.changeSetId} · {item.author?.name || item.author?.id} · {item.appliedOperations} applied · {item.appliedAt}</small>)}</details>
   </section>;
 }
 

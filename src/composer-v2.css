@@ -132,5 +132,19 @@
 .device-connector-catalog article p { margin: 0; }
 .device-connector-catalog article label { display: flex; align-items: center; gap: 4px; }
 .device-connector-catalog article button { padding: 5px; border: 1px solid var(--border, #dfe3e8); border-radius: 5px; background: var(--surface, #fff); color: inherit; }
+
+.collaboration-catalog { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border, #dfe3e8); }
+.collaboration-catalog > p, .collaboration-catalog > small, .collaboration-catalog details { color: var(--muted, #667085); font-size: .64rem; line-height: 1.4; }
+.collaboration-catalog > label { display: grid; gap: 3px; margin: 6px 0; color: var(--muted, #667085); font-size: .62rem; }
+.collaboration-catalog input, .collaboration-catalog select { min-width: 0; padding: 5px; border: 1px solid var(--border, #dfe3e8); border-radius: 5px; background: var(--surface, #fff); color: inherit; font-size: .65rem; }
+.collaboration-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 7px 0; }
+.collaboration-actions button, .collaboration-preview button, .collaboration-import { display: flex; justify-content: center; box-sizing: border-box; width: 100%; padding: 6px; border: 1px solid #2673d9; border-radius: 6px; background: #2673d910; color: #1d5ba9; font-size: .64rem; cursor: pointer; }
+.collaboration-import input { display: none; }
+.collaboration-preview { display: grid; gap: 6px; margin: 7px 0; padding: 8px; border: 1px solid var(--border, #dfe3e8); border-radius: 7px; }
+.collaboration-preview > b, .collaboration-preview > small, .collaboration-catalog details small { display: block; }
+.collaboration-preview > small, .collaboration-conflict small { color: var(--muted, #667085); font-size: .62rem; }
+.collaboration-conflict { display: grid; grid-template-columns: minmax(0, 1fr) 90px; gap: 6px; align-items: center; padding: 6px; border: 1px solid #d8a23c; border-radius: 5px; }
+.collaboration-conflict span { min-width: 0; overflow-wrap: anywhere; }
+.collaboration-preview > div { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
 .composer-v2.locked .composer-palette, .composer-v2.locked .composer-inspector .inspector-card, .composer-v2.locked .composer-node { pointer-events: none; opacity: .72; }
 .migration-review-warning { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; padding: 9px; border: 1px solid #e2ba7b; border-radius: 7px; background: #fff7e8; color: #7a4a00; font-size: .68rem; }

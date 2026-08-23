@@ -5,6 +5,7 @@ import { validateParticipantUi } from './participantUi.js';
 function hashableProtocol(protocol) {
   const next = structuredClone(protocol);
   delete next.freeze;
+  delete next.collaboration;
   next.audit = { ...next.audit, createdAt: null, updatedAt: null, frozenAt: null, archivedAt: null };
   return next;
 }
