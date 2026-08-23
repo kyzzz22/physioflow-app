@@ -55,7 +55,7 @@ export class LocalHostedExecutionService {
     const actor = this.actors.get(context?.accessToken);
     if (actor && ROLE_PERMISSIONS[actor.role].includes(permission)) return { kind: 'actor', ...actor };
     const participant = this.participantTokens.get(context?.accessToken);
-    if (participant && participant.sessionId === sessionId && ['session.read', 'session.manage', 'data.ingest'].includes(permission)) return { kind: 'participant', actorId: participant.participantId, role: 'participant' };
+    if (participant?.active !== false && participant?.sessionId === sessionId && ['session.read', 'session.manage', 'data.ingest'].includes(permission)) return { kind: 'participant', actorId: participant.participantId, role: 'participant' };
     throw new Error(`Hosted permission ${permission} is required`);
   }
 
@@ -167,7 +167,7 @@ export class LocalHostedExecutionService {
         idempotency: new Map(),
       };
       this.sessions.set(sessionId, record);
-      this.participantTokens.set(participantAccessToken, { sessionId, participantId });
+      this.participantTokens.set(participantAccessToken, { sessionId, participantId, active: true });
       this.deployments.set(deploymentId, { ...deployment, sessionCount: deployment.sessionCount + 1, updatedAt: now });
       this.audit('session.created', actor, { deploymentId, sessionId }, { participantId });
       return { ...publicSession(record), participantAccessToken };
@@ -186,8 +186,9 @@ export class LocalHostedExecutionService {
     const record = this.sessions.get(sessionId);
     if (!record) throw new Error(`Unknown hosted session ${sessionId}`);
     if (!options.batchId?.trim()) throw new Error('Event ingestion requires a batch ID');
-    if (record.idempotency.has(options.batchId)) {
-      const previous = record.idempotency.get(options.batchId);
+    const idempotencyKey = `events:${options.batchId}`;
+    if (record.idempotency.has(idempotencyKey)) {
+      const previous = record.idempotency.get(idempotencyKey);
       if (JSON.stringify(previous.events) !== JSON.stringify(events)) throw new Error(`Event batch ${options.batchId} was already used with different content`);
       return clone(previous.receipt);
     }
@@ -217,7 +218,7 @@ export class LocalHostedExecutionService {
       updatedAt: this.clock(),
     };
     const receipt = { sessionId, batchId: options.batchId, accepted: events.length, firstSequence: events[0].sequence, lastSequence: events.at(-1).sequence, revision: next.revision };
-    next.idempotency.set(options.batchId, { events: clone(events), receipt });
+    next.idempotency.set(idempotencyKey, { events: clone(events), receipt });
     this.sessions.set(sessionId, next);
     this.audit('session.events_appended', actor, { sessionId }, { batchId: options.batchId, accepted: events.length, lastSequence: receipt.lastSequence });
     return clone(receipt);
@@ -227,28 +228,52 @@ export class LocalHostedExecutionService {
     const actor = this.authorize(context, 'session.manage', sessionId);
     const record = this.sessions.get(sessionId);
     if (!record) throw new Error(`Unknown hosted session ${sessionId}`);
+    if (!options.syncId?.trim()) throw new Error('Runtime state synchronization requires a sync ID');
+    const idempotencyKey = `state:${options.syncId}`;
+    if (record.idempotency.has(idempotencyKey)) {
+      const previous = record.idempotency.get(idempotencyKey);
+      if (JSON.stringify(previous.state) !== JSON.stringify(state)) throw new Error(`Runtime state sync ${options.syncId} was already used with different content`);
+      return publicSession(previous.result);
+    }
     if (TERMINAL_SESSION_STATES.has(record.status)) throw new Error(`Hosted session ${sessionId} is ${record.status}`);
     if (options.expectedRevision !== record.revision) throw new Error(`Hosted session revision conflict: expected ${options.expectedRevision}, current ${record.revision}`);
     if (state?.sessionId !== sessionId || state?.protocolId !== record.protocolId || state?.protocolVersion !== record.protocolVersion) throw new Error('Runtime snapshot does not match the hosted session identity');
     if (state.eventSequence !== record.nextEventSequence - 1) throw new Error(`Runtime snapshot event sequence ${state.eventSequence} does not match ingested sequence ${record.nextEventSequence - 1}`);
-    const next = { ...record, status: state.status === 'paused' ? 'paused' : record.status === 'ready' ? 'running' : record.status, revision: record.revision + 1, runtimeSnapshot: clone(state), updatedAt: this.clock() };
+    const nextStatus = state.status === 'paused' ? 'paused' : ['running', 'waiting'].includes(state.status) ? 'running' : record.status;
+    const next = { ...record, status: nextStatus, revision: record.revision + 1, runtimeSnapshot: clone(state), updatedAt: this.clock() };
+    const result = publicSession(next);
+    next.idempotency.set(idempotencyKey, { state: clone(state), result });
     this.sessions.set(sessionId, next);
     this.audit('session.state_synced', actor, { sessionId }, { revision: next.revision, runtimeStatus: state.status });
-    return publicSession(next);
+    return result;
   }
 
   completeSession(sessionId, options = {}, context = {}) {
-    const actor = this.authorize(context, 'session.manage', sessionId);
     const record = this.sessions.get(sessionId);
     if (!record) throw new Error(`Unknown hosted session ${sessionId}`);
+    if (!options.completionId?.trim()) throw new Error('Session completion requires a completion ID');
+    const outcome = options.outcome || 'completed';
+    if (!['completed', 'failed'].includes(outcome)) throw new Error(`Unsupported hosted session outcome ${outcome}`);
+    const idempotencyKey = `completion:${options.completionId}`;
+    if (record.idempotency.has(idempotencyKey)) {
+      const actor = this.actors.get(context?.accessToken);
+      const participant = this.participantTokens.get(context?.accessToken);
+      if ((!actor || !ROLE_PERMISSIONS[actor.role].includes('session.manage')) && participant?.sessionId !== sessionId) throw new Error('Hosted permission session.manage is required');
+      const previous = record.idempotency.get(idempotencyKey);
+      if (previous.outcome !== outcome) throw new Error(`Session completion ${options.completionId} was already used with a different outcome`);
+      return publicSession(previous.result);
+    }
+    const actor = this.authorize(context, 'session.manage', sessionId);
     if (options.expectedRevision !== record.revision) throw new Error(`Hosted session revision conflict: expected ${options.expectedRevision}, current ${record.revision}`);
     if (record.status === 'completed') return publicSession(record);
     if (TERMINAL_SESSION_STATES.has(record.status)) throw new Error(`Hosted session ${sessionId} is ${record.status}`);
-    const next = { ...record, status: 'completed', revision: record.revision + 1, completedAt: this.clock(), updatedAt: this.clock() };
+    const next = { ...record, status: outcome, revision: record.revision + 1, completedAt: this.clock(), updatedAt: this.clock() };
+    const result = publicSession(next);
+    next.idempotency.set(idempotencyKey, { outcome, result });
     this.sessions.set(sessionId, next);
-    this.participantTokens.delete(record.participantAccessToken);
-    this.audit('session.completed', actor, { sessionId }, { eventCount: next.eventCount, revision: next.revision });
-    return publicSession(next);
+    this.participantTokens.set(record.participantAccessToken, { sessionId, participantId: record.participantId, active: false });
+    this.audit(`session.${outcome}`, actor, { sessionId }, { eventCount: next.eventCount, revision: next.revision });
+    return result;
   }
 
   readSessionData(sessionId, context = {}) {

@@ -12,7 +12,7 @@ The planned MVP refactor phases 0–6 are implemented on the `demo` branch.
 | 5 — Data | Raw JSONL, normalized CSV, snapshots, manifests, data dictionary, quality report, full package download, participant/media/device lifecycle events, reaction times, device provenance, and independently tested validator |
 | 6 — Migration/Pilot | In-app and CLI migration, migration reports, native Questionnaire adapter, review gate, freeze hashes, three representative migration tests, operator guide, and release gate |
 
-Current automated gate: `npm run quality:release` passes as one authoritative local/CI command: 130 tests, a production build without bundle warnings, strict zero-warning lint, and both isolated browser flows.
+Current automated gate: `npm run quality:release` passes as one authoritative local/CI command: 132 tests, a production build without bundle warnings, strict zero-warning lint, and both isolated browser flows.
 
 Composer V2 now includes a typed variable catalog with scope, source, default value, and export policy, plus a variable picker for condition inputs. Variable renames update node and participant-UI bindings atomically; referenced variables cannot be removed accidentally.
 
@@ -34,7 +34,7 @@ Trusted Control Handler Contract 1.0 lets host-installed, versioned handlers add
 
 The release gate includes a deterministic refactor E2E test (compose → validate → freeze → run → snapshot/restore → export) and explicit performance gates. Current local measurements validate/edit a 500-node graph in about 36 ms and export 10,000 events in about 39 ms, well below the enforced 2 s / 3 s limits.
 
-The release gate includes two self-hosted browser tests. The legacy compatibility flow verifies the formal-storage gate and completes, saves, and reloads a preview session. The Composer V2 flow freezes a minimal graph, publishes it through the hosted sandbox queue, creates a participant session, creates a new editable version, then exercises typed variables, reusable subflows, SDK components and device connectors. Both launch isolated Vite and headless Chrome processes, and GitHub Actions runs them after the complete quality gate for `demo` pushes and pull requests.
+The release gate includes two self-hosted browser tests. The legacy compatibility flow verifies the formal-storage gate and completes, saves, and reloads a preview session. The Composer V2 flow freezes a minimal graph, publishes it through the hosted sandbox queue, creates and runs a participant session through successful hosted synchronization, creates a new editable version, then exercises typed variables, reusable subflows, SDK components and device connectors. Both launch isolated Vite and headless Chrome processes, and GitHub Actions runs them after the complete quality gate for `demo` pushes and pull requests.
 
 The production bundle now loads Composer V2, the legacy visual workspace, Session Review, Guide, Analytics, and both runtime runners as view-level chunks while keeping the first-screen Dashboard synchronous. This removes the ineffective dynamic-import warning and reduces the initial JavaScript chunk from roughly 749 kB to 489 kB without changing local-first behavior.
 
@@ -47,6 +47,8 @@ Local-first Collaboration Change Sets 1.0 add transport-neutral team editing wit
 Portable Deployment Contract 1.0 packages a frozen Protocol Graph snapshot, exact configuration hash, dependency manifest, execution policy, and provider target under an outer integrity hash. Composer Advanced exports and verifies bundles; a versioned provider registry plus in-memory reference provider prove the transport boundary through submit/status/cancel operations. See `PORTABLE_DEPLOYMENT.md`. A hosted backend remains a separate infrastructure deliverable.
 
 Hosted Service Contract 1.0 adds role-separated publication, an explicit deployment queue, idempotent requests, scoped participant sessions, optimistic state revisions, contiguous append-only event ingestion, completion-time token revocation, separate metadata/data access and sequential audit records. Composer Advanced exposes the complete publish-to-ready-to-session path through a local hosted sandbox. See `HOSTED_SERVICE_CONTRACT.md`; production identity, durable infrastructure and internet hosting remain deployment responsibilities.
+
+Runtime V2 now attaches directly to a hosted participant session through a serialized synchronization controller. It sends incremental events before their matching snapshot, retries lost acknowledgements idempotently, records completed or failed terminal states exactly once, exposes sync errors/retry in the runner, and prevents leaving a terminal run until required hosted synchronization succeeds.
 
 The final hardening pass makes frozen protocols immutable: editing always creates a new draft protocol version with a distinct ID. Formal validation now checks participant UI completion paths, media sources, durations, rating ranges, migration review, and every required condition/loop control exit before preview or freeze.
 

@@ -427,6 +427,27 @@ export default function App() {
             } catch (error) { setAlert({ title: 'Cannot freeze', message: error.message }); }
           }}
           onCreateDraft={() => addAndOpen(createNextGraphProtocolVersion(current))}
+          onHostedRun={({ client, session }) => {
+            setRun({
+              protocol: current,
+              session: {
+                session_id: session.sessionId,
+                participant_id: session.participantId,
+                operator_id: 'local-owner',
+                participant_language: 'en',
+                protocol_id: session.protocolId,
+                protocol_version: session.protocolVersion,
+                protocol_hash: session.configHash,
+                protocol_name: protocolNameOf(current),
+                run_mode: 'hosted',
+                status: 'ready',
+                started_at: session.createdAt,
+                ended_at: null,
+              },
+              hosted: { client, session },
+            });
+            setView('runner');
+          }}
           onUndo={undo}
           onRedo={redo}
           canUndo={undoStack.length > 0}

@@ -77,7 +77,7 @@ function groupBounds(group, nodes) {
   return { left, top, width: right - left, height: bottom - top };
 }
 
-export default function ComposerV2({ protocol, onChange, onSave, onBack, onExport, onPreview, onFreeze, onCreateDraft, onUndo, onRedo, canUndo, canRedo, hasUnsaved, saveAnim }) {
+export default function ComposerV2({ protocol, onChange, onSave, onBack, onExport, onPreview, onFreeze, onCreateDraft, onHostedRun, onUndo, onRedo, canUndo, canRedo, hasUnsaved, saveAnim }) {
   const [selectedNodeId, setSelectedNodeId] = useState(protocol.graph.entryNodeId);
   const [selectedEdgeId, setSelectedEdgeId] = useState(null);
   const [pendingPort, setPendingPort] = useState(null);
@@ -256,7 +256,7 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
           catch (error) { setMessage(error.message); }
         }} />}
         {editorMode === 'advanced' && <CollaborationCatalog protocol={protocol} baseline={collaborationBaseline} locked={locked} onSetBaseline={() => { setCollaborationBaseline(structuredClone(protocol)); setMessage('Collaboration baseline updated'); }} onApply={next => { commit(next); setCollaborationBaseline(structuredClone(next)); setMessage('Collaboration change set applied'); }} onMessage={setMessage} />}
-        {editorMode === 'advanced' && <DeploymentCatalog protocol={protocol} onMessage={setMessage} />}
+        {editorMode === 'advanced' && <DeploymentCatalog protocol={protocol} onHostedRun={onHostedRun} onMessage={setMessage} />}
         {editorMode !== 'quick' && <SubflowTemplateCatalog templates={protocol.subflowTemplates || []} variables={protocol.variables || []} locked={locked} onInstantiate={(templateId, parameterMappings) => {
           try { const result = instantiateSubflowTemplate(protocol, templateId, { parameterMappings, position: { x: 320, y: 180 + (protocol.graph.groups?.length || 0) * 170 } }); commit(result.protocol); setSelectedNodeId(result.group.entryNodeId); setMessage(`Created ${result.group.name}`); }
           catch (error) { setMessage(error.message); }
@@ -495,7 +495,7 @@ function CollaborationCatalog({ protocol, baseline, locked, onSetBaseline, onApp
   </section>;
 }
 
-function DeploymentCatalog({ protocol, onMessage }) {
+function DeploymentCatalog({ protocol, onHostedRun, onMessage }) {
   const [providerId, setProviderId] = useState('org.physioflow.portable');
   const [environment, setEnvironment] = useState('portable');
   const [error, setError] = useState('');
@@ -504,6 +504,7 @@ function DeploymentCatalog({ protocol, onMessage }) {
   const [hostedSession, setHostedSession] = useState(null);
   const [participantId, setParticipantId] = useState('SANDBOX-P001');
   const sandboxRef = useRef(null);
+  const participantClientRef = useRef(null);
   if (!sandboxRef.current) {
     const service = new LocalHostedExecutionService({ actors: [{ actorId: 'local-owner', role: 'owner', accessToken: 'local-owner-token' }] });
     sandboxRef.current = new HostedExecutionClient(service, 'local-owner-token');
@@ -543,6 +544,7 @@ function DeploymentCatalog({ protocol, onMessage }) {
   const createSandboxSession = async () => {
     try {
       const session = await sandboxRef.current.createSession(hostedDeployment.deploymentId, { participantId: participantId.trim() || undefined, idempotencyKey: `participant:${participantId.trim() || 'generated'}` });
+      participantClientRef.current = new HostedExecutionClient(sandboxRef.current.service, session.participantAccessToken);
       setHostedSession(session);
       setError('');
       onMessage(`Created hosted sandbox session ${session.sessionId}`);
@@ -568,7 +570,11 @@ function DeploymentCatalog({ protocol, onMessage }) {
       <small>{hostedDeployment.deploymentId} · revision {hostedDeployment.revision}</small>
       <label>Participant ID<input value={participantId} onChange={event => setParticipantId(event.target.value)} /></label>
       <button onClick={createSandboxSession}>Create sandbox session</button>
-      {hostedSession && <small>Session {hostedSession.sessionId} · {hostedSession.status} · revision {hostedSession.revision}</small>}
+      {hostedSession && <><small>Session {hostedSession.sessionId} · {hostedSession.status} · revision {hostedSession.revision}</small><button onClick={() => {
+        const session = structuredClone(hostedSession);
+        delete session.participantAccessToken;
+        onHostedRun?.({ client: participantClientRef.current, session });
+      }}>Run hosted session</button></>}
     </article>}
   </section>;
 }

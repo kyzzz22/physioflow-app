@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ParticipantRenderer from './ParticipantRenderer.jsx';
 import { createUiElement, participantUiTemplate, protocolNameOf, protocolStatusOf, protocolVersionOf } from './core/index.js';
 import {
@@ -18,6 +18,7 @@ import { clearCurrentRun, saveCurrentRun, saveSession } from './storage.js';
 import { buildGraphSessionFiles } from './data/index.js';
 import { downloadBundle } from './exporter.js';
 import { createProjectComponentRegistry } from './sdk/index.js';
+import { HostedRuntimeSync } from './hosted/index.js';
 
 function runtimeServices() {
   return {
@@ -83,6 +84,9 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
   const [responses, setResponses] = useState(data.restore?.responses || []);
   const [started, setStarted] = useState(Boolean(data.restore?.runtime?.status && data.restore.runtime.status !== 'ready'));
   const [saved, setSaved] = useState(false);
+  const hostedSyncRef = useRef(null);
+  if (data.hosted && !hostedSyncRef.current) hostedSyncRef.current = new HostedRuntimeSync(data.hosted);
+  const [hostedStatus, setHostedStatus] = useState(() => hostedSyncRef.current?.status() || null);
   const finishing = useRef(false);
   const runtimeRef = useRef(initialState);
   const nodeEnteredAt = useRef(performance.now());
@@ -136,6 +140,13 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
     apply(recordRuntimeEvent(runtimeRef.current, protocol, services.current, eventType, { payload }));
   };
 
+  const syncHosted = useCallback(() => {
+    if (!hostedSyncRef.current) return Promise.resolve(null);
+    return hostedSyncRef.current.enqueue({ events, runtime, complete: ['completed', 'failed'].includes(runtime.status) })
+      .then(status => { setHostedStatus(status); return status; })
+      .catch(error => { setHostedStatus({ ...hostedSyncRef.current.status(), error: error.message || String(error) }); throw error; });
+  }, [events, runtime]);
+
   useEffect(() => {
     if (currentNode?.id) nodeEnteredAt.current = performance.now();
   }, [currentNode?.id]);
@@ -154,6 +165,11 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
     if (!started || ['completed', 'failed'].includes(runtime.status)) return;
     saveCurrentRun({ session: data.session, protocol, runtime: snapshotRuntime(runtime), events, responses, saved_at: new Date().toISOString(), runtime_version: 2 });
   }, [data.session, events, protocol, responses, runtime, started]);
+
+  useEffect(() => {
+    if (!started || !hostedSyncRef.current) return;
+    syncHosted().catch(() => {});
+  }, [started, syncHosted]);
 
   useEffect(() => {
     if (runtime.status !== 'completed' || finishing.current) return;
@@ -177,8 +193,11 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
   }, [data.session, events, protocol, responses, runtime]);
 
   if (!started) return <main className="graph-runner"><div className="graph-runner-ready"><span className="eyebrow">RUNTIME V2 READY</span><h1>{protocolNameOf(protocol)}</h1><p>{data.session.participant_id} · {executableCount} participant components</p><button className="primary" onClick={begin}>Begin experiment</button></div></main>;
-  if (runtime.status === 'completed') return <main className="graph-runner"><div className="graph-runner-ready"><span className="eyebrow">SESSION COMPLETE</span><h1>Thank you</h1><p>{events.length} events · {responses.length} responses · {Object.keys(exportFiles).length} export files</p><p>{saved === true ? 'Saved locally.' : typeof saved === 'string' ? saved : 'Saving…'}</p><button className="primary" onClick={() => downloadBundle(exportFiles, data.session.participant_id)}>Export complete data package</button><button disabled={saved !== true} onClick={onDone}>Return to projects</button></div></main>;
-  if (runtime.status === 'failed') return <main className="graph-runner"><div className="graph-runner-ready"><span className="eyebrow">RUNTIME FAILED</span><h1>Experiment stopped</h1><p>{runtime.error}</p><button onClick={onDone}>Return to projects</button></div></main>;
+  if (runtime.status === 'completed') {
+    const hostedReady = !hostedSyncRef.current || hostedStatus?.completed;
+    return <main className="graph-runner"><div className="graph-runner-ready"><span className="eyebrow">SESSION COMPLETE</span><h1>Thank you</h1><p>{events.length} events · {responses.length} responses · {Object.keys(exportFiles).length} export files</p><p>{saved === true ? 'Saved locally.' : typeof saved === 'string' ? saved : 'Saving…'}</p>{hostedSyncRef.current && <p>{hostedStatus?.completed ? `Hosted sync complete · revision ${hostedStatus.revision}` : hostedStatus?.error ? `Hosted sync failed: ${hostedStatus.error}` : 'Syncing hosted session…'}</p>}{hostedStatus?.error && <button onClick={() => syncHosted().catch(() => {})}>Retry hosted sync</button>}<button className="primary" onClick={() => downloadBundle(exportFiles, data.session.participant_id)}>Export complete data package</button><button disabled={saved !== true || !hostedReady} onClick={onDone}>Return to projects</button></div></main>;
+  }
+  if (runtime.status === 'failed') return <main className="graph-runner"><div className="graph-runner-ready"><span className="eyebrow">RUNTIME FAILED</span><h1>Experiment stopped</h1><p>{runtime.error}</p>{hostedSyncRef.current && <p>{hostedStatus?.completed ? `Hosted failure recorded · revision ${hostedStatus.revision}` : hostedStatus?.error ? `Hosted sync failed: ${hostedStatus.error}` : 'Recording hosted failure…'}</p>}{hostedStatus?.error && <button onClick={() => syncHosted().catch(() => {})}>Retry hosted sync</button>}<button disabled={Boolean(hostedSyncRef.current && !hostedStatus?.completed)} onClick={onDone}>Return to projects</button></div></main>;
   if (!currentNode) return null;
 
   return <main className="graph-runner">

@@ -18,14 +18,14 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 - Installed the declarative Reaction Button SDK example from Composer Advanced mode, confirmed its package/version/permission record, found the component in the normal interaction palette, and inserted it into the same Protocol Graph with schema-driven participant UI.
 - Installed the simulated physiology connector from Composer Advanced mode and confirmed its versioned manifest, simulated transport, signal/marker channel types and approved connect/read/write capabilities.
 - Inserted the registry-driven Value switch control component and confirmed its schema-driven match setting and explicit match/default branch ports.
-- Ran the self-hosted Composer V2 browser gate from a clean profile. It froze and published a minimal graph through the local hosted queue, created a scoped participant session, then produced a five-node editable graph with a reusable subflow instance and Value switch and verified both the Reaction Button SDK package and simulated sensor connector.
+- Ran the self-hosted Composer V2 browser gate from a clean profile. It froze and published a minimal graph through the local hosted queue, created and completed a scoped participant session with hosted event/snapshot/terminal synchronization, then produced a five-node editable graph with a reusable subflow instance and Value switch and verified both the Reaction Button SDK package and simulated sensor connector.
 - Ran the self-hosted legacy compatibility gate from a clean profile. It blocked formal collection without a selected local folder, completed a draft preview with eight events, persisted a valid session, returned to Dashboard, and immediately displayed the saved participant record.
 - Migrated the representative Emotion protocol from the Dashboard into Composer V2. The migration produced 22 nodes and 21 edges, preserved all 20 steps, reported 100% native mapping, and kept formal collection behind the explicit migration-review gate.
 - Re-ran the automated release gate after immutable-version, required-port, participant binding/action, lifecycle-event, response-time, and independent export-validator hardening.
 
 ## Acceptance evidence
 
-- Automated tests: 130 passing.
+- Automated tests: 132 passing.
 - Production build: passing.
 - Lint: zero errors and zero warnings.
 - Production bundle: no build warnings; view-level loading keeps the initial JavaScript chunk below the configured 500 kB warning threshold.
@@ -47,6 +47,7 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 - Collaboration behavior: tests cover portable field/entity operations, clean merging of independent edits, mandatory local/incoming resolution for same-field conflicts, audit history, frozen/cross-version rejection and prototype-path safety.
 - Portable deployment behavior: tests prove frozen-snapshot and outer-manifest integrity, draft rejection, provider registration, job submission/status and cancellation.
 - Hosted-service behavior: tests prove role separation, publication/session idempotency, queue transitions, participant-token scoping, revision conflicts, contiguous batch ingestion, token revocation, restricted data access and audit sequencing.
+- Hosted-runtime behavior: a real Runtime V2 fixture survives simulated lost event and snapshot acknowledgements, then proves exactly one remote event batch, snapshot, completion and audit entry; pause/resume and terminal failure are also verified.
 - Browser release behavior: `npm run test:e2e` and `npm run test:e2e:refactor-browser` pass locally and `.github/workflows/refactor-quality.yml` runs both after the full quality gate on pushes and pull requests.
 - Unified release behavior: `npm run quality:release` is the single entry point used locally and by GitHub Actions, so tests, build, strict lint and both browser gates cannot drift into different release definitions.
 
