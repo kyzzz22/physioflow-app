@@ -2,9 +2,11 @@ import { validateDeploymentBundle } from '../deployment/index.js';
 import { createParticipantBootstrap } from './participantBootstrap.js';
 
 export const HOSTED_SERVICE_CONTRACT_VERSION = '1.0.0';
-export const HOSTED_STATE_SCHEMA_VERSION = '1.1.0';
+export const HOSTED_STATE_SCHEMA_VERSION = '1.2.0';
 export const HOSTED_DATA_EXPORT_SCHEMA_VERSION = '1.0.0';
-const LEGACY_HOSTED_STATE_SCHEMA_VERSION = '1.0.0';
+export const DEFAULT_HOSTED_TENANT_ID = 'default';
+const LEGACY_HOSTED_STATE_SCHEMA_VERSIONS = new Set(['1.0.0', '1.1.0']);
+const TENANT_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 const ROLE_PERMISSIONS = Object.freeze({
   owner: ['deployment.publish', 'deployment.read', 'deployment.manage', 'deployment.asset.write', 'session.start', 'session.read', 'session.bootstrap', 'session.manage', 'data.ingest', 'data.read', 'data.purge', 'audit.read'],
@@ -17,6 +19,8 @@ const ROLE_PERMISSIONS = Object.freeze({
 const TERMINAL_SESSION_STATES = new Set(['completed', 'failed', 'cancelled']);
 
 function clone(value) { return value === undefined ? undefined : structuredClone(value); }
+
+function tenantIdOf(record) { return record?.tenantId || DEFAULT_HOSTED_TENANT_ID; }
 
 function publicDeployment(record) {
   const next = clone(record);
@@ -93,6 +97,7 @@ function validateActor(actor) {
   if (!actor?.actorId?.trim()) throw new Error('Hosted actor ID is required');
   if (!ROLE_PERMISSIONS[actor.role]) throw new Error(`Unsupported hosted role ${actor.role}`);
   if (!actor.accessToken?.trim()) throw new Error('Hosted actor access token is required');
+  if (actor.tenantId !== undefined && (!TENANT_ID.test(actor.tenantId) || actor.tenantId !== actor.tenantId.trim())) throw new Error('Hosted actor tenant ID is invalid');
 }
 
 export class LocalHostedExecutionService {
@@ -111,24 +116,25 @@ export class LocalHostedExecutionService {
     for (const actor of options.actors || []) {
       validateActor(actor);
       if (this.actors.has(actor.accessToken)) throw new Error('Hosted actor access tokens must be unique');
-      this.actors.set(actor.accessToken, { actorId: actor.actorId, role: actor.role });
+      this.actors.set(actor.accessToken, { actorId: actor.actorId, role: actor.role, tenantId: actor.tenantId || DEFAULT_HOSTED_TENANT_ID });
     }
     if (options.state) this.restoreState(options.state);
   }
 
   restoreState(state) {
-    if (![HOSTED_STATE_SCHEMA_VERSION, LEGACY_HOSTED_STATE_SCHEMA_VERSION].includes(state?.schemaVersion)) throw new Error(`Unsupported hosted state version ${state?.schemaVersion || '(missing)'}`);
-    this.deployments = new Map((state.deployments || []).map(record => [record.deploymentId, clone(record)]));
+    if (state?.schemaVersion !== HOSTED_STATE_SCHEMA_VERSION && !LEGACY_HOSTED_STATE_SCHEMA_VERSIONS.has(state?.schemaVersion)) throw new Error(`Unsupported hosted state version ${state?.schemaVersion || '(missing)'}`);
+    const legacy = LEGACY_HOSTED_STATE_SCHEMA_VERSIONS.has(state.schemaVersion);
+    this.deployments = new Map((state.deployments || []).map(record => [record.deploymentId, { ...clone(record), tenantId: tenantIdOf(record), assetNamespaceVersion: record.assetNamespaceVersion || (legacy ? 1 : 2) }]));
     this.sessions = new Map((state.sessions || []).map(record => {
-      const session = clone(record);
+      const session = { ...clone(record), tenantId: tenantIdOf(record) };
       session.idempotency = new Map(record.idempotency || []);
       return [session.sessionId, session];
     }));
-    this.participantTokens = new Map(clone(state.participantTokens || []));
-    this.launchLinks = new Map((state.launchLinks || []).map(record => [record.launchLinkId, clone(record)]));
+    this.participantTokens = new Map((state.participantTokens || []).map(([token, record]) => [token, { ...clone(record), tenantId: tenantIdOf(record) }]));
+    this.launchLinks = new Map((state.launchLinks || []).map(record => [record.launchLinkId, { ...clone(record), tenantId: tenantIdOf(record) }]));
     this.launchTokens = new Map(clone(state.launchTokens || []));
-    this.idempotency = new Map(clone(state.idempotency || []));
-    this.auditEntries = clone(state.auditEntries || []);
+    this.idempotency = new Map((state.idempotency || []).map(([key, value]) => [legacy ? `${DEFAULT_HOSTED_TENANT_ID}:${key}` : key, clone(value)]));
+    this.auditEntries = (state.auditEntries || []).map(entry => ({ ...clone(entry), tenantId: tenantIdOf(entry) }));
   }
 
   exportState() {
@@ -148,8 +154,26 @@ export class LocalHostedExecutionService {
     const actor = this.actors.get(context?.accessToken);
     if (actor && ROLE_PERMISSIONS[actor.role].includes(permission)) return { kind: 'actor', ...actor };
     const participant = this.participantTokens.get(context?.accessToken);
-    if (participant?.active !== false && participant?.sessionId === sessionId && ['session.read', 'session.bootstrap', 'session.manage', 'data.ingest'].includes(permission)) return { kind: 'participant', actorId: participant.participantId, role: 'participant' };
+    if (participant?.active !== false && participant?.sessionId === sessionId && ['session.read', 'session.bootstrap', 'session.manage', 'data.ingest'].includes(permission)) return { kind: 'participant', actorId: participant.participantId, role: 'participant', tenantId: tenantIdOf(participant) };
     throw new Error(`Hosted permission ${permission} is required`);
+  }
+
+  authorizeDeployment(context, permission, deploymentId) {
+    const actor = this.authorize(context, permission);
+    const deployment = this.deployments.get(deploymentId);
+    if (!deployment || actor.kind !== 'actor' || actor.tenantId !== tenantIdOf(deployment)) throw new Error(`Unknown hosted deployment ${deploymentId}`);
+    return { actor, deployment };
+  }
+
+  authorizeSession(context, permission, sessionId) {
+    const actor = this.authorize(context, permission, sessionId);
+    const session = this.sessions.get(sessionId);
+    if (!session || (actor.kind === 'actor' && actor.tenantId !== tenantIdOf(session))) throw new Error(`Unknown hosted session ${sessionId}`);
+    return { actor, session };
+  }
+
+  tenantForContext(context = {}) {
+    return this.actors.get(context.accessToken)?.tenantId || this.participantTokens.get(context.accessToken)?.tenantId || null;
   }
 
   audit(action, actor, resource = {}, detail = {}) {
@@ -157,6 +181,7 @@ export class LocalHostedExecutionService {
       auditId: this.idFactory('audit'),
       sequence: this.auditEntries.length + 1,
       occurredAt: this.clock(),
+      tenantId: actor.tenantId || DEFAULT_HOSTED_TENANT_ID,
       action,
       actor: { id: actor.actorId, role: actor.role, kind: actor.kind },
       resource: clone(resource),
@@ -168,9 +193,12 @@ export class LocalHostedExecutionService {
 
   idempotent(actor, scope, key, fingerprint, create) {
     if (!key?.trim()) throw new Error(`${scope} requires an idempotency key`);
-    const idempotencyKey = `${actor.actorId}:${scope}:${key}`;
-    if (this.idempotency.has(idempotencyKey)) {
-      const previous = this.idempotency.get(idempotencyKey);
+    const tenantId = actor.tenantId || DEFAULT_HOSTED_TENANT_ID;
+    const idempotencyKey = JSON.stringify([tenantId, actor.actorId, scope, key]);
+    const legacyKey = `${tenantId}:${actor.actorId}:${scope}:${key}`;
+    const storedKey = this.idempotency.has(idempotencyKey) ? idempotencyKey : this.idempotency.has(legacyKey) ? legacyKey : null;
+    if (storedKey) {
+      const previous = this.idempotency.get(storedKey);
       if (previous.purged) return clone(previous.result);
       if (previous.fingerprint !== fingerprint) throw new Error(`${scope} idempotency key was already used with different content`);
       return clone(previous.result);
@@ -202,6 +230,7 @@ export class LocalHostedExecutionService {
       contractVersion: HOSTED_SERVICE_CONTRACT_VERSION,
       sessionId,
       deploymentId: deployment.deploymentId,
+      tenantId: tenantIdOf(deployment),
       projectId: deployment.projectId,
       protocolId: deployment.protocolId,
       protocolVersion: deployment.protocolVersion,
@@ -221,7 +250,7 @@ export class LocalHostedExecutionService {
       idempotency: new Map(),
     };
     this.sessions.set(sessionId, record);
-    this.participantTokens.set(participantAccessToken, { sessionId, participantId, active: true });
+    this.participantTokens.set(participantAccessToken, { sessionId, participantId, active: true, tenantId: tenantIdOf(deployment) });
     this.deployments.set(deployment.deploymentId, { ...deployment, sessionCount: deployment.sessionCount + 1, updatedAt: now });
     this.audit('session.created', actor, { deploymentId: deployment.deploymentId, sessionId }, { participantId, launchLinkId: request.launchLinkId || null });
     return { ...publicSession(record), participantAccessToken };
@@ -237,6 +266,8 @@ export class LocalHostedExecutionService {
       const record = {
         contractVersion: HOSTED_SERVICE_CONTRACT_VERSION,
         deploymentId,
+        tenantId: actor.tenantId,
+        assetNamespaceVersion: 2,
         bundleId: bundle.bundleId,
         bundleHash: bundle.bundleHash,
         projectId: bundle.protocol.projectId,
@@ -263,16 +294,12 @@ export class LocalHostedExecutionService {
   }
 
   getDeployment(deploymentId, context = {}) {
-    this.authorize(context, 'deployment.read');
-    const record = this.deployments.get(deploymentId);
-    if (!record) throw new Error(`Unknown hosted deployment ${deploymentId}`);
+    const { deployment: record } = this.authorizeDeployment(context, 'deployment.read', deploymentId);
     return this.deploymentView(record);
   }
 
   recordDeploymentAsset(deploymentId, asset, context = {}) {
-    const actor = this.authorize(context, 'deployment.asset.write');
-    const deployment = this.deployments.get(deploymentId);
-    if (!deployment) throw new Error(`Unknown hosted deployment ${deploymentId}`);
+    const { actor, deployment } = this.authorizeDeployment(context, 'deployment.asset.write', deploymentId);
     if (deployment.status !== 'queued') throw new Error(`Hosted deployment ${deploymentId} is ${deployment.status}`);
     const declared = deployment.bundle.dependencies?.assets?.find(item => item.id === asset?.assetId && item.source === 'workspace');
     if (!declared) throw new Error(`Hosted deployment asset ${asset?.assetId || '(missing)'} is not a declared workspace asset`);
@@ -283,7 +310,7 @@ export class LocalHostedExecutionService {
 
   processNextDeployment(context = {}) {
     const actor = this.authorize(context, 'deployment.manage');
-    const record = [...this.deployments.values()].find(item => item.status === 'queued');
+    const record = [...this.deployments.values()].find(item => tenantIdOf(item) === actor.tenantId && item.status === 'queued');
     if (!record) return null;
     const next = { ...record, status: 'ready', revision: record.revision + 1, updatedAt: this.clock(), readyAt: this.clock() };
     this.deployments.set(record.deploymentId, next);
@@ -291,19 +318,21 @@ export class LocalHostedExecutionService {
     return this.deploymentView(next);
   }
 
+  nextQueuedDeployment(context = {}) {
+    const actor = this.authorize(context, 'deployment.manage');
+    const record = [...this.deployments.values()].find(item => tenantIdOf(item) === actor.tenantId && item.status === 'queued');
+    return record ? clone(record) : null;
+  }
+
   async createSession(deploymentId, request = {}, context = {}) {
-    const actor = this.authorize(context, 'session.start');
-    const deployment = this.deployments.get(deploymentId);
-    if (!deployment) throw new Error(`Unknown hosted deployment ${deploymentId}`);
+    const { actor, deployment } = this.authorizeDeployment(context, 'session.start', deploymentId);
     return this.idempotent(actor, `session.start:${deploymentId}`, request.idempotencyKey, JSON.stringify({ participantId: request.participantId || null }), () => {
       return this.createSessionRecord(deployment, request, actor);
     });
   }
 
   deactivateDeployment(deploymentId, request = {}, context = {}) {
-    const actor = this.authorize(context, 'deployment.manage');
-    const deployment = this.deployments.get(deploymentId);
-    if (!deployment) throw new Error(`Unknown hosted deployment ${deploymentId}`);
+    const { actor, deployment } = this.authorizeDeployment(context, 'deployment.manage', deploymentId);
     return this.idempotent(actor, `deployment.deactivate:${deploymentId}`, request.idempotencyKey, String(request.expectedRevision), () => {
       if (deployment.status === 'deactivated') return this.deploymentView(deployment);
       if (request.expectedRevision !== deployment.revision) throw new Error(`Hosted deployment revision conflict: expected ${request.expectedRevision}, current ${deployment.revision}`);
@@ -315,9 +344,7 @@ export class LocalHostedExecutionService {
   }
 
   createLaunchLink(deploymentId, request = {}, context = {}) {
-    const actor = this.authorize(context, 'session.start');
-    const deployment = this.deployments.get(deploymentId);
-    if (!deployment) throw new Error(`Unknown hosted deployment ${deploymentId}`);
+    const { actor, deployment } = this.authorizeDeployment(context, 'session.start', deploymentId);
     const maximumUses = request.maximumUses ?? 1;
     if (!Number.isInteger(maximumUses) || maximumUses < 1) throw new Error('Hosted launch link maximum uses must be a positive integer');
     if (request.expiresAt && !Number.isFinite(Date.parse(request.expiresAt))) throw new Error('Hosted launch link expiry must be a valid timestamp');
@@ -331,6 +358,7 @@ export class LocalHostedExecutionService {
         contractVersion: HOSTED_SERVICE_CONTRACT_VERSION,
         launchLinkId,
         deploymentId,
+        tenantId: tenantIdOf(deployment),
         status: 'active',
         maximumUses,
         useCount: 0,
@@ -350,7 +378,7 @@ export class LocalHostedExecutionService {
   revokeLaunchLink(launchLinkId, request = {}, context = {}) {
     const actor = this.authorize(context, 'deployment.manage');
     const link = this.launchLinks.get(launchLinkId);
-    if (!link) throw new Error(`Unknown hosted launch link ${launchLinkId}`);
+    if (!link || actor.tenantId !== tenantIdOf(link)) throw new Error(`Unknown hosted launch link ${launchLinkId}`);
     return this.idempotent(actor, `launch-link.revoke:${launchLinkId}`, request.idempotencyKey, String(request.expectedRevision), () => {
       if (link.status === 'revoked') return publicLaunchLink(link);
       if (request.expectedRevision !== link.revision) throw new Error(`Hosted launch link revision conflict: expected ${request.expectedRevision}, current ${link.revision}`);
@@ -364,7 +392,8 @@ export class LocalHostedExecutionService {
   redeemLaunchLink(launchToken, request = {}) {
     const launchLinkId = this.launchTokens.get(launchToken);
     if (!launchLinkId) throw new Error('Unknown hosted launch token');
-    const actor = { kind: 'launch_link', actorId: launchLinkId, role: 'participant' };
+    const linkRecord = this.launchLinks.get(launchLinkId);
+    const actor = { kind: 'launch_link', actorId: launchLinkId, role: 'participant', tenantId: tenantIdOf(linkRecord) };
     return this.idempotent(actor, `launch-link.redeem:${launchLinkId}`, request.idempotencyKey, JSON.stringify({ participantId: request.participantId || null }), () => {
       const link = this.launchLinks.get(launchLinkId);
       if (!link || link.status !== 'active') throw new Error(`Hosted launch link ${launchLinkId} is ${link?.status || 'unavailable'}`);
@@ -381,16 +410,12 @@ export class LocalHostedExecutionService {
   }
 
   getSession(sessionId, context = {}) {
-    this.authorize(context, 'session.read', sessionId);
-    const record = this.sessions.get(sessionId);
-    if (!record) throw new Error(`Unknown hosted session ${sessionId}`);
+    const { session: record } = this.authorizeSession(context, 'session.read', sessionId);
     return publicSession(record);
   }
 
   async getParticipantBootstrap(sessionId, context = {}) {
-    this.authorize(context, 'session.bootstrap', sessionId);
-    const session = this.sessions.get(sessionId);
-    if (!session) throw new Error(`Unknown hosted session ${sessionId}`);
+    const { session } = this.authorizeSession(context, 'session.bootstrap', sessionId);
     if (TERMINAL_SESSION_STATES.has(session.status)) throw new Error(`Hosted session ${sessionId} is ${session.status}`);
     const deployment = this.deployments.get(session.deploymentId);
     if (!deployment) throw new Error(`Unknown hosted deployment ${session.deploymentId}`);
@@ -398,9 +423,7 @@ export class LocalHostedExecutionService {
   }
 
   appendEvents(sessionId, events, options = {}, context = {}) {
-    const actor = this.authorize(context, 'data.ingest', sessionId);
-    const record = this.sessions.get(sessionId);
-    if (!record) throw new Error(`Unknown hosted session ${sessionId}`);
+    const { actor, session: record } = this.authorizeSession(context, 'data.ingest', sessionId);
     if (!options.batchId?.trim()) throw new Error('Event ingestion requires a batch ID');
     const idempotencyKey = `events:${options.batchId}`;
     if (record.idempotency.has(idempotencyKey)) {
@@ -441,9 +464,7 @@ export class LocalHostedExecutionService {
   }
 
   syncSessionState(sessionId, state, options = {}, context = {}) {
-    const actor = this.authorize(context, 'session.manage', sessionId);
-    const record = this.sessions.get(sessionId);
-    if (!record) throw new Error(`Unknown hosted session ${sessionId}`);
+    const { actor, session: record } = this.authorizeSession(context, 'session.manage', sessionId);
     if (!options.syncId?.trim()) throw new Error('Runtime state synchronization requires a sync ID');
     const idempotencyKey = `state:${options.syncId}`;
     if (record.idempotency.has(idempotencyKey)) {
@@ -467,6 +488,8 @@ export class LocalHostedExecutionService {
   completeSession(sessionId, options = {}, context = {}) {
     const record = this.sessions.get(sessionId);
     if (!record) throw new Error(`Unknown hosted session ${sessionId}`);
+    const credentialActor = this.actors.get(context?.accessToken);
+    if (credentialActor && ROLE_PERMISSIONS[credentialActor.role].includes('session.manage') && credentialActor.tenantId !== tenantIdOf(record)) throw new Error(`Unknown hosted session ${sessionId}`);
     if (!options.completionId?.trim()) throw new Error('Session completion requires a completion ID');
     const outcome = options.outcome || 'completed';
     if (!['completed', 'failed'].includes(outcome)) throw new Error(`Unsupported hosted session outcome ${outcome}`);
@@ -474,12 +497,13 @@ export class LocalHostedExecutionService {
     if (record.idempotency.has(idempotencyKey)) {
       const actor = this.actors.get(context?.accessToken);
       const participant = this.participantTokens.get(context?.accessToken);
-      if ((!actor || !ROLE_PERMISSIONS[actor.role].includes('session.manage')) && participant?.sessionId !== sessionId) throw new Error('Hosted permission session.manage is required');
+      const actorAllowed = actor && ROLE_PERMISSIONS[actor.role].includes('session.manage') && actor.tenantId === tenantIdOf(record);
+      if (!actorAllowed && participant?.sessionId !== sessionId) throw new Error('Hosted permission session.manage is required');
       const previous = record.idempotency.get(idempotencyKey);
       if (previous.outcome !== outcome) throw new Error(`Session completion ${options.completionId} was already used with a different outcome`);
       return publicSession(previous.result);
     }
-    const actor = this.authorize(context, 'session.manage', sessionId);
+    const { actor } = this.authorizeSession(context, 'session.manage', sessionId);
     if (options.expectedRevision !== record.revision) throw new Error(`Hosted session revision conflict: expected ${options.expectedRevision}, current ${record.revision}`);
     if (record.status === 'completed') return publicSession(record);
     if (TERMINAL_SESSION_STATES.has(record.status)) throw new Error(`Hosted session ${sessionId} is ${record.status}`);
@@ -487,7 +511,7 @@ export class LocalHostedExecutionService {
     const result = publicSession(next);
     next.idempotency.set(idempotencyKey, { outcome, result });
     this.sessions.set(sessionId, next);
-    this.participantTokens.set(record.participantAccessToken, { sessionId, participantId: record.participantId, active: false });
+    this.participantTokens.set(record.participantAccessToken, { sessionId, participantId: record.participantId, active: false, tenantId: tenantIdOf(record) });
     this.audit(`session.${outcome}`, actor, { sessionId }, { eventCount: next.eventCount, revision: next.revision });
     return result;
   }
@@ -507,16 +531,12 @@ export class LocalHostedExecutionService {
   }
 
   planDataRetention(deploymentId, options = {}, context = {}) {
-    this.authorize(context, 'data.purge');
-    const deployment = this.deployments.get(deploymentId);
-    if (!deployment) throw new Error(`Unknown hosted deployment ${deploymentId}`);
+    const { deployment } = this.authorizeDeployment(context, 'data.purge', deploymentId);
     return this.retentionPlanFor(deployment, options.asOf || this.clock());
   }
 
   purgeExpiredSessionData(deploymentId, request = {}, context = {}) {
-    const actor = this.authorize(context, 'data.purge');
-    const deployment = this.deployments.get(deploymentId);
-    if (!deployment) throw new Error(`Unknown hosted deployment ${deploymentId}`);
+    const { actor, deployment } = this.authorizeDeployment(context, 'data.purge', deploymentId);
     if (!request.asOf) throw new Error('Hosted retention purge requires the plan as-of time');
     return this.idempotent(actor, `data.purge:${deploymentId}`, request.idempotencyKey, JSON.stringify({ asOf: request.asOf, confirmationCode: request.confirmationCode || null }), () => {
       const plan = this.retentionPlanFor(deployment, request.asOf);
@@ -555,16 +575,12 @@ export class LocalHostedExecutionService {
   }
 
   readSessionData(sessionId, context = {}) {
-    this.authorize(context, 'data.read');
-    const record = this.sessions.get(sessionId);
-    if (!record) throw new Error(`Unknown hosted session ${sessionId}`);
+    const { session: record } = this.authorizeSession(context, 'data.read', sessionId);
     return { session: publicSession(record), events: clone(record.events), runtimeSnapshot: clone(record.runtimeSnapshot) };
   }
 
   readDeploymentData(deploymentId, context = {}) {
-    this.authorize(context, 'data.read');
-    const deployment = this.deployments.get(deploymentId);
-    if (!deployment) throw new Error(`Unknown hosted deployment ${deploymentId}`);
+    const { deployment } = this.authorizeDeployment(context, 'data.read', deploymentId);
     const storedSessions = [...this.sessions.values()].filter(session => session.deploymentId === deploymentId);
     const sessionIds = new Set(storedSessions.map(session => session.sessionId));
     const sessions = storedSessions.map(record => ({ session: publicSession(record), events: clone(record.events), runtimeSnapshot: clone(record.runtimeSnapshot) }));
@@ -594,8 +610,8 @@ export class LocalHostedExecutionService {
   }
 
   readAudit(context = {}) {
-    this.authorize(context, 'audit.read');
-    return this.auditEntries.map(clone);
+    const actor = this.authorize(context, 'audit.read');
+    return this.auditEntries.filter(entry => tenantIdOf(entry) === actor.tenantId).map(clone);
   }
 }
 

@@ -25,9 +25,9 @@ Owners, editors, and operators have `deployment.asset.write`; analysts and viewe
 The single-node server writes accepted files under:
 
 ```text
-<PHYSIOFLOW_ASSET_DIR>/<deployment bundle ID>/<asset ID>
+<PHYSIOFLOW_ASSET_DIR>/<tenant ID>/<hosted deployment ID>/<asset ID>
 ```
 
 The same store later verifies the checksum again before signing Bootstrap delivery and on every download. Upload bodies default to a maximum of 250 MiB and can be limited with `PHYSIOFLOW_MAX_ASSET_BYTES`.
 
-The real-network test proves that processing is blocked before upload, unauthorized and incorrect uploads are rejected, valid upload is audited and survives restart, post-ready replacement is rejected, and signed delivery refuses both URL tampering and file replacement.
+The real-network test proves that processing is blocked before upload, unauthorized and incorrect uploads are rejected, valid upload is audited and survives restart, two tenants publishing the same bundle receive separate files, post-ready replacement is rejected, and signed delivery refuses both URL tampering and file replacement. State 1.0/1.1 deployments keep their legacy bundle-based path during migration; see `TENANT_ISOLATION.md`.

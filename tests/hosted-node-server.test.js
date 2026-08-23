@@ -13,6 +13,7 @@ import { FileHostedStateStore } from '../server/fileHostedStateStore.mjs';
 const actors = [
   { actorId: 'node-owner', role: 'owner', accessToken: 'node-owner-token' },
   { actorId: 'node-viewer', role: 'viewer', accessToken: 'node-viewer-token' },
+  { actorId: 'node-other-owner', role: 'owner', tenantId: 'node-other', accessToken: 'node-other-owner-token' },
 ];
 
 async function fixture(root) {
@@ -48,9 +49,11 @@ test('Node hosted server persists its service, serves the participant app, and d
   const firstAddress = await first.listen(0);
   const owner = new HostedHttpClient({ baseUrl: firstAddress.baseUrl, accessToken: 'node-owner-token' });
   const viewer = new HostedHttpClient({ baseUrl: firstAddress.baseUrl, accessToken: 'node-viewer-token' });
+  const otherOwner = new HostedHttpClient({ baseUrl: firstAddress.baseUrl, accessToken: 'node-other-owner-token' });
   const deployment = await owner.publish(bundle, { idempotencyKey: 'node-publish' });
   await assert.rejects(() => owner.processNextDeployment(), error => error.status === 409 && error.code === 'assets_incomplete');
   assert.equal((await owner.deploymentAssets(deployment.deploymentId)).assets[0].status, 'missing');
+  await assert.rejects(() => otherOwner.deploymentAssets(deployment.deploymentId), error => error.status === 404 && error.code === 'not_found');
   await assert.rejects(() => viewer.uploadDeploymentAsset(deployment.deploymentId, 'asset_node', content, { mediaType: 'text/plain' }), error => error.status === 403 && error.code === 'forbidden');
   await assert.rejects(() => owner.uploadDeploymentAsset(deployment.deploymentId, 'asset_node', 'incorrect content', { mediaType: 'text/plain' }), error => error.status === 409);
   const uploaded = await owner.uploadDeploymentAsset(deployment.deploymentId, 'asset_node', content, { mediaType: 'text/plain' });
@@ -74,11 +77,20 @@ test('Node hosted server persists its service, serves the participant app, and d
   assert.equal(metrics.resources.sessions, 0);
   assert.equal(JSON.stringify(metrics).includes('node-owner-token'), false);
   assert.equal((await fetch(`${firstAddress.baseUrl}/metrics`, { headers: { authorization: 'Bearer node-viewer-token' } })).status, 403);
+  const otherMetrics = await fetch(`${firstAddress.baseUrl}/metrics`, { headers: { authorization: 'Bearer node-other-owner-token' } }).then(response => response.json());
+  assert.equal(otherMetrics.tenantId, 'node-other');
+  assert.equal(otherMetrics.resources.deployments, 0);
+  assert.equal(otherMetrics.requests.responsesByStatus[201], undefined);
+  const otherDeployment = await otherOwner.publish(bundle, { idempotencyKey: 'node-other-publish' });
+  await otherOwner.uploadDeploymentAsset(otherDeployment.deploymentId, 'asset_node', content, { mediaType: 'text/plain' });
+  await otherOwner.processNextDeployment();
+  assert.equal((await stat(join(root, 'assets', 'default', deployment.deploymentId, 'asset_node'))).isFile(), true);
+  assert.equal((await stat(join(root, 'assets', 'node-other', otherDeployment.deploymentId, 'asset_node'))).isFile(), true);
   await first.close();
 
   const persisted = JSON.parse(await readFile(join(root, 'state', 'hosted.json'), 'utf8'));
-  assert.equal(persisted.deployments.length, 1);
-  assert.equal(persisted.auditEntries.filter(entry => entry.action === 'deployment.asset_uploaded').length, 1);
+  assert.equal(persisted.deployments.length, 2);
+  assert.equal(persisted.auditEntries.filter(entry => entry.action === 'deployment.asset_uploaded').length, 2);
   assert.equal((await stat(join(root, 'state', 'hosted.json'))).mode & 0o777, 0o600);
 
   const restarted = await createHostedNodeServer(serverOptions(root, 100));
@@ -97,7 +109,7 @@ test('Node hosted server persists its service, serves the participant app, and d
   const tampered = new URL(resource.delivery.url);
   tampered.searchParams.set('type', 'text/html');
   assert.equal((await fetch(tampered)).status, 403);
-  await writeFile(join(root, 'assets', bundle.bundleId, 'asset_node'), 'replaced asset content');
+  await writeFile(join(root, 'assets', 'default', deployment.deploymentId, 'asset_node'), 'replaced asset content');
   assert.equal((await fetch(resource.delivery.url)).status, 409);
   const notReady = await fetch(`${restartedAddress.baseUrl}/readyz`);
   assert.equal(notReady.status, 503);

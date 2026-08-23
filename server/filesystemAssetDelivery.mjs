@@ -10,11 +10,23 @@ function safeId(value, label) {
   return value;
 }
 
-function assetPath(rootDirectory, bundleId, assetId) {
+function assetPath(rootDirectory, segments, assetId) {
   const root = resolve(rootDirectory);
-  const file = resolve(root, safeId(bundleId, 'bundle ID'), safeId(assetId, 'ID'));
+  const file = resolve(root, ...segments.map((segment, index) => safeId(segment, index === 0 ? 'namespace ID' : 'deployment ID')), safeId(assetId, 'ID'));
   if (!file.startsWith(`${root}${sep}`)) throw new Error('Hosted asset path escapes its root');
   return file;
+}
+
+function deploymentNamespace(deployment) {
+  return deployment.assetNamespaceVersion === 2
+    ? [deployment.tenantId || 'default', deployment.deploymentId]
+    : [deployment.bundleId];
+}
+
+function contextNamespace(context) {
+  return context.assetNamespaceVersion === 2
+    ? [context.tenantId || 'default', context.deploymentId]
+    : [context.bundleId];
 }
 
 function signature(secret, pathname, expires, mediaType, checksum) {
@@ -53,7 +65,7 @@ export function createFilesystemAssetDelivery(options = {}) {
       const assets = [];
       for (const asset of workspaceAssets(deployment)) {
         try {
-          const file = assetPath(options.rootDirectory, deployment.bundleId, asset.id);
+          const file = assetPath(options.rootDirectory, deploymentNamespace(deployment), asset.id);
           const details = await stat(file);
           if (!details.isFile()) throw new Error('not_file');
           await verifyChecksum(file, asset.checksum);
@@ -76,7 +88,7 @@ export function createFilesystemAssetDelivery(options = {}) {
       const declaredType = asset.mediaType || 'application/octet-stream';
       const suppliedType = String(mediaType || '').split(';')[0].trim();
       if (suppliedType && declaredType !== suppliedType) throw Object.assign(new Error(`Asset media type must be ${declaredType}`), { status: 409 });
-      const file = assetPath(options.rootDirectory, deployment.bundleId, asset.id);
+      const file = assetPath(options.rootDirectory, deploymentNamespace(deployment), asset.id);
       try {
         const existing = await readFile(file);
         verifyContentChecksum(existing, asset.checksum);
@@ -98,27 +110,30 @@ export function createFilesystemAssetDelivery(options = {}) {
 
     async resolve(asset, context) {
       const assetId = safeId(asset.id || asset.assetId, 'ID');
-      const bundleId = safeId(context.bundleId, 'bundle ID');
-      const file = assetPath(options.rootDirectory, bundleId, assetId);
+      const namespace = contextNamespace(context);
+      const file = assetPath(options.rootDirectory, namespace, assetId);
       const details = await stat(file);
       if (!details.isFile()) throw new Error('Hosted asset is not a file');
       await verifyChecksum(file, asset.checksum || asset.hash);
       const mediaType = SAFE_MEDIA_TYPE.test(asset.mediaType || asset.type || '') ? asset.mediaType || asset.type : 'application/octet-stream';
       const checksum = asset.checksum || asset.hash || '';
       const expires = String(clock() + ttlMs);
-      const pathname = `/assets/${encodeURIComponent(bundleId)}/${encodeURIComponent(assetId)}`;
+      const pathname = `/assets/${namespace.map(encodeURIComponent).join('/')}/${encodeURIComponent(assetId)}`;
       const token = signature(options.secret, pathname, expires, mediaType, checksum);
       return { mode: 'signed', url: `${publicBaseUrl()}${pathname}?expires=${expires}&type=${encodeURIComponent(mediaType)}&checksum=${encodeURIComponent(checksum)}&signature=${token}`, checksum: checksum || null, expiresAt: new Date(Number(expires)).toISOString() };
     },
 
     async response(request) {
       const url = new URL(request.url);
-      const match = url.pathname.match(/^\/assets\/([^/]+)\/([^/]+)$/);
+      const match = url.pathname.match(/^\/assets\/([^/]+)\/([^/]+)(?:\/([^/]+))?$/);
       if (!match) return null;
       if (!['GET', 'HEAD'].includes(request.method)) return new Response('Method not allowed', { status: 405, headers: { allow: 'GET, HEAD' } });
-      let bundleId;
+      let namespace;
       let assetId;
-      try { bundleId = decodeURIComponent(match[1]); assetId = decodeURIComponent(match[2]); }
+      try {
+        namespace = match[3] ? [decodeURIComponent(match[1]), decodeURIComponent(match[2])] : [decodeURIComponent(match[1])];
+        assetId = decodeURIComponent(match[3] || match[2]);
+      }
       catch { return new Response('Invalid asset path', { status: 400 }); }
       const expires = url.searchParams.get('expires') || '';
       const mediaType = url.searchParams.get('type') || '';
@@ -127,7 +142,7 @@ export function createFilesystemAssetDelivery(options = {}) {
       const expected = signature(options.secret, url.pathname, expires, mediaType, checksum);
       if (!Number.isFinite(Number(expires)) || Number(expires) < clock() || !SAFE_MEDIA_TYPE.test(mediaType) || !equalSignature(supplied, expected)) return new Response('Asset link is invalid or expired', { status: 403, headers: { 'cache-control': 'no-store' } });
       try {
-        const content = await readFile(assetPath(options.rootDirectory, bundleId, assetId));
+        const content = await readFile(assetPath(options.rootDirectory, namespace, assetId));
         try { verifyContentChecksum(content, checksum); }
         catch { return new Response('Asset checksum mismatch', { status: 409, headers: { 'cache-control': 'no-store' } }); }
         return new Response(content, { headers: { 'content-type': mediaType, 'content-length': String(content.length), 'cache-control': 'private, max-age=300', 'x-content-type-options': 'nosniff' } });

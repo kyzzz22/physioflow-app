@@ -12,6 +12,7 @@ test('hosted request limiter enforces independent fixed windows with bounded key
   assert.equal(denied.retryAfterSeconds, 1);
   assert.equal(limiter.consume('api', 'source-a').allowed, true);
   assert.equal(limiter.consume('api', 'source-b').allowed, true);
+  assert.equal(limiter.consume('api', 'source-a', 'other-tenant').allowed, true);
   assert.equal(limiter.snapshot().trackedKeys, 2);
   now = 2_001;
   assert.equal(limiter.consume('publicRedemption', 'source-a').allowed, true);
@@ -38,13 +39,18 @@ test('hosted operational metrics expose aggregates without record identities', (
   metrics.record(200);
   metrics.record(403, true);
   now = 8_500;
+  metrics.record(201, false, 'other-tenant');
   const service = {
-    deployments: new Map([['secret-deployment-id', { status: 'ready' }]]),
-    sessions: new Map([['secret-session-id', { status: 'completed', eventCount: 4 }]]),
+    deployments: new Map([['secret-deployment-id', { status: 'ready' }], ['other-deployment', { status: 'queued', tenantId: 'other-tenant' }]]),
+    sessions: new Map([['secret-session-id', { status: 'completed', eventCount: 4 }], ['other-session', { status: 'running', eventCount: 99, tenantId: 'other-tenant' }]]),
   };
   const snapshot = metrics.snapshot(service, new HostedRequestRateLimiter({ limits: false }));
   assert.equal(snapshot.uptimeSeconds, 3);
   assert.deepEqual(snapshot.resources, { deployments: 1, deploymentStatuses: { ready: 1 }, sessions: 1, sessionStatuses: { completed: 1 }, events: 4 });
   assert.equal(JSON.stringify(snapshot).includes('secret-deployment-id'), false);
   assert.equal(JSON.stringify(snapshot).includes('secret-session-id'), false);
+  assert.equal(JSON.stringify(snapshot).includes('other-tenant'), false);
+  const other = metrics.snapshot(service, new HostedRequestRateLimiter({ limits: false }), 'other-tenant');
+  assert.deepEqual(other.resources, { deployments: 1, deploymentStatuses: { queued: 1 }, sessions: 1, sessionStatuses: { running: 1 }, events: 99 });
+  assert.deepEqual(other.requests.responsesByStatus, { 201: 1 });
 });

@@ -142,16 +142,19 @@ export async function createHostedNodeServer(options = {}) {
   };
   const server = createServer(async (incoming, outgoing) => {
     let rateDecision = null;
-    const send = (response, head = incoming.method === 'HEAD', error = false) => {
-      metrics.record(response.status, error);
+    let requestTenantId = 'public';
+    const send = async (response, head = incoming.method === 'HEAD', error = false) => {
+      metrics.record(response.status, error, requestTenantId);
       return sendNodeResponse(outgoing, withRateLimitHeaders(response, rateDecision), head);
     };
     try {
       const requestUrl = `${baseUrl || `http://${incoming.headers.host}`}${incoming.url}`;
       const pathname = new URL(requestUrl).pathname;
       const metadataRequest = new Request(requestUrl, { method: incoming.method, headers: incoming.headers });
+      const bearer = String(incoming.headers.authorization || '').match(/^Bearer\s+(.+)$/i)?.[1];
+      requestTenantId = bearer ? await service.tenantForContext({ accessToken: bearer }) || 'public' : 'public';
       const rateScope = requestRateScope(pathname, incoming.method);
-      rateDecision = limiter.consume(rateScope, requestSourceAddress(incoming, trustedProxyHops));
+      rateDecision = limiter.consume(rateScope, requestSourceAddress(incoming, trustedProxyHops), requestTenantId);
       if (!rateDecision.allowed) {
         incoming.resume();
         return send(jsonResponse({ error: { code: 'rate_limited', message: 'Hosted request rate limit exceeded' } }, 429, metadataRequest, options.allowedOrigins));
@@ -169,26 +172,23 @@ export async function createHostedNodeServer(options = {}) {
       }
       if (pathname === '/metrics') {
         if (!['GET', 'HEAD'].includes(incoming.method)) return send(new Response('Method not allowed', { status: 405, headers: { allow: 'GET, HEAD', 'cache-control': 'no-store' } }));
-        await service.authorize(accessContext(request), 'audit.read');
-        return send(jsonResponse(metrics.snapshot(service, limiter), 200, request, options.allowedOrigins));
+        const context = accessContext(request);
+        const actor = await service.authorize(context, 'audit.read');
+        return send(jsonResponse(metrics.snapshot(service, limiter, actor.tenantId), 200, request, options.allowedOrigins));
       }
       const asset = await assetDelivery?.response(request);
       if (asset) return send(asset);
       const assetListMatch = pathname.match(/^\/v1\/deployments\/([^/]+)\/assets$/);
       if (incoming.method === 'GET' && assetListMatch) {
         const deploymentId = decodeURIComponent(assetListMatch[1]);
-        await service.authorize(accessContext(request), 'deployment.read');
-        const deployment = service.deployments.get(deploymentId);
-        if (!deployment) return send(jsonResponse({ error: { code: 'not_found', message: `Unknown hosted deployment ${deploymentId}` } }, 404, request, options.allowedOrigins));
+        const { deployment } = await service.authorizeDeployment(accessContext(request), 'deployment.read', deploymentId);
         return send(jsonResponse(assetDelivery ? await assetDelivery.status(deployment) : assetRequirementsWithoutStore(deployment), 200, request, options.allowedOrigins));
       }
       if (incoming.method === 'PUT' && uploadMatch) {
         const deploymentId = decodeURIComponent(uploadMatch[1]);
         const assetId = decodeURIComponent(uploadMatch[2]);
         const context = accessContext(request);
-        await service.authorize(context, 'deployment.asset.write');
-        const deployment = service.deployments.get(deploymentId);
-        if (!deployment) return send(jsonResponse({ error: { code: 'not_found', message: `Unknown hosted deployment ${deploymentId}` } }, 404, request, options.allowedOrigins));
+        const { deployment } = await service.authorizeDeployment(context, 'deployment.asset.write', deploymentId);
         if (deployment.status !== 'queued') return send(jsonResponse({ error: { code: 'conflict', message: `Hosted deployment ${deploymentId} is ${deployment.status}` } }, 409, request, options.allowedOrigins));
         if (!assetDelivery) return send(jsonResponse({ error: { code: 'asset_storage_unavailable', message: 'Hosted asset storage is not configured' } }, 503, request, options.allowedOrigins));
         const uploaded = await assetDelivery.upload(deployment, assetId, await request.arrayBuffer(), request.headers.get('content-type'));
@@ -196,8 +196,7 @@ export async function createHostedNodeServer(options = {}) {
         return send(jsonResponse(uploaded, uploaded.outcome === 'uploaded' ? 201 : 200, request, options.allowedOrigins));
       }
       if (incoming.method === 'POST' && pathname === '/v1/deployments/process-next') {
-        await service.authorize(accessContext(request), 'deployment.manage');
-        const queued = [...service.deployments.values()].find(deployment => deployment.status === 'queued');
+        const queued = await service.nextQueuedDeployment(accessContext(request));
         if (queued) {
           const requirements = assetDelivery ? await assetDelivery.status(queued) : assetRequirementsWithoutStore(queued);
           if (!requirements.ready) return send(jsonResponse({ error: { code: 'assets_incomplete', message: 'Hosted deployment workspace assets are incomplete', detail: requirements } }, 409, request, options.allowedOrigins));

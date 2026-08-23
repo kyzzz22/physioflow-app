@@ -13,7 +13,7 @@ Rate limits use fixed per-source windows with separate scopes:
 | Workspace asset upload | 30 |
 | Signed asset download | 600 |
 
-The limiter stores only a process-random salted hash of each source address. Its key table is capped at 10,000 entries and expired/old entries are removed, preventing unbounded memory growth. Rejected requests return HTTP 429 with stable `rate_limited` JSON, `Retry-After`, and remaining/reset headers. Health/readiness, CORS preflight, and static application delivery are exempt.
+The limiter partitions authenticated windows by the server-resolved tenant and stores only a process-random salted hash of that partition plus source address. One tenant therefore cannot consume another tenant's window when they share a proxy address. Public traffic uses a separate partition. The key table is capped at 10,000 entries and expired/old entries are removed, preventing unbounded memory growth. Rejected requests return HTTP 429 with stable `rate_limited` JSON, `Retry-After`, and remaining/reset headers. Health/readiness, CORS preflight, and static application delivery are exempt.
 
 Override all values with `PHYSIOFLOW_RATE_LIMITS_JSON`, for example:
 
@@ -31,11 +31,11 @@ By default the adapter uses the TCP peer address and ignores `X-Forwarded-For`. 
 
 `GET /metrics` requires a Bearer actor with `audit.read` (owner in the reference roles). It returns Hosted Metrics 1.0 JSON with:
 
-- uptime and total/error/status response counts;
-- total rate-limit rejections and bounded-key utilization;
+- uptime and tenant-scoped total/error/status response counts;
+- tenant-scoped rate-limit rejections and non-identifying limiter configuration;
 - aggregate deployment/session counts by status;
 - aggregate stored event count.
 
-The response contains no deployment ID, session ID, participant ID, event payload, actor ID, token, or source address. It uses `Cache-Control: no-store`. Scrape it through the same TLS/authentication boundary as the research application.
+Resource and request aggregates are filtered to the authenticated actor's tenant. The response contains no deployment ID, session ID, participant ID, event payload, actor ID, token, source address, global request total, or other tenant's limiter utilization. It uses `Cache-Control: no-store`. Scrape it through the same TLS/authentication boundary as the research application.
 
 These are baseline process metrics, not full observability. Production operations still need external logs with redaction, alert rules, durable time-series storage, distributed traces where appropriate, and monitoring of the reverse proxy, database, object store and backup jobs.

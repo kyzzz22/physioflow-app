@@ -57,19 +57,19 @@ export class HostedRequestRateLimiter {
     this.rateLimitedTotal = 0;
   }
 
-  key(scope, source) { return `${scope}:${createHash('sha256').update(this.salt).update(String(source)).digest('hex')}`; }
+  key(scope, source, partition) { return `${scope}:${createHash('sha256').update(this.salt).update(String(partition)).update('\0').update(String(source)).digest('hex')}`; }
 
   prune(now) {
     for (const [key, entry] of this.entries) if (entry.resetAt <= now) this.entries.delete(key);
     while (this.entries.size >= this.config.maxEntries) this.entries.delete(this.entries.keys().next().value);
   }
 
-  consume(scope, source) {
+  consume(scope, source, partition = 'public') {
     if (!this.config || !scope) return { allowed: true, limit: null, remaining: null, resetAt: null, retryAfterSeconds: null };
     const now = this.clock();
     const limit = this.config[scope];
     if (!limit) throw new Error(`Unsupported hosted rate-limit scope ${scope}`);
-    const key = this.key(scope, source);
+    const key = this.key(scope, source, partition);
     let entry = this.entries.get(key);
     if (!entry || entry.resetAt <= now) {
       if (!entry) this.prune(now);
@@ -94,27 +94,36 @@ export class HostedOperationalMetrics {
     this.requestsTotal = 0;
     this.responsesByStatus = {};
     this.errorsTotal = 0;
+    this.tenantCounters = new Map();
   }
 
-  record(status, error = false) {
+  record(status, error = false, tenantId = 'default') {
     this.requestsTotal += 1;
     this.responsesByStatus[status] = (this.responsesByStatus[status] || 0) + 1;
     if (error) this.errorsTotal += 1;
+    const counter = this.tenantCounters.get(tenantId) || { total: 0, errors: 0, responsesByStatus: {} };
+    counter.total += 1;
+    counter.responsesByStatus[status] = (counter.responsesByStatus[status] || 0) + 1;
+    if (error) counter.errors += 1;
+    this.tenantCounters.set(tenantId, counter);
   }
 
-  snapshot(service, limiter) {
-    const deployments = [...service.deployments.values()];
-    const sessions = [...service.sessions.values()];
+  snapshot(service, limiter, tenantId = 'default') {
+    const deployments = [...service.deployments.values()].filter(item => (item.tenantId || 'default') === tenantId);
+    const sessions = [...service.sessions.values()].filter(item => (item.tenantId || 'default') === tenantId);
     const deploymentStatuses = {};
     const sessionStatuses = {};
     for (const item of deployments) deploymentStatuses[item.status] = (deploymentStatuses[item.status] || 0) + 1;
     for (const item of sessions) sessionStatuses[item.status] = (sessionStatuses[item.status] || 0) + 1;
+    const requests = this.tenantCounters.get(tenantId) || { total: 0, errors: 0, responsesByStatus: {} };
+    const limiterState = limiter?.snapshot() || { enabled: false, maxEntries: 0 };
     return {
       schemaVersion: HOSTED_METRICS_SCHEMA_VERSION,
+      tenantId,
       uptimeSeconds: Math.max(0, Math.floor((this.clock() - this.startedAt) / 1000)),
-      requests: { total: this.requestsTotal, errors: this.errorsTotal, responsesByStatus: { ...this.responsesByStatus }, rateLimited: limiter?.rateLimitedTotal || 0 },
+      requests: { total: requests.total, errors: requests.errors, responsesByStatus: { ...requests.responsesByStatus }, rateLimited: requests.responsesByStatus[429] || 0 },
       resources: { deployments: deployments.length, deploymentStatuses, sessions: sessions.length, sessionStatuses, events: sessions.reduce((total, session) => total + session.eventCount, 0) },
-      limiter: limiter?.snapshot() || { enabled: false, trackedKeys: 0, rateLimitedTotal: 0, maxEntries: 0 },
+      limiter: { enabled: limiterState.enabled, maxEntries: limiterState.maxEntries },
     };
   }
 }

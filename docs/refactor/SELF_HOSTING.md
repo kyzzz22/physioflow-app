@@ -8,7 +8,7 @@ Build the application, provide actor credentials, and start the server:
 
 ```bash
 npm run build
-PHYSIOFLOW_ACTORS_JSON='[{"actorId":"owner","role":"owner","accessToken":"replace-with-a-long-random-secret"}]' \
+PHYSIOFLOW_ACTORS_JSON='[{"actorId":"owner","role":"owner","tenantId":"lab-a","accessToken":"replace-with-a-long-random-secret"}]' \
 PHYSIOFLOW_STATE_FILE='./var/hosted-state.json' \
 HOST='127.0.0.1' PORT='8787' \
 npm run hosted:serve
@@ -20,7 +20,7 @@ The default static directory is `./dist`. Put the service behind an HTTPS revers
 
 | Variable | Purpose |
 | --- | --- |
-| `PHYSIOFLOW_ACTORS_JSON` | Required JSON array of owner/editor/operator/analyst/viewer credentials |
+| `PHYSIOFLOW_ACTORS_JSON` | Required JSON array of owner/editor/operator/analyst/viewer credentials and their server-controlled tenant IDs |
 | `PHYSIOFLOW_STATE_FILE` | Atomic JSON state file; defaults to `./var/hosted-state.json` |
 | `PHYSIOFLOW_STATIC_DIR` | Built application directory; defaults to `./dist` |
 | `PHYSIOFLOW_PUBLIC_BASE_URL` | External origin used in signed links |
@@ -47,7 +47,7 @@ Use the offline `hosted:backup`, `hosted:backup:verify`, and `hosted:restore` co
 Authenticated deployment uploads are stored using this path convention:
 
 ```text
-<PHYSIOFLOW_ASSET_DIR>/<deployment bundle ID>/<asset ID>
+<PHYSIOFLOW_ASSET_DIR>/<tenant ID>/<hosted deployment ID>/<asset ID>
 ```
 
 Use the deployment asset API or `uploadDeploymentAssets` coordinator after publication. Only declared workspace assets can be uploaded, and only while the deployment is queued. The service validates permission, size, media type, and SHA-256 content before an atomic write and persistent audit entry. Deployment processing remains blocked until every required asset is valid.
@@ -56,6 +56,6 @@ When Bootstrap is requested, the resolver verifies that the file is inside the c
 
 ## Scope
 
-The adapter is appropriate for one trusted process or a small lab server. It is not a multi-process database and does not provide tenant isolation, managed identity, key rotation, distributed locking, shared/distributed rate limiting, scheduled/remote backups, or full observability. Production multi-tenant deployments should retain the same service/store/asset boundaries while replacing the filesystem adapters with transactional storage and managed object delivery.
+The adapter is appropriate for one trusted process or a small lab server. It enforces application-layer tenant ownership and separate asset namespaces, but remains one process, state file, asset root and backup set. It does not provide managed identity, physical database/key separation, distributed locking, shared/distributed rate limiting, scheduled/remote backups, or full observability. Production multi-tenant deployments should retain the same service/store/asset boundaries while adding tenant-aware transactional storage and managed object delivery; see `TENANT_ISOLATION.md`.
 
 `tests/hosted-node-server.test.js` exercises real network publication, asset readiness blocking, authenticated upload, process-level service reconstruction from disk, public redemption, Bootstrap validation, participant static delivery, checksum validation, signed asset download, readiness degradation, and signature/file-replacement rejection. `tests/hosted-backup.test.js` proves private atomic backup creation, full inventory verification, safe restore, overwrite refusal, tamper detection, and symbolic-link rejection.

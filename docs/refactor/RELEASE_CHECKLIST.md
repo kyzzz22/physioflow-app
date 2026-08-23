@@ -18,6 +18,7 @@
 - [x] A verified offline backup restores into new paths, rejects tampering and existing targets, and the recovered server passes `/readyz`.
 - [x] Rate limits return stable 429/retry metadata, forwarded addresses are trusted only by explicit topology, and protected metrics contain no record identities or tokens.
 - [x] Data retention is opt-in, owner-planned and explicitly confirmed; purge removes participant credentials, identifiers, raw events, snapshots and cached response copies while preserving a validated audit tombstone across restart.
+- [x] Server-assigned tenant identity scopes queues, idempotency, deployments, sessions, links, data, retention, audit, metrics and filesystem assets; cross-tenant probes disclose no resource existence.
 - [x] Workspace binaries are authenticated, checksum-locked, atomically uploaded and audited before deployment readiness; incomplete or immutable deployments reject processing or replacement.
 - [x] Participant launch tokens enforce expiry, quotas, revocation and deployment deactivation without interrupting active sessions.
 - [x] Participant bootstrap verifies the frozen graph, omits credentials and marks unsafe or unresolved resources unavailable.

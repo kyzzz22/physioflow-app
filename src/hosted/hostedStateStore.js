@@ -16,27 +16,39 @@ const MUTATIONS = new Set([
 ]);
 
 function clone(value) { return value === undefined ? undefined : structuredClone(value); }
+const TENANT_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+
+function validTenant(value) { return typeof value === 'string' && TENANT_ID.test(value) && value === value.trim(); }
 
 export function validateHostedState(state) {
   const errors = [];
   if (!state || typeof state !== 'object') return { valid: false, errors: ['Hosted state must be an object'] };
-  if (![HOSTED_STATE_SCHEMA_VERSION, '1.0.0'].includes(state.schemaVersion)) errors.push(`Unsupported hosted state version ${state.schemaVersion || '(missing)'}`);
+  if (![HOSTED_STATE_SCHEMA_VERSION, '1.1.0', '1.0.0'].includes(state.schemaVersion)) errors.push(`Unsupported hosted state version ${state.schemaVersion || '(missing)'}`);
+  const requiresTenant = state.schemaVersion === HOSTED_STATE_SCHEMA_VERSION;
   const requiredArrays = ['deployments', 'sessions', 'participantTokens', 'idempotency', 'auditEntries'];
-  if (state.schemaVersion === HOSTED_STATE_SCHEMA_VERSION) requiredArrays.push('launchLinks', 'launchTokens');
+  if (state.schemaVersion !== '1.0.0') requiredArrays.push('launchLinks', 'launchTokens');
   for (const key of requiredArrays) {
     if (!Array.isArray(state[key])) errors.push(`Hosted state ${key} must be an array`);
   }
   const deploymentIds = new Set();
+  const deploymentTenants = new Map();
   for (const deployment of state.deployments || []) {
     if (!deployment.deploymentId || deploymentIds.has(deployment.deploymentId)) errors.push('Hosted deployment IDs must be present and unique');
     deploymentIds.add(deployment.deploymentId);
+    if (requiresTenant && !validTenant(deployment.tenantId)) errors.push(`Hosted deployment ${deployment.deploymentId || '(missing)'} must declare a valid tenant`);
+    if (requiresTenant && ![1, 2].includes(deployment.assetNamespaceVersion)) errors.push(`Hosted deployment ${deployment.deploymentId || '(missing)'} must declare a valid asset namespace version`);
+    deploymentTenants.set(deployment.deploymentId, deployment.tenantId || 'default');
   }
   const sessionIds = new Set();
+  const sessionTenants = new Map();
   const purgedSessionIds = new Set();
   for (const session of state.sessions || []) {
     if (!session.sessionId || sessionIds.has(session.sessionId)) errors.push('Hosted session IDs must be present and unique');
     sessionIds.add(session.sessionId);
     if (!deploymentIds.has(session.deploymentId)) errors.push(`Hosted session ${session.sessionId || '(missing)'} references an unknown deployment`);
+    if (requiresTenant && !validTenant(session.tenantId)) errors.push(`Hosted session ${session.sessionId || '(missing)'} must declare a valid tenant`);
+    sessionTenants.set(session.sessionId, session.tenantId || 'default');
+    if (deploymentTenants.has(session.deploymentId) && (session.tenantId || 'default') !== deploymentTenants.get(session.deploymentId)) errors.push(`Hosted session ${session.sessionId || '(missing)'} tenant does not match its deployment`);
     if (!Array.isArray(session.idempotency)) errors.push(`Hosted session ${session.sessionId || '(missing)'} idempotency state must be an array`);
     if (session.dataPurgedAt) {
       purgedSessionIds.add(session.sessionId);
@@ -50,15 +62,24 @@ export function validateHostedState(state) {
   for (const entry of state.participantTokens || []) {
     if (!Array.isArray(entry) || entry.length !== 2 || !sessionIds.has(entry[1]?.sessionId)) errors.push('Hosted participant tokens must reference a known session');
     else if (purgedSessionIds.has(entry[1].sessionId)) errors.push(`Purged hosted session ${entry[1].sessionId} must not retain a participant token`);
+    else {
+      if (requiresTenant && !validTenant(entry[1].tenantId)) errors.push(`Hosted participant token for session ${entry[1].sessionId} must declare a valid tenant`);
+      if ((entry[1].tenantId || 'default') !== sessionTenants.get(entry[1].sessionId)) errors.push(`Hosted participant token for session ${entry[1].sessionId} tenant does not match its session`);
+    }
   }
   const launchLinkIds = new Set();
   for (const link of state.launchLinks || []) {
     if (!link.launchLinkId || launchLinkIds.has(link.launchLinkId)) errors.push('Hosted launch link IDs must be present and unique');
     launchLinkIds.add(link.launchLinkId);
     if (!deploymentIds.has(link.deploymentId)) errors.push(`Hosted launch link ${link.launchLinkId || '(missing)'} references an unknown deployment`);
+    if (requiresTenant && !validTenant(link.tenantId)) errors.push(`Hosted launch link ${link.launchLinkId || '(missing)'} must declare a valid tenant`);
+    if (deploymentTenants.has(link.deploymentId) && (link.tenantId || 'default') !== deploymentTenants.get(link.deploymentId)) errors.push(`Hosted launch link ${link.launchLinkId || '(missing)'} tenant does not match its deployment`);
   }
   for (const entry of state.launchTokens || []) {
     if (!Array.isArray(entry) || entry.length !== 2 || !launchLinkIds.has(entry[1])) errors.push('Hosted launch tokens must reference a known launch link');
+  }
+  if (requiresTenant) {
+    for (const entry of state.auditEntries || []) if (!validTenant(entry.tenantId)) errors.push(`Hosted audit entry ${entry.auditId || '(missing)'} must declare a valid tenant`);
   }
   return { valid: errors.length === 0, errors };
 }

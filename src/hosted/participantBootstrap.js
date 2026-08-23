@@ -67,7 +67,7 @@ async function resolveResource(resource, deployment, assetResolver) {
   if (resource.sourceUrl) return { resourceId: resource.resourceId, kind: resource.kind, assetId: resource.assetId, nodeId: resource.nodeId, name: resource.name, mediaType: resource.mediaType, checksum: resource.checksum, status: 'unavailable', reason: 'unsafe_or_unsupported_url', delivery: null };
   if (resource.asset && assetResolver) {
     try {
-      const resolved = await assetResolver(clone(resource.asset), { deploymentId: deployment.deploymentId, bundleId: deployment.bundleId, protocolId: deployment.protocolId });
+      const resolved = await assetResolver(clone(resource.asset), { deploymentId: deployment.deploymentId, bundleId: deployment.bundleId, tenantId: deployment.tenantId || 'default', assetNamespaceVersion: deployment.assetNamespaceVersion || 1, protocolId: deployment.protocolId });
       const url = safeDeliveryUrl(resolved?.url);
       if (url) return { resourceId: resource.resourceId, kind: resource.kind, assetId: resource.assetId, nodeId: resource.nodeId, name: resource.name, mediaType: resource.mediaType, checksum: resolved.checksum || resource.checksum, status: 'ready', delivery: { mode: resolved.mode || 'signed', url, expiresAt: resolved.expiresAt || null } };
     } catch { /* expose availability, not provider internals */ }

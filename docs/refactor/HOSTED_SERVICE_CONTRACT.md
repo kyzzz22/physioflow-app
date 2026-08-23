@@ -5,6 +5,7 @@ The hosted service layer turns a portable deployment bundle into a controlled ex
 ## Capabilities
 
 - Role-based access for owner, editor, operator, analyst, viewer, and scoped participant sessions.
+- Server-assigned tenant ownership across deployments, queues, sessions, launch links, exports, retention, audit, metrics, idempotency, and assets.
 - Idempotent deployment publication and session creation.
 - Explicit `queued` to `ready` deployment processing.
 - Permission-checked, checksum-locked workspace-asset upload with a readiness gate before processing.
@@ -44,6 +45,6 @@ The standalone participant surface consumes this contract at `/participant`, wit
 
 ## Security boundary
 
-The local hosted service is a deterministic reference and test sandbox, not a production identity provider. Its injected opaque tokens and in-memory records must be replaced by durable storage, encrypted transport, managed secrets, rate limiting, tenant isolation, audited authentication, and operational retention scheduling before internet exposure. The reference contract does enforce explicit live-state retention plans and purge invariants; see `DATA_RETENTION.md` for its backup and downstream-copy boundary.
+The local hosted service is a deterministic reference and test sandbox, not a production identity provider. It enforces application-layer tenant ownership but its injected opaque tokens and in-memory records still require durable tenant-aware storage, encrypted transport, managed secrets, audited authentication, and operational retention scheduling before internet exposure. See `TENANT_ISOLATION.md` and `DATA_RETENTION.md` for the precise guarantees and infrastructure boundaries.
 
 The framework-neutral HTTP v1 handler/client and versioned persistent-state store boundary are implemented; see `HOSTED_HTTP_API.md`. They make network deployment and durable adapters possible without changing Runtime V2, but do not themselves supply managed infrastructure or production identity.
