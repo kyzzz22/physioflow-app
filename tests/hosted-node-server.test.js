@@ -66,6 +66,14 @@ test('Node hosted server persists its service, serves the participant app, and d
   assert.equal(ready.status, 200);
   assert.equal((await ready.json()).status, 'ready');
   assert.equal((await fetch(`${firstAddress.baseUrl}/readyz`, { method: 'POST' })).status, 405);
+  const metricsResponse = await fetch(`${firstAddress.baseUrl}/metrics`, { headers: { authorization: 'Bearer node-owner-token' } });
+  assert.equal(metricsResponse.status, 200);
+  const metrics = await metricsResponse.json();
+  assert.equal(metrics.schemaVersion, '1.0.0');
+  assert.equal(metrics.resources.deployments, 1);
+  assert.equal(metrics.resources.sessions, 0);
+  assert.equal(JSON.stringify(metrics).includes('node-owner-token'), false);
+  assert.equal((await fetch(`${firstAddress.baseUrl}/metrics`, { headers: { authorization: 'Bearer node-viewer-token' } })).status, 403);
   await first.close();
 
   const persisted = JSON.parse(await readFile(join(root, 'state', 'hosted.json'), 'utf8'));
@@ -94,6 +102,24 @@ test('Node hosted server persists its service, serves the participant app, and d
   const notReady = await fetch(`${restartedAddress.baseUrl}/readyz`);
   assert.equal(notReady.status, 503);
   assert.equal((await notReady.json()).checks.assets.ready, false);
+});
+
+test('Node hosted server applies bounded source rate limits without trusting forwarded addresses', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'physioflow-hosted-limit-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const hosted = await createHostedNodeServer({ actors, stateFile: join(root, 'state.json'), rateLimits: { api: 1 } });
+  t.after(async () => hosted.close());
+  const address = await hosted.listen(0);
+  const headers = { authorization: 'Bearer node-owner-token', 'x-forwarded-for': '198.51.100.10' };
+  const accepted = await fetch(`${address.baseUrl}/v1/audit`, { headers });
+  assert.equal(accepted.status, 200);
+  assert.equal(accepted.headers.get('x-ratelimit-remaining'), '0');
+  const rejected = await fetch(`${address.baseUrl}/v1/audit`, { headers: { ...headers, 'x-forwarded-for': '203.0.113.20' } });
+  assert.equal(rejected.status, 429);
+  assert.equal((await rejected.json()).error.code, 'rate_limited');
+  assert.equal(rejected.headers.get('retry-after'), '60');
+  assert.equal(hosted.metrics.snapshot(hosted.service, hosted.limiter).requests.rateLimited, 1);
+  assert.equal((await fetch(`${address.baseUrl}/healthz`)).status, 200);
 });
 
 test('file hosted state store rejects corrupt or insecurely edited state content', async t => {

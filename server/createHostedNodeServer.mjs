@@ -4,6 +4,7 @@ import { extname, resolve, sep } from 'node:path';
 import { createHostedHttpHandler, createPersistentHostedExecutionService } from '../src/hosted/index.js';
 import { FileHostedStateStore } from './fileHostedStateStore.mjs';
 import { createFilesystemAssetDelivery } from './filesystemAssetDelivery.mjs';
+import { HostedOperationalMetrics, HostedRequestRateLimiter, normalizeRateLimits, requestRateScope, requestSourceAddress } from './requestProtection.mjs';
 
 const STATIC_TYPES = Object.freeze({ '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.woff2': 'font/woff2' });
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
@@ -35,6 +36,16 @@ function jsonResponse(value, status, request, allowedOrigins) {
   const origin = corsOrigin(request, allowedOrigins);
   if (origin) { headers.set('access-control-allow-origin', origin); if (origin !== '*') headers.set('vary', 'Origin'); }
   return new Response(JSON.stringify(value), { status, headers });
+}
+
+function withRateLimitHeaders(response, decision) {
+  if (!decision?.limit) return response;
+  const headers = new globalThis.Headers(response.headers);
+  headers.set('x-ratelimit-limit', String(decision.limit));
+  headers.set('x-ratelimit-remaining', String(decision.remaining));
+  headers.set('x-ratelimit-reset', String(Math.ceil(decision.resetAt / 1000)));
+  if (!decision.allowed) headers.set('retry-after', String(decision.retryAfterSeconds));
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
 function assetRequirementsWithoutStore(deployment) {
@@ -93,6 +104,11 @@ export async function createHostedNodeServer(options = {}) {
   if (!Array.isArray(options.actors) || !options.actors.length) throw new Error('Hosted Node server requires at least one configured actor');
   const maximumBodyBytes = options.maximumBodyBytes || 10 * 1024 * 1024;
   const maximumAssetBytes = options.maximumAssetBytes || 250 * 1024 * 1024;
+  const trustedProxyHops = options.trustedProxyHops ?? 0;
+  if (!Number.isInteger(trustedProxyHops) || trustedProxyHops < 0) throw new Error('Hosted trusted proxy hops must be a non-negative integer');
+  const rateLimits = normalizeRateLimits(options.rateLimits);
+  const limiter = new HostedRequestRateLimiter({ limits: rateLimits || false, clock: options.rateLimitClock });
+  const metrics = new HostedOperationalMetrics({ clock: options.metricsClock });
   let baseUrl = normalizedPublicBaseUrl(options.publicBaseUrl);
   const listenHost = options.host || '127.0.0.1';
   if (options.assetDirectory && !baseUrl && !LOOPBACK_HOSTS.has(listenHost)) throw new Error('Non-loopback asset hosting requires an explicit HTTPS public base URL');
@@ -125,29 +141,46 @@ export async function createHostedNodeServer(options = {}) {
     return { status: Object.values(checks).every(check => check.ready) ? 'ready' : 'not_ready', checks };
   };
   const server = createServer(async (incoming, outgoing) => {
+    let rateDecision = null;
+    const send = (response, head = incoming.method === 'HEAD', error = false) => {
+      metrics.record(response.status, error);
+      return sendNodeResponse(outgoing, withRateLimitHeaders(response, rateDecision), head);
+    };
     try {
       const requestUrl = `${baseUrl || `http://${incoming.headers.host}`}${incoming.url}`;
       const pathname = new URL(requestUrl).pathname;
+      const metadataRequest = new Request(requestUrl, { method: incoming.method, headers: incoming.headers });
+      const rateScope = requestRateScope(pathname, incoming.method);
+      rateDecision = limiter.consume(rateScope, requestSourceAddress(incoming, trustedProxyHops));
+      if (!rateDecision.allowed) {
+        incoming.resume();
+        return send(jsonResponse({ error: { code: 'rate_limited', message: 'Hosted request rate limit exceeded' } }, 429, metadataRequest, options.allowedOrigins));
+      }
       const uploadMatch = pathname.match(/^\/v1\/deployments\/([^/]+)\/assets\/([^/]+)$/);
       const request = new Request(requestUrl, { method: incoming.method, headers: incoming.headers, body: await bodyOf(incoming, incoming.method === 'PUT' && uploadMatch ? maximumAssetBytes : maximumBodyBytes) });
       if (pathname === '/healthz') {
-        if (!['GET', 'HEAD'].includes(incoming.method)) return sendNodeResponse(outgoing, new Response('Method not allowed', { status: 405, headers: { allow: 'GET, HEAD', 'cache-control': 'no-store' } }));
-        return sendNodeResponse(outgoing, new Response(JSON.stringify({ status: 'ok' }), { headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } }), incoming.method === 'HEAD');
+        if (!['GET', 'HEAD'].includes(incoming.method)) return send(new Response('Method not allowed', { status: 405, headers: { allow: 'GET, HEAD', 'cache-control': 'no-store' } }));
+        return send(new Response(JSON.stringify({ status: 'ok' }), { headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } }));
       }
       if (pathname === '/readyz') {
-        if (!['GET', 'HEAD'].includes(incoming.method)) return sendNodeResponse(outgoing, new Response('Method not allowed', { status: 405, headers: { allow: 'GET, HEAD', 'cache-control': 'no-store' } }));
+        if (!['GET', 'HEAD'].includes(incoming.method)) return send(new Response('Method not allowed', { status: 405, headers: { allow: 'GET, HEAD', 'cache-control': 'no-store' } }));
         const result = await readiness();
-        return sendNodeResponse(outgoing, new Response(JSON.stringify(result), { status: result.status === 'ready' ? 200 : 503, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } }), incoming.method === 'HEAD');
+        return send(new Response(JSON.stringify(result), { status: result.status === 'ready' ? 200 : 503, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } }));
+      }
+      if (pathname === '/metrics') {
+        if (!['GET', 'HEAD'].includes(incoming.method)) return send(new Response('Method not allowed', { status: 405, headers: { allow: 'GET, HEAD', 'cache-control': 'no-store' } }));
+        await service.authorize(accessContext(request), 'audit.read');
+        return send(jsonResponse(metrics.snapshot(service, limiter), 200, request, options.allowedOrigins));
       }
       const asset = await assetDelivery?.response(request);
-      if (asset) return sendNodeResponse(outgoing, asset, incoming.method === 'HEAD');
+      if (asset) return send(asset);
       const assetListMatch = pathname.match(/^\/v1\/deployments\/([^/]+)\/assets$/);
       if (incoming.method === 'GET' && assetListMatch) {
         const deploymentId = decodeURIComponent(assetListMatch[1]);
         await service.authorize(accessContext(request), 'deployment.read');
         const deployment = service.deployments.get(deploymentId);
-        if (!deployment) return sendNodeResponse(outgoing, jsonResponse({ error: { code: 'not_found', message: `Unknown hosted deployment ${deploymentId}` } }, 404, request, options.allowedOrigins));
-        return sendNodeResponse(outgoing, jsonResponse(assetDelivery ? await assetDelivery.status(deployment) : assetRequirementsWithoutStore(deployment), 200, request, options.allowedOrigins));
+        if (!deployment) return send(jsonResponse({ error: { code: 'not_found', message: `Unknown hosted deployment ${deploymentId}` } }, 404, request, options.allowedOrigins));
+        return send(jsonResponse(assetDelivery ? await assetDelivery.status(deployment) : assetRequirementsWithoutStore(deployment), 200, request, options.allowedOrigins));
       }
       if (incoming.method === 'PUT' && uploadMatch) {
         const deploymentId = decodeURIComponent(uploadMatch[1]);
@@ -155,28 +188,28 @@ export async function createHostedNodeServer(options = {}) {
         const context = accessContext(request);
         await service.authorize(context, 'deployment.asset.write');
         const deployment = service.deployments.get(deploymentId);
-        if (!deployment) return sendNodeResponse(outgoing, jsonResponse({ error: { code: 'not_found', message: `Unknown hosted deployment ${deploymentId}` } }, 404, request, options.allowedOrigins));
-        if (deployment.status !== 'queued') return sendNodeResponse(outgoing, jsonResponse({ error: { code: 'conflict', message: `Hosted deployment ${deploymentId} is ${deployment.status}` } }, 409, request, options.allowedOrigins));
-        if (!assetDelivery) return sendNodeResponse(outgoing, jsonResponse({ error: { code: 'asset_storage_unavailable', message: 'Hosted asset storage is not configured' } }, 503, request, options.allowedOrigins));
+        if (!deployment) return send(jsonResponse({ error: { code: 'not_found', message: `Unknown hosted deployment ${deploymentId}` } }, 404, request, options.allowedOrigins));
+        if (deployment.status !== 'queued') return send(jsonResponse({ error: { code: 'conflict', message: `Hosted deployment ${deploymentId} is ${deployment.status}` } }, 409, request, options.allowedOrigins));
+        if (!assetDelivery) return send(jsonResponse({ error: { code: 'asset_storage_unavailable', message: 'Hosted asset storage is not configured' } }, 503, request, options.allowedOrigins));
         const uploaded = await assetDelivery.upload(deployment, assetId, await request.arrayBuffer(), request.headers.get('content-type'));
         if (uploaded.outcome === 'uploaded') await service.recordDeploymentAsset(deploymentId, uploaded, context);
-        return sendNodeResponse(outgoing, jsonResponse(uploaded, uploaded.outcome === 'uploaded' ? 201 : 200, request, options.allowedOrigins));
+        return send(jsonResponse(uploaded, uploaded.outcome === 'uploaded' ? 201 : 200, request, options.allowedOrigins));
       }
       if (incoming.method === 'POST' && pathname === '/v1/deployments/process-next') {
         await service.authorize(accessContext(request), 'deployment.manage');
         const queued = [...service.deployments.values()].find(deployment => deployment.status === 'queued');
         if (queued) {
           const requirements = assetDelivery ? await assetDelivery.status(queued) : assetRequirementsWithoutStore(queued);
-          if (!requirements.ready) return sendNodeResponse(outgoing, jsonResponse({ error: { code: 'assets_incomplete', message: 'Hosted deployment workspace assets are incomplete', detail: requirements } }, 409, request, options.allowedOrigins));
+          if (!requirements.ready) return send(jsonResponse({ error: { code: 'assets_incomplete', message: 'Hosted deployment workspace assets are incomplete', detail: requirements } }, 409, request, options.allowedOrigins));
         }
       }
-      if (pathname.startsWith('/v1/')) return sendNodeResponse(outgoing, await hosted(request), incoming.method === 'HEAD');
+      if (pathname.startsWith('/v1/')) return send(await hosted(request));
       const staticFile = await staticResponse(request, options.staticDirectory);
-      return sendNodeResponse(outgoing, staticFile || new Response('Not found', { status: 404 }), incoming.method === 'HEAD');
+      return send(staticFile || new Response('Not found', { status: 404 }));
     } catch (error) {
       const normalized = hostedNodeError(error);
       const request = new Request(`${baseUrl || `http://${incoming.headers.host}`}${incoming.url}`, { headers: incoming.headers });
-      return sendNodeResponse(outgoing, jsonResponse({ error: { code: normalized.code, message: normalized.message } }, normalized.status, request, options.allowedOrigins));
+      return send(jsonResponse({ error: { code: normalized.code, message: normalized.message } }, normalized.status, request, options.allowedOrigins), incoming.method === 'HEAD', true);
     }
   });
 
@@ -184,6 +217,8 @@ export async function createHostedNodeServer(options = {}) {
     server,
     service,
     readiness,
+    limiter,
+    metrics,
     async listen(port = options.port ?? 8787, host = listenHost) {
       await new Promise((resolveListen, rejectListen) => { server.once('error', rejectListen); server.listen(port, host, resolveListen); });
       const address = server.address();

@@ -2,7 +2,7 @@
 
 The HTTP adapter exposes Hosted Service Contract 1.0 without coupling the core service to a web framework. `createHostedHttpHandler(service)` accepts a standard Web `Request` and returns a standard `Response`, so the same handler can be mounted in a Node server, serverless function, edge runtime, or test transport. `HostedHttpClient` implements the interface consumed by `HostedRuntimeSync`.
 
-The single-node adapter additionally exposes unauthenticated `GET /healthz` for liveness and `GET /readyz` for state-store and processed-asset readiness. These operational routes sit outside the versioned application contract.
+The single-node adapter additionally exposes unauthenticated `GET /healthz` for liveness, `GET /readyz` for state-store and processed-asset readiness, and owner-protected `GET /metrics` for aggregate operational counters. These operational routes sit outside the versioned application contract. Its bounded request limiter returns HTTP 429 and stable `rate_limited` errors before reading rejected request bodies.
 
 ## Authentication and request rules
 

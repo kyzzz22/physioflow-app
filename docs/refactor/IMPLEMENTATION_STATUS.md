@@ -12,7 +12,7 @@ The planned MVP refactor phases 0–6 are implemented on the `demo` branch.
 | 5 — Data | Raw JSONL, normalized CSV, snapshots, manifests, data dictionary, quality report, full package download, participant/media/device lifecycle events, reaction times, device provenance, and independently tested validator |
 | 6 — Migration/Pilot | In-app and CLI migration, migration reports, native Questionnaire adapter, review gate, freeze hashes, three representative migration tests, operator guide, and release gate |
 
-Current automated gate: `npm run quality:release` passes as one authoritative local/CI command: 149 tests, a production build without bundle warnings, strict zero-warning lint, and three isolated browser flows.
+Current automated gate: `npm run quality:release` passes as one authoritative local/CI command: 153 tests, a production build without bundle warnings, strict zero-warning lint, and three isolated browser flows.
 
 Composer V2 now includes a typed variable catalog with scope, source, default value, and export policy, plus a variable picker for condition inputs. Variable renames update node and participant-UI bindings atomically; referenced variables cannot be removed accidentally.
 
@@ -63,6 +63,8 @@ The standalone participant application now provides the real public execution su
 The single-node Node adapter makes the hosted boundary directly runnable: it serves the built researcher/participant application, exposes health and API routes, restores validated state from an atomic mode-`0600` JSON store, accepts permission-checked workspace assets, gates deployment readiness on their SHA-256 integrity, and resolves them to expiring HMAC-signed URLs. Its real-network test uploads, processes, restarts, redeems, bootstraps, downloads an asset, and rejects a tampered signature. See `SELF_HOSTING.md`.
 
 Single-node recovery tooling now creates an offline atomic directory backup with a validated state snapshot, private asset copies and a complete SHA-256 inventory; verification detects altered/missing/unexpected files, and restore validates first and refuses existing targets. `/readyz` separately checks state-store readability/writability and processed-asset integrity. See `BACKUP_AND_RECOVERY.md`.
+
+Single-node abuse controls apply memory-bounded, process-local fixed-window limits to public redemption, API, asset upload and signed delivery. Proxy forwarding is ignored unless an exact trusted hop count is configured. An `audit.read`-protected metrics document exposes response/limit and aggregate deployment/session/event counts without record identities or payloads. See `HOSTED_OPERATIONS.md`.
 
 The deployment asset pipeline replaces manual provisioning with authenticated, manifest-constrained upload. Workspace dependencies require safe IDs and SHA-256 checksums; owner/editor/operator uploads are size/type/content checked, atomically stored and audited; incomplete assets block readiness; ready deployments reject replacement. A browser-neutral coordinator loads local workspace binaries, uploads with progress, and verifies server readiness. See `DEPLOYMENT_ASSETS.md`.
 

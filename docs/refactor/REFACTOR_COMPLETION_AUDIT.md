@@ -37,6 +37,7 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 | Deployment asset pipeline | Legacy/modern manifest normalization, mandatory workspace SHA-256, role-scoped binary upload, local/server checksum gates, atomic storage, persistent audit, readiness blocking, post-ready immutability and browser coordinator |
 | Hosted deployment data export | Data-reader authorization, exact frozen bundle, all session/event/snapshot records, public enrollment metadata, related audit provenance, aggregate counts, integrity diagnostics and credential exclusion |
 | Single-node recovery controls | Offline atomic state/asset backup, private permissions, SHA-256 inventory, tamper and symlink rejection, safe new-target restore, liveness and storage/asset readiness probes |
+| Single-node abuse and operations controls | Per-source scoped fixed-window limiting, bounded salted key storage, stable 429/retry metadata, explicit trusted-proxy boundary, protected aggregate metrics and privacy test |
 | Self-hosted browser release gates | Scripts launch Vite and isolated headless Chrome themselves, exercise legacy and Composer workflows plus a real cross-origin public participant server with server-only refresh recovery, and run in the demo push/PR GitHub Actions job |
 | Reproducible formal versions | Pre-freeze validation, migration review gate, config hash, immutable frozen record, new-version editing |
 | Complete session data | Raw events/responses, normalized CSV, snapshots, manifest, dictionary, quality report and independent validator |

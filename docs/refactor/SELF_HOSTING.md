@@ -28,6 +28,8 @@ The default static directory is `./dist`. Put the service behind an HTTPS revers
 | `PHYSIOFLOW_ASSET_DIR` | Optional root for uploaded workspace assets |
 | `PHYSIOFLOW_ASSET_SECRET` | Required with asset delivery; at least 32 characters |
 | `PHYSIOFLOW_MAX_ASSET_BYTES` | Per-asset upload limit; defaults to 250 MiB |
+| `PHYSIOFLOW_RATE_LIMITS_JSON` | Optional fixed-window limits; use `false` only behind an equivalent gateway |
+| `PHYSIOFLOW_TRUSTED_PROXY_HOPS` | Exact trusted reverse-proxy hop count; defaults to `0` |
 | `HOST`, `PORT` | Listen address and port |
 
 The state writer validates every snapshot, writes a mode-`0600` temporary file, and atomically renames it into place. The file contains active bearer and launch credentials and must be protected like a secret. Back it up only through encrypted storage and never commit it.
@@ -35,6 +37,8 @@ The state writer validates every snapshot, writes a mode-`0600` temporary file, 
 ## Health and recovery
 
 `GET /healthz` is a lightweight process-liveness check. `GET /readyz` verifies that the state store can be read and written and that every processed deployment still has valid workspace assets. It returns HTTP 503 when either check fails; queued deployments may legitimately have missing assets and do not make the server unavailable.
+
+The server applies bounded per-source limits to public redemption, API calls, asset upload and signed download. `GET /metrics` requires `audit.read` and exposes only aggregate process/resource counts. Forwarded addresses are ignored unless an exact trusted-proxy hop count is configured. See `HOSTED_OPERATIONS.md`.
 
 Use the offline `hosted:backup`, `hosted:backup:verify`, and `hosted:restore` commands for checksum-inventoried state and asset backups. Restore refuses existing targets. Stop the server before creating a backup and rehearse recovery separately; see `BACKUP_AND_RECOVERY.md`.
 
@@ -52,6 +56,6 @@ When Bootstrap is requested, the resolver verifies that the file is inside the c
 
 ## Scope
 
-The adapter is appropriate for one trusted process or a small lab server. It is not a multi-process database and does not provide tenant isolation, managed identity, key rotation, distributed locking, rate limiting, scheduled/remote backups, or full observability. Production multi-tenant deployments should retain the same service/store/asset boundaries while replacing the filesystem adapters with transactional storage and managed object delivery.
+The adapter is appropriate for one trusted process or a small lab server. It is not a multi-process database and does not provide tenant isolation, managed identity, key rotation, distributed locking, shared/distributed rate limiting, scheduled/remote backups, or full observability. Production multi-tenant deployments should retain the same service/store/asset boundaries while replacing the filesystem adapters with transactional storage and managed object delivery.
 
 `tests/hosted-node-server.test.js` exercises real network publication, asset readiness blocking, authenticated upload, process-level service reconstruction from disk, public redemption, Bootstrap validation, participant static delivery, checksum validation, signed asset download, readiness degradation, and signature/file-replacement rejection. `tests/hosted-backup.test.js` proves private atomic backup creation, full inventory verification, safe restore, overwrite refusal, tamper detection, and symbolic-link rejection.
