@@ -23,6 +23,8 @@ The sandbox also exercises the public-entry lifecycle: create a one-use launch t
 
 `HostedRuntimeSync` connects that session to Runtime V2. It uploads only unacknowledged event sequences, synchronizes the matching runtime snapshot under optimistic revision control, and finalizes a completed or failed hosted session only after both are accepted. Event, state, and terminal operations use deterministic idempotency identifiers, so a lost acknowledgement can be retried without duplicating remote records. The runner exposes sync progress and retry, and does not enable return-to-projects until required hosted finalization succeeds.
 
+Before the runtime starts, the scoped participant downloads and validates Participant Bootstrap 1.0: the exact frozen graph, bundle provenance, dependency metadata and safe resource delivery entries under an outer hash. See `PARTICIPANT_BOOTSTRAP.md`.
+
 ## Integration boundary
 
 `HostedExecutionClient` is the application-facing interface. A production adapter can map its operations to authenticated HTTP or RPC endpoints while retaining the same semantics:

@@ -18,7 +18,7 @@ import { clearCurrentRun, saveCurrentRun, saveSession } from './storage.js';
 import { buildGraphSessionFiles } from './data/index.js';
 import { downloadBundle } from './exporter.js';
 import { createProjectComponentRegistry } from './sdk/index.js';
-import { HostedRuntimeSync } from './hosted/index.js';
+import { HostedRuntimeSync, resolveParticipantResourceUrl } from './hosted/index.js';
 
 function runtimeServices() {
   return {
@@ -42,13 +42,18 @@ function packagePermissions(protocol, node) {
   return componentPackage ? new Set(componentPackage.approvedPermissions || []) : null;
 }
 
-function schemaForNode(node, definition) {
+function schemaForNode(node, definition, resources) {
   const adapter = definition?.runtime?.uiAdapter || 'schema';
   if (adapter === 'screen' || adapter === 'schema') return structuredClone(node.config?.ui || participantUiTemplate('instruction'));
   if (adapter === 'media') {
     const schema = structuredClone(node.config?.ui || participantUiTemplate('media'));
     const media = findUiElement(schema.root, 'Media');
-    if (media) media.props = { ...media.props, mediaType: node.config?.mediaType || 'image', sourceUrl: node.config?.sourceUrl || '', assetId: node.config?.assetId || null };
+    const sourceUrl = resolveParticipantResourceUrl(resources, {
+      assetId: node.config?.assetId || null,
+      nodeId: node.id,
+      fallbackUrl: node.config?.sourceUrl || '',
+    });
+    if (media) media.props = { ...media.props, mediaType: node.config?.mediaType || 'image', sourceUrl, assetId: node.config?.assetId || null };
     return schema;
   }
   if (adapter === 'rating') {
@@ -208,7 +213,7 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
     </div></div>
     <section className="graph-participant" aria-label="Participant view">
       {runtime.status === 'paused' && <div className="pause-overlay">Paused</div>}
-      <ParticipantRenderer key={currentNode.id} schema={schemaForNode(currentNode, currentDefinition)} disabled={runtime.status === 'paused'} context={{ participant: data.session, variables: currentPermissions && !currentPermissions.has('session.variables.read') ? {} : runtime.variables, outputs: runtime.outputs, progress, timer: { elapsedMs: 0 } }} onSubmit={complete} onValueChange={payload => record('value_changed', payload)} onAction={action => record('ui_action', action)} onMediaEvent={(eventType, payload) => {
+      <ParticipantRenderer key={currentNode.id} schema={schemaForNode(currentNode, currentDefinition, data.hosted?.resources)} disabled={runtime.status === 'paused'} context={{ participant: data.session, variables: currentPermissions && !currentPermissions.has('session.variables.read') ? {} : runtime.variables, outputs: runtime.outputs, progress, timer: { elapsedMs: 0 } }} onSubmit={complete} onValueChange={payload => record('value_changed', payload)} onAction={action => record('ui_action', action)} onMediaEvent={(eventType, payload) => {
         record(eventType, payload);
         if (eventType === 'media_ended' && currentNode.config?.completion?.mode === 'media-ended') complete({});
       }} />

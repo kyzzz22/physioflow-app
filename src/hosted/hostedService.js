@@ -1,13 +1,14 @@
 import { validateDeploymentBundle } from '../deployment/index.js';
+import { createParticipantBootstrap } from './participantBootstrap.js';
 
 export const HOSTED_SERVICE_CONTRACT_VERSION = '1.0.0';
 export const HOSTED_STATE_SCHEMA_VERSION = '1.1.0';
 const LEGACY_HOSTED_STATE_SCHEMA_VERSION = '1.0.0';
 
 const ROLE_PERMISSIONS = Object.freeze({
-  owner: ['deployment.publish', 'deployment.read', 'deployment.manage', 'session.start', 'session.read', 'session.manage', 'data.ingest', 'data.read', 'audit.read'],
+  owner: ['deployment.publish', 'deployment.read', 'deployment.manage', 'session.start', 'session.read', 'session.bootstrap', 'session.manage', 'data.ingest', 'data.read', 'audit.read'],
   editor: ['deployment.publish', 'deployment.read', 'session.read'],
-  operator: ['deployment.read', 'deployment.manage', 'session.start', 'session.read', 'session.manage', 'data.ingest', 'data.read'],
+  operator: ['deployment.read', 'deployment.manage', 'session.start', 'session.read', 'session.bootstrap', 'session.manage', 'data.ingest', 'data.read'],
   analyst: ['deployment.read', 'session.read', 'data.read'],
   viewer: ['deployment.read', 'session.read'],
 });
@@ -50,6 +51,7 @@ export class LocalHostedExecutionService {
   constructor(options = {}) {
     this.clock = options.clock || (() => new Date().toISOString());
     this.idFactory = options.idFactory || (prefix => `${prefix}_${globalThis.crypto.randomUUID()}`);
+    this.assetResolver = options.assetResolver || null;
     this.actors = new Map();
     this.participantTokens = new Map();
     this.deployments = new Map();
@@ -98,7 +100,7 @@ export class LocalHostedExecutionService {
     const actor = this.actors.get(context?.accessToken);
     if (actor && ROLE_PERMISSIONS[actor.role].includes(permission)) return { kind: 'actor', ...actor };
     const participant = this.participantTokens.get(context?.accessToken);
-    if (participant?.active !== false && participant?.sessionId === sessionId && ['session.read', 'session.manage', 'data.ingest'].includes(permission)) return { kind: 'participant', actorId: participant.participantId, role: 'participant' };
+    if (participant?.active !== false && participant?.sessionId === sessionId && ['session.read', 'session.bootstrap', 'session.manage', 'data.ingest'].includes(permission)) return { kind: 'participant', actorId: participant.participantId, role: 'participant' };
     throw new Error(`Hosted permission ${permission} is required`);
   }
 
@@ -323,6 +325,16 @@ export class LocalHostedExecutionService {
     return publicSession(record);
   }
 
+  async getParticipantBootstrap(sessionId, context = {}) {
+    this.authorize(context, 'session.bootstrap', sessionId);
+    const session = this.sessions.get(sessionId);
+    if (!session) throw new Error(`Unknown hosted session ${sessionId}`);
+    if (TERMINAL_SESSION_STATES.has(session.status)) throw new Error(`Hosted session ${sessionId} is ${session.status}`);
+    const deployment = this.deployments.get(session.deploymentId);
+    if (!deployment) throw new Error(`Unknown hosted deployment ${session.deploymentId}`);
+    return createParticipantBootstrap({ deployment, session, assetResolver: this.assetResolver, issuedAt: this.clock(), bootstrapId: this.idFactory('participant_bootstrap') });
+  }
+
   appendEvents(sessionId, events, options = {}, context = {}) {
     const actor = this.authorize(context, 'data.ingest', sessionId);
     const record = this.sessions.get(sessionId);
@@ -447,6 +459,7 @@ export class HostedExecutionClient {
   revokeLaunchLink(id, request) { return this.service.revokeLaunchLink(id, request, this.context); }
   redeemLaunchLink(token, request) { return this.service.redeemLaunchLink(token, request); }
   session(id) { return this.service.getSession(id, this.context); }
+  bootstrap(id) { return this.service.getParticipantBootstrap(id, this.context); }
   appendEvents(id, events, options) { return this.service.appendEvents(id, events, options, this.context); }
   syncState(id, state, options) { return this.service.syncSessionState(id, state, options, this.context); }
   completeSession(id, options) { return this.service.completeSession(id, options, this.context); }

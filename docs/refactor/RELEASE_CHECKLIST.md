@@ -13,6 +13,7 @@
 - [x] Runtime V2 retries hosted event/snapshot acknowledgements without duplication and completes the remote session exactly once.
 - [x] Hosted HTTP transport and persistent-state recovery preserve authentication boundaries, idempotency, session data and audit history.
 - [x] Participant launch tokens enforce expiry, quotas, revocation and deployment deactivation without interrupting active sessions.
+- [x] Participant bootstrap verifies the frozen graph, omits credentials and marks unsafe or unresolved resources unavailable.
 - [x] Complete session package includes all raw, normalized, metadata, dictionary, manifest, and quality files.
 - [x] Emotion, Stroop, and Go/No-Go migrations exceed 90% native mapping and retain every source payload.
 - [ ] A human pilot follows `OPERATOR_PILOT_GUIDE.md` and `USABILITY_STUDY_PROTOCOL.md`; `npm run verify:usability-study -- <results.json>` returns `passed: true`.

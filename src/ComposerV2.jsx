@@ -26,7 +26,7 @@ import { createProjectComponentRegistry, exampleReactionButtonPackage, installCo
 import { exampleSimulatedConnector, installDeviceConnector, uninstallDeviceConnector } from './devices/index.js';
 import { createProtocolChangeSet, mergeProtocolChangeSet } from './collaboration/index.js';
 import { createDeploymentBundle, validateDeploymentBundle } from './deployment/index.js';
-import { HostedExecutionClient, LocalHostedExecutionService } from './hosted/index.js';
+import { HostedExecutionClient, LocalHostedExecutionService, validateParticipantBootstrap } from './hosted/index.js';
 
 const NODE_WIDTH = 188;
 const NODE_HEIGHT = 112;
@@ -502,6 +502,7 @@ function DeploymentCatalog({ protocol, onHostedRun, onMessage }) {
   const [inspection, setInspection] = useState(null);
   const [hostedDeployment, setHostedDeployment] = useState(null);
   const [hostedSession, setHostedSession] = useState(null);
+  const [hostedBootstrap, setHostedBootstrap] = useState(null);
   const [participantId, setParticipantId] = useState('SANDBOX-P001');
   const [maximumSessions, setMaximumSessions] = useState('5');
   const [launchLink, setLaunchLink] = useState(null);
@@ -539,6 +540,7 @@ function DeploymentCatalog({ protocol, onHostedRun, onMessage }) {
       const ready = client.processNextDeployment() || client.deployment(queued.deploymentId);
       setHostedDeployment(ready);
       setHostedSession(null);
+      setHostedBootstrap(null);
       setLaunchLink(null);
       setError('');
       onMessage(`Sandbox deployment ${ready.status}`);
@@ -548,7 +550,11 @@ function DeploymentCatalog({ protocol, onHostedRun, onMessage }) {
     try {
       const session = await sandboxRef.current.createSession(hostedDeployment.deploymentId, { participantId: participantId.trim() || undefined, idempotencyKey: `participant:${participantId.trim() || 'generated'}` });
       participantClientRef.current = new HostedExecutionClient(sandboxRef.current.service, session.participantAccessToken);
+      const bootstrap = await participantClientRef.current.bootstrap(session.sessionId);
+      const check = await validateParticipantBootstrap(bootstrap);
+      if (!check.valid) throw new Error(`Participant bootstrap failed validation: ${check.errors.join('; ')}`);
       setHostedSession(session);
+      setHostedBootstrap(bootstrap);
       setError('');
       onMessage(`Created hosted sandbox session ${session.sessionId}`);
     } catch (nextError) { setError(nextError.message); }
@@ -565,7 +571,11 @@ function DeploymentCatalog({ protocol, onHostedRun, onMessage }) {
     try {
       const result = await sandboxRef.current.redeemLaunchLink(launchLink.launchToken, { idempotencyKey: `redeem:${participantId.trim() || 'generated'}`, participantId: participantId.trim() || undefined });
       participantClientRef.current = new HostedExecutionClient(sandboxRef.current.service, result.session.participantAccessToken);
+      const bootstrap = await participantClientRef.current.bootstrap(result.session.sessionId);
+      const check = await validateParticipantBootstrap(bootstrap);
+      if (!check.valid) throw new Error(`Participant bootstrap failed validation: ${check.errors.join('; ')}`);
       setHostedSession(result.session);
+      setHostedBootstrap(bootstrap);
       setLaunchLink(current => ({ ...current, ...result.launchLink }));
       setError('');
       onMessage(`Redeemed launch token for ${result.session.sessionId}`);
@@ -611,10 +621,10 @@ function DeploymentCatalog({ protocol, onHostedRun, onMessage }) {
       <button disabled={hostedDeployment.status !== 'ready' || Boolean(launchLink)} onClick={createSandboxLaunchLink}>Create one-use launch token</button>
       {launchLink && <><small>Launch {launchLink.launchLinkId} · {launchLink.status} · {launchLink.useCount}/{launchLink.maximumUses} uses</small><code>{launchLink.launchToken}</code><button disabled={launchLink.status !== 'active' || launchLink.useCount >= launchLink.maximumUses} onClick={redeemSandboxLaunchLink}>Redeem launch token</button><button disabled={launchLink.status !== 'active'} onClick={revokeSandboxLaunchLink}>Revoke launch token</button></>}
       <button disabled={hostedDeployment.status === 'deactivated'} onClick={deactivateSandbox}>Deactivate deployment</button>
-      {hostedSession && <><small>Session {hostedSession.sessionId} · {hostedSession.status} · revision {hostedSession.revision}</small><button onClick={() => {
+      {hostedSession && <><small>Session {hostedSession.sessionId} · {hostedSession.status} · revision {hostedSession.revision}</small>{hostedBootstrap && <small>Bootstrap verified · {hostedBootstrap.resources.filter(item => item.status === 'ready').length}/{hostedBootstrap.resources.length} resources ready</small>}<button disabled={!hostedBootstrap} onClick={() => {
         const session = structuredClone(hostedSession);
         delete session.participantAccessToken;
-        onHostedRun?.({ client: participantClientRef.current, session });
+        onHostedRun?.({ client: participantClientRef.current, session, protocol: hostedBootstrap.protocol, resources: hostedBootstrap.resources });
       }}>Run hosted session</button></>}
     </article>}
   </section>;

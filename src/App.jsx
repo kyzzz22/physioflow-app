@@ -427,9 +427,9 @@ export default function App() {
             } catch (error) { setAlert({ title: 'Cannot freeze', message: error.message }); }
           }}
           onCreateDraft={() => addAndOpen(createNextGraphProtocolVersion(current))}
-          onHostedRun={({ client, session }) => {
+          onHostedRun={({ client, session, protocol: hostedProtocol, resources }) => {
             setRun({
-              protocol: current,
+              protocol: hostedProtocol || current,
               session: {
                 session_id: session.sessionId,
                 participant_id: session.participantId,
@@ -438,13 +438,13 @@ export default function App() {
                 protocol_id: session.protocolId,
                 protocol_version: session.protocolVersion,
                 protocol_hash: session.configHash,
-                protocol_name: protocolNameOf(current),
+                protocol_name: protocolNameOf(hostedProtocol || current),
                 run_mode: 'hosted',
                 status: 'ready',
                 started_at: session.createdAt,
                 ended_at: null,
               },
-              hosted: { client, session },
+              hosted: { client, session, resources },
             });
             setView('runner');
           }}

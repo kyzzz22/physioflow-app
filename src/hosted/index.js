@@ -7,3 +7,4 @@ export {
 export { HostedRuntimeSync, HOSTED_RUNTIME_SYNC_VERSION } from './hostedRuntimeSync.js';
 export { createPersistentHostedExecutionService, MemoryHostedStateStore, validateHostedState, WebStorageHostedStateStore } from './hostedStateStore.js';
 export { createHostedHttpHandler, HostedHttpClient, HostedHttpError, HOSTED_HTTP_API_VERSION } from './hostedHttp.js';
+export { createParticipantBootstrap, PARTICIPANT_BOOTSTRAP_SCHEMA_VERSION, resolveParticipantResourceUrl, validateParticipantBootstrap } from './participantBootstrap.js';

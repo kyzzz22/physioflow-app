@@ -24,6 +24,7 @@ The HTTP adapter exposes Hosted Service Contract 1.0 without coupling the core s
 | POST | `/v1/launch-links/redeem` | Public launch token | Idempotently exchange a launch token for one scoped session |
 | POST | `/v1/launch-links/:id/revoke` | `deployment.manage` | Revoke an unexpired launch token |
 | GET | `/v1/sessions/:id` | `session.read` | Read session metadata without raw events |
+| GET | `/v1/sessions/:id/bootstrap` | `session.bootstrap` | Download the integrity-checked protocol and resource manifest |
 | POST | `/v1/sessions/:id/events` | `data.ingest` | Append one contiguous idempotent event batch |
 | PUT | `/v1/sessions/:id/state` | `session.manage` | Synchronize the snapshot matching ingested events |
 | POST | `/v1/sessions/:id/complete` | `session.manage` | Finalize a completed or failed session |

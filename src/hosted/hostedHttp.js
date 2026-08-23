@@ -94,6 +94,8 @@ export function createHostedHttpHandler(service, options = {}) {
       }
       match = path.match(/^\/v1\/sessions\/([^/]+)$/);
       if (method === 'GET' && match) return json(await service.getSession(decodeURIComponent(match[1]), context));
+      match = path.match(/^\/v1\/sessions\/([^/]+)\/bootstrap$/);
+      if (method === 'GET' && match) return json(await service.getParticipantBootstrap(decodeURIComponent(match[1]), context));
       match = path.match(/^\/v1\/sessions\/([^/]+)\/events$/);
       if (method === 'POST' && match) {
         const body = await readJson(request, maximumBytes);
@@ -167,6 +169,7 @@ export class HostedHttpClient {
   revokeLaunchLink(id, request = {}) { return this.request('POST', `/launch-links/${encodeURIComponent(id)}/revoke`, request, request); }
   redeemLaunchLink(launchToken, request = {}) { return this.request('POST', '/launch-links/redeem', { ...request, launchToken }, request); }
   session(id) { return this.request('GET', `/sessions/${encodeURIComponent(id)}`); }
+  bootstrap(id) { return this.request('GET', `/sessions/${encodeURIComponent(id)}/bootstrap`); }
   appendEvents(id, events, options) { return this.request('POST', `/sessions/${encodeURIComponent(id)}/events`, { events, options }); }
   syncState(id, state, options) { return this.request('PUT', `/sessions/${encodeURIComponent(id)}/state`, { state, options }); }
   completeSession(id, options) { return this.request('POST', `/sessions/${encodeURIComponent(id)}/complete`, { options }); }

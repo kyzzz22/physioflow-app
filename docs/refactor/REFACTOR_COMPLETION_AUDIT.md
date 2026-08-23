@@ -31,6 +31,7 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 | Hosted Runtime V2 synchronization | Serialized incremental event upload, snapshot sequence matching, deterministic idempotency keys, lost-acknowledgement recovery, exactly-once terminal transition and visible runner retry/completion gate |
 | Hosted network and persistence boundary | Framework-neutral HTTP v1 handler, fetch client, Bearer transport, bounded bodies, stable errors, versioned service snapshots, serialized store writes and validated restart recovery |
 | Governed participant launch | Opaque public launch tokens, idempotent redemption, per-link expiry/use limits, deployment expiry/session quotas, revocation, deactivation, persistence and audit provenance |
+| Participant bootstrap and resource delivery | Scoped bootstrap permission, exact frozen snapshot, nested integrity checks, bundle/dependency provenance, safe URL filtering, signed asset-resolver boundary, HTTP endpoint and Composer consumption |
 | Self-hosted Composer browser release gate | Script launches Vite and isolated headless Chrome itself, exercises freeze/hosted publication/runtime synchronization and V2 variable/subflow/SDK/device workflows, and runs in the demo push/PR GitHub Actions job |
 | Reproducible formal versions | Pre-freeze validation, migration review gate, config hash, immutable frozen record, new-version editing |
 | Complete session data | Raw events/responses, normalized CSV, snapshots, manifest, dictionary, quality report and independent validator |
