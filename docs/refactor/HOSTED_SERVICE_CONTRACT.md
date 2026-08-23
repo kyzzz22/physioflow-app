@@ -33,3 +33,5 @@ Composer Advanced includes a local hosted sandbox. A frozen version can be publi
 ## Security boundary
 
 The local hosted service is a deterministic reference and test sandbox, not a production identity provider. Its injected opaque tokens and in-memory records must be replaced by durable storage, encrypted transport, managed secrets, rate limiting, tenant isolation, retention enforcement, and an audited authentication system before internet exposure.
+
+The framework-neutral HTTP v1 handler/client and versioned persistent-state store boundary are implemented; see `HOSTED_HTTP_API.md`. They make network deployment and durable adapters possible without changing Runtime V2, but do not themselves supply managed infrastructure or production identity.

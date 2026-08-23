@@ -25,7 +25,7 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 
 ## Acceptance evidence
 
-- Automated tests: 132 passing.
+- Automated tests: 134 passing.
 - Production build: passing.
 - Lint: zero errors and zero warnings.
 - Production bundle: no build warnings; view-level loading keeps the initial JavaScript chunk below the configured 500 kB warning threshold.
@@ -48,6 +48,7 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 - Portable deployment behavior: tests prove frozen-snapshot and outer-manifest integrity, draft rejection, provider registration, job submission/status and cancellation.
 - Hosted-service behavior: tests prove role separation, publication/session idempotency, queue transitions, participant-token scoping, revision conflicts, contiguous batch ingestion, token revocation, restricted data access and audit sequencing.
 - Hosted-runtime behavior: a real Runtime V2 fixture survives simulated lost event and snapshot acknowledgements, then proves exactly one remote event batch, snapshot, completion and audit entry; pause/resume and terminal failure are also verified.
+- Hosted HTTP/persistence behavior: tests send a complete Runtime V2 session through the fetch client and Web Request handler, verify Bearer and JSON errors, then serialize and restart the service while retaining deployment, session, token, idempotency and audit state.
 - Browser release behavior: `npm run test:e2e` and `npm run test:e2e:refactor-browser` pass locally and `.github/workflows/refactor-quality.yml` runs both after the full quality gate on pushes and pull requests.
 - Unified release behavior: `npm run quality:release` is the single entry point used locally and by GitHub Actions, so tests, build, strict lint and both browser gates cannot drift into different release definitions.
 

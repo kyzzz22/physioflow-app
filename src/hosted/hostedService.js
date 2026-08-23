@@ -1,6 +1,7 @@
 import { validateDeploymentBundle } from '../deployment/index.js';
 
 export const HOSTED_SERVICE_CONTRACT_VERSION = '1.0.0';
+export const HOSTED_STATE_SCHEMA_VERSION = '1.0.0';
 
 const ROLE_PERMISSIONS = Object.freeze({
   owner: ['deployment.publish', 'deployment.read', 'deployment.manage', 'session.start', 'session.read', 'session.manage', 'data.ingest', 'data.read', 'audit.read'],
@@ -49,6 +50,31 @@ export class LocalHostedExecutionService {
       if (this.actors.has(actor.accessToken)) throw new Error('Hosted actor access tokens must be unique');
       this.actors.set(actor.accessToken, { actorId: actor.actorId, role: actor.role });
     }
+    if (options.state) this.restoreState(options.state);
+  }
+
+  restoreState(state) {
+    if (state?.schemaVersion !== HOSTED_STATE_SCHEMA_VERSION) throw new Error(`Unsupported hosted state version ${state?.schemaVersion || '(missing)'}`);
+    this.deployments = new Map((state.deployments || []).map(record => [record.deploymentId, clone(record)]));
+    this.sessions = new Map((state.sessions || []).map(record => {
+      const session = clone(record);
+      session.idempotency = new Map(record.idempotency || []);
+      return [session.sessionId, session];
+    }));
+    this.participantTokens = new Map(clone(state.participantTokens || []));
+    this.idempotency = new Map(clone(state.idempotency || []));
+    this.auditEntries = clone(state.auditEntries || []);
+  }
+
+  exportState() {
+    return {
+      schemaVersion: HOSTED_STATE_SCHEMA_VERSION,
+      deployments: [...this.deployments.values()].map(clone),
+      sessions: [...this.sessions.values()].map(record => ({ ...clone(record), idempotency: [...record.idempotency.entries()].map(clone) })),
+      participantTokens: [...this.participantTokens.entries()].map(clone),
+      idempotency: [...this.idempotency.entries()].map(clone),
+      auditEntries: this.auditEntries.map(clone),
+    };
   }
 
   authorize(context, permission, sessionId = null) {
