@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createCoreComponentRegistry, createProtocolGraph, createSequentialIdFactory, freezeProtocolGraph } from '../src/core/index.js';
 import { createDeploymentBundle } from '../src/deployment/index.js';
-import { createHostedHttpHandler, HostedExecutionClient, HostedHttpClient, LocalHostedExecutionService, resolveParticipantResourceUrl, validateParticipantBootstrap } from '../src/hosted/index.js';
+import { createHostedHttpHandler, HostedExecutionClient, HostedHttpClient, HostedRuntimeSync, LocalHostedExecutionService, resolveParticipantResourceUrl, validateParticipantBootstrap } from '../src/hosted/index.js';
+import { createRuntimeState, startRuntime } from '../src/runtime/index.js';
 
 async function fixture() {
   const protocol = createProtocolGraph({ idFactory: createSequentialIdFactory(), now: '2026-08-23T00:00:00.000Z' });
@@ -71,4 +72,24 @@ test('anonymous HTTP launch redemption yields a scoped client that downloads a v
   assert.equal((await validateParticipantBootstrap(bootstrap)).valid, true);
   assert.equal(bootstrap.session.participantId, 'P-PUBLIC');
   assert.equal(bootstrap.deployment.bundleHash, bundle.bundleHash);
+});
+
+test('participant bootstrap carries a consistent hosted recovery checkpoint', async () => {
+  const { bundle, protocol } = await fixture();
+  const service = new LocalHostedExecutionService(serviceOptions());
+  const owner = new HostedExecutionClient(service, 'bootstrap-owner-token');
+  const deployment = await owner.publish(bundle, { idempotencyKey: 'recovery-publish' });
+  owner.processNextDeployment();
+  const session = await owner.createSession(deployment.deploymentId, { idempotencyKey: 'recovery-session', participantId: 'P-RECOVERY' });
+  const participant = new HostedExecutionClient(service, session.participantAccessToken);
+  let eventId = 0;
+  const started = startRuntime(createRuntimeState(protocol, { sessionId: session.sessionId, startedAtEpochMs: 1, startedAtMonotonicMs: 1 }), protocol, createCoreComponentRegistry(), {
+    idFactory: prefix => `${prefix}_recovery_${++eventId}`,
+    clock: { now: () => ({ epochMs: 2 + eventId, monotonicMs: 2 + eventId, iso: '2026-08-23T03:00:00.000Z' }) },
+  });
+  await new HostedRuntimeSync({ client: participant, session }).enqueue({ events: started.events, runtime: started.state, complete: false });
+  const bootstrap = await participant.bootstrap(session.sessionId);
+  assert.equal((await validateParticipantBootstrap(bootstrap)).valid, true);
+  assert.equal(bootstrap.recovery.runtime.eventSequence, started.state.eventSequence);
+  assert.deepEqual(bootstrap.recovery.events, started.events);
 });

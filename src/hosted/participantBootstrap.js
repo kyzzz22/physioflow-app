@@ -104,6 +104,9 @@ export async function createParticipantBootstrap({ deployment, session, assetRes
     protocol: clone(protocol),
     dependencies: clone(deployment.bundle.dependencies || {}),
     resources,
+    recovery: session.runtimeSnapshot && session.runtimeSnapshot.eventSequence === session.nextEventSequence - 1
+      ? { runtime: clone(session.runtimeSnapshot), events: clone(session.events || []) }
+      : null,
   };
   bootstrap.bootstrapHash = await sha256(bootstrap);
   return bootstrap;
@@ -126,6 +129,12 @@ export async function validateParticipantBootstrap(bootstrap) {
     ids.add(resource.resourceId);
     if (!['ready', 'unavailable'].includes(resource.status)) errors.push(`Participant resource ${resource.resourceId || '(missing)'} has invalid status`);
     if (resource.status === 'ready' && !safeDeliveryUrl(resource.delivery?.url)) errors.push(`Participant resource ${resource.resourceId || '(missing)'} has an unsafe delivery URL`);
+  }
+  if (bootstrap.recovery) {
+    const runtime = bootstrap.recovery.runtime;
+    const events = bootstrap.recovery.events;
+    if (runtime?.sessionId !== bootstrap.session?.sessionId || runtime?.protocolId !== bootstrap.session?.protocolId || runtime?.protocolVersion !== bootstrap.session?.protocolVersion) errors.push('Participant recovery snapshot does not match the session');
+    if (!Array.isArray(events) || events.some((event, index) => event.sequence !== index + 1 || event.sessionId !== bootstrap.session?.sessionId) || (events.at(-1)?.sequence ?? 0) !== runtime?.eventSequence) errors.push('Participant recovery events do not match the runtime snapshot');
   }
   if (!bootstrap.bootstrapHash?.match(/^[a-f0-9]{64}$/) || await sha256(unsigned(bootstrap)) !== bootstrap.bootstrapHash) errors.push('Participant bootstrap content does not match its hash');
   return { valid: errors.length === 0, errors };

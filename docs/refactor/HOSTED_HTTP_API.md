@@ -10,6 +10,7 @@ The HTTP adapter exposes Hosted Service Contract 1.0 without coupling the core s
 - The default maximum request body is 10 MiB and can be reduced by the host.
 - Responses use `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, and identify the hosted contract version.
 - Stable JSON errors contain `error.code` and `error.message`; authorization, missing resources, conflicts, invalid requests, oversized payloads, timeouts, and internal failures remain distinguishable.
+- Cross-origin participant applications must be explicitly allow-listed through `allowedOrigins`. The handler answers preflight requests and permits only the required methods and `Authorization`, `Content-Type`, and `Idempotency-Key` headers; CORS is disabled by default.
 
 ## Routes
 

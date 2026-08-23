@@ -66,6 +66,18 @@ test('Hosted HTTP API carries a complete Runtime V2 session with stable errors a
   await assert.rejects(() => missingAuth.deployment(deployment.deploymentId), error => error.status === 403);
 });
 
+test('Hosted HTTP API grants CORS only to configured participant application origins', async () => {
+  const service = new LocalHostedExecutionService(serviceOptions());
+  const handler = createHostedHttpHandler(service, { allowedOrigins: ['https://experiments.example'] });
+  const allowed = await handler(new Request('https://hosted.example/v1/launch-links/redeem', { method: 'OPTIONS', headers: { origin: 'https://experiments.example', 'access-control-request-method': 'POST' } }));
+  assert.equal(allowed.status, 204);
+  assert.equal(allowed.headers.get('access-control-allow-origin'), 'https://experiments.example');
+  assert.match(allowed.headers.get('access-control-allow-headers'), /authorization/);
+  const denied = await handler(new Request('https://hosted.example/v1/launch-links/redeem', { method: 'OPTIONS', headers: { origin: 'https://untrusted.example' } }));
+  assert.equal(denied.status, 403);
+  assert.equal(denied.headers.get('access-control-allow-origin'), null);
+});
+
 test('persistent hosted state restores deployments, scoped sessions and data after service restart', async () => {
   const { bundle } = await fixture();
   const store = new MemoryHostedStateStore();

@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import { isParticipantEntryLocation } from './hosted/participantRoute.js';
 import { LanguageProvider } from './i18n';
 import './style.css';
 import './i18n.css';
@@ -13,6 +14,7 @@ import './analytics.css';
 import './sessions.css';
 import './composer-v2.css';
 import './participant-ui.css';
+import './participant-launch.css';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -69,11 +71,16 @@ if (localStorage.getItem('physioflow.dark-mode') === '1') {
   document.documentElement.classList.remove('dark-mode');
 }
 
+const ParticipantLaunchPage = React.lazy(() => import('./ParticipantLaunchPage.jsx'));
+const entry = isParticipantEntryLocation(window.location)
+  ? React.createElement(React.Suspense, { fallback: React.createElement('main', { className: 'participant-launch' }, React.createElement('section', null, 'Loading…')) }, React.createElement(ParticipantLaunchPage))
+  : React.createElement(App, null);
+
 createRoot(root).render(
   React.createElement(React.StrictMode, null,
     React.createElement(ErrorBoundary, null,
       React.createElement(LanguageProvider, null,
-        React.createElement(App, null)
+        entry
       )
     )
   )

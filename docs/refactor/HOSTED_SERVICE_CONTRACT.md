@@ -25,6 +25,8 @@ The sandbox also exercises the public-entry lifecycle: create a one-use launch t
 
 Before the runtime starts, the scoped participant downloads and validates Participant Bootstrap 1.0: the exact frozen graph, bundle provenance, dependency metadata and safe resource delivery entries under an outer hash. See `PARTICIPANT_BOOTSTRAP.md`.
 
+The standalone participant surface consumes this contract at `/participant`, with fragment credentials, idempotent redemption, explicit cross-origin policy, and local/server checkpoint recovery. See `PUBLIC_PARTICIPANT_APP.md`.
+
 ## Integration boundary
 
 `HostedExecutionClient` is the application-facing interface. A production adapter can map its operations to authenticated HTTP or RPC endpoints while retaining the same semantics:

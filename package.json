@@ -16,12 +16,13 @@
     "test:e2e": "node tests/e2e-cdp.mjs",
     "test:refactor-e2e": "node --test tests/refactor-e2e.test.js",
     "test:e2e:refactor-browser": "node tests/e2e-composer-v2-self-hosted.mjs",
+    "test:e2e:participant-public": "node tests/e2e-participant-public.mjs",
     "test:performance": "node --test tests/performance-gates.test.js",
     "validate:graph-export": "node scripts/validate-graph-export.mjs",
     "verify:usability-study": "node scripts/verify-usability-study.mjs",
     "migrate:v1": "node scripts/migrate-protocol-v1.mjs",
     "quality:refactor": "npm test && npm run build && npm run lint -- --max-warnings=0",
-    "quality:release": "npm run quality:refactor && npm run test:e2e && npm run test:e2e:refactor-browser"
+    "quality:release": "npm run quality:refactor && npm run test:e2e && npm run test:e2e:refactor-browser && npm run test:e2e:participant-public"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",

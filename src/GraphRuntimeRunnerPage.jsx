@@ -23,7 +23,7 @@ import { HostedRuntimeSync, resolveParticipantResourceUrl } from './hosted/index
 function runtimeServices() {
   return {
     idFactory: prefix => `${prefix}_${crypto.randomUUID()}`,
-    clock: { now: () => { const epochMs = Date.now(); return { epochMs, monotonicMs: performance.now(), iso: new Date(epochMs).toISOString() }; } },
+    clock: { now: () => { const epochMs = Date.now(); return { epochMs, monotonicMs: performance.timeOrigin + performance.now(), iso: new Date(epochMs).toISOString() }; } },
     controlHandlers: createCoreControlHandlerRegistry(),
   };
 }
@@ -83,7 +83,7 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
   const services = useRef(runtimeServices());
   const initialState = useMemo(() => data.restore?.runtime?.protocolSchemaVersion
     ? restoreRuntime(data.restore.runtime, protocol)
-    : createRuntimeState(protocol, { sessionId: data.session.session_id, startedAtEpochMs: Date.now(), startedAtMonotonicMs: performance.now() }), [data.restore, data.session.session_id, protocol]);
+    : createRuntimeState(protocol, { sessionId: data.session.session_id, startedAtEpochMs: Date.now(), startedAtMonotonicMs: performance.timeOrigin + performance.now() }), [data.restore, data.session.session_id, protocol]);
   const [runtime, setRuntime] = useState(initialState);
   const [events, setEvents] = useState(data.restore?.events || []);
   const [responses, setResponses] = useState(data.restore?.responses || []);

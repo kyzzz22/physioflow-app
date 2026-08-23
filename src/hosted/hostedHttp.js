@@ -50,10 +50,30 @@ function errorResponse(error) {
   return json({ error: { code: 'internal_error', message: 'Hosted service request failed' } }, 500);
 }
 
+function allowedCorsOrigin(request, allowedOrigins) {
+  const origin = request.headers.get('origin');
+  if (!origin || !allowedOrigins) return null;
+  if (allowedOrigins === '*') return '*';
+  if (typeof allowedOrigins === 'function') return allowedOrigins(origin) ? origin : null;
+  const values = Array.isArray(allowedOrigins) ? allowedOrigins : [allowedOrigins];
+  return values.includes(origin) ? origin : null;
+}
+
+function withCors(response, origin) {
+  if (!origin) return response;
+  const headers = new globalThis.Headers(response.headers);
+  headers.set('access-control-allow-origin', origin);
+  headers.set('access-control-allow-methods', 'GET, POST, PUT, OPTIONS');
+  headers.set('access-control-allow-headers', 'authorization, content-type, idempotency-key');
+  headers.set('access-control-max-age', '600');
+  if (origin !== '*') headers.append('vary', 'Origin');
+  return new globalThis.Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
 export function createHostedHttpHandler(service, options = {}) {
   if (!service) throw new Error('Hosted HTTP handler requires a service');
   const maximumBytes = options.maximumBodyBytes || 10 * 1024 * 1024;
-  return async request => {
+  const handle = async request => {
     try {
       const url = new URL(request.url);
       const path = url.pathname.replace(/\/$/, '') || '/';
@@ -124,6 +144,14 @@ export function createHostedHttpHandler(service, options = {}) {
       return errorResponse(error);
     }
   };
+  return async request => {
+    const corsOrigin = allowedCorsOrigin(request, options.allowedOrigins);
+    if (request.method.toUpperCase() === 'OPTIONS') {
+      if (request.headers.get('origin') && !corsOrigin) return errorResponse(new HostedHttpError('Hosted API origin is not allowed', { status: 403, code: 'forbidden_origin' }));
+      return withCors(new globalThis.Response(null, { status: 204, headers: { 'cache-control': 'no-store' } }), corsOrigin);
+    }
+    return withCors(await handle(request), corsOrigin);
+  };
 }
 
 export class HostedHttpClient {
@@ -131,7 +159,8 @@ export class HostedHttpClient {
     if (!options.baseUrl) throw new Error('Hosted HTTP client requires a base URL');
     this.baseUrl = options.baseUrl.replace(/\/$/, '');
     this.accessToken = options.accessToken;
-    this.fetch = options.fetch || globalThis.fetch;
+    const transport = options.fetch || globalThis.fetch?.bind(globalThis);
+    this.fetch = transport ? (...args) => transport(...args) : null;
     this.timeoutMs = options.timeoutMs || 15000;
     if (!this.fetch) throw new Error('Hosted HTTP client requires fetch');
   }

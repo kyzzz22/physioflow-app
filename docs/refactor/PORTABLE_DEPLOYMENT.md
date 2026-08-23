@@ -25,4 +25,4 @@ Composer can also inspect an imported deployment bundle and reports protocol or 
 
 ## Current boundary
 
-The contract, bundle exporter/validator, provider registry, and deterministic in-memory reference provider are implemented. This supplies the application boundary required by a future server, queue, authentication system, or managed runtime. It does not claim that a hosted PhysioFlow backend, public participant URL, multi-tenant access control, or remote data storage currently exists.
+The contract, bundle exporter/validator, provider registry, deterministic reference provider, hosted service boundary, and standalone public participant application are implemented. Production infrastructure still needs managed identity, multi-tenant access control, durable remote storage, asset hosting, and operations.

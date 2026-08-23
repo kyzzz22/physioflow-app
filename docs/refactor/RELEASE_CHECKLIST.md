@@ -6,11 +6,12 @@
 - [x] Instruction, Media, and Form participant interfaces render without custom code.
 - [x] Runtime V2 executes deterministic linear, branch, and bounded-loop fixtures.
 - [x] Pause, resume, retry, skip, snapshot, and recovery tests pass.
-- [x] Self-hosted legacy and Composer V2 browser gates pass from clean profiles.
+- [x] Self-hosted legacy, Composer V2, and public-participant browser gates pass from clean profiles.
 - [x] Collaboration change sets export, merge independent edits, require conflict resolution, reject unsafe input and retain audit provenance.
 - [x] Portable deployment bundles reject drafts and detect protocol or manifest tampering.
 - [x] Hosted service enforces roles, idempotency, deployment queues, session revisions, contiguous event ingestion and audit provenance.
 - [x] Runtime V2 retries hosted event/snapshot acknowledgements without duplication and completes the remote session exactly once.
+- [x] `/participant` redeems fragment credentials, validates Bootstrap, resumes from a hosted checkpoint without local recovery data, and completes through an explicitly allowed CORS origin.
 - [x] Hosted HTTP transport and persistent-state recovery preserve authentication boundaries, idempotency, session data and audit history.
 - [x] Participant launch tokens enforce expiry, quotas, revocation and deployment deactivation without interrupting active sessions.
 - [x] Participant bootstrap verifies the frozen graph, omits credentials and marks unsafe or unresolved resources unavailable.

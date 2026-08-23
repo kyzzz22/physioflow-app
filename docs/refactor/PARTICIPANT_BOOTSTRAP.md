@@ -8,6 +8,7 @@ The bootstrap contains:
 - the exact frozen Protocol Graph snapshot consumed by Runtime V2;
 - bundle and dependency provenance;
 - a normalized resource-delivery manifest;
+- the latest fully synchronized runtime checkpoint and its contiguous events, when a resumable checkpoint exists;
 - an integrity hash covering the complete bootstrap response.
 
 Participant access tokens are never included in the bootstrap body. The service re-hashes the frozen protocol before issuing the document, and the client validates both the protocol configuration hash and outer bootstrap hash before running it.
@@ -32,4 +33,6 @@ Hosted Runtime V2 resolves media nodes through this verified manifest. Ready ass
 
 `GET /v1/sessions/:id/bootstrap` is implemented by both local and persistent hosted services and consumed by `HostedHttpClient.bootstrap`. Composer's hosted sandbox validates the returned bootstrap and starts Runtime V2 with the server-delivered protocol snapshot, not its in-memory editor object.
 
-The contract provides the application boundary for a standalone public participant page. Internet deployment still requires HTTPS hosting, a production identity/token service, durable storage, a signed asset resolver/CDN, monitoring, abuse controls, and a public application route.
+The standalone `/participant` application accepts opaque launch credentials in the URL fragment, exchanges them through the HTTP client with a deterministic idempotency key, validates the bootstrap, and enters Runtime V2 without loading the researcher workspace. Refresh recovery chooses the newest matching local or hosted checkpoint, re-fetches current session revisions, and preserves event monotonicity across page navigation. The launch token remains in the fragment and is therefore not sent in HTTP request paths or referrer headers.
+
+Internet deployment still requires HTTPS hosting, a production identity/token service, durable storage, a signed asset resolver/CDN, monitoring, and abuse controls.

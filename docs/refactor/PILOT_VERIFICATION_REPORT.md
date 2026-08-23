@@ -19,13 +19,14 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 - Installed the simulated physiology connector from Composer Advanced mode and confirmed its versioned manifest, simulated transport, signal/marker channel types and approved connect/read/write capabilities.
 - Inserted the registry-driven Value switch control component and confirmed its schema-driven match setting and explicit match/default branch ports.
 - Ran the self-hosted Composer V2 browser gate from a clean profile. It froze and published a minimal graph through the local hosted queue, created and completed a scoped participant session with hosted event/snapshot/terminal synchronization, then produced a five-node editable graph with a reusable subflow instance and Value switch and verified both the Reaction Button SDK package and simulated sensor connector.
+- Ran the standalone public-participant browser gate against a real cross-origin hosted HTTP server. It redeemed a fragment token, validated the server bootstrap, removed browser recovery data, restored from the hosted checkpoint after reload, and completed synchronization.
 - Ran the self-hosted legacy compatibility gate from a clean profile. It blocked formal collection without a selected local folder, completed a draft preview with eight events, persisted a valid session, returned to Dashboard, and immediately displayed the saved participant record.
 - Migrated the representative Emotion protocol from the Dashboard into Composer V2. The migration produced 22 nodes and 21 edges, preserved all 20 steps, reported 100% native mapping, and kept formal collection behind the explicit migration-review gate.
 - Re-ran the automated release gate after immutable-version, required-port, participant binding/action, lifecycle-event, response-time, and independent export-validator hardening.
 
 ## Acceptance evidence
 
-- Automated tests: 149 passing.
+- Automated tests: 153 passing.
 - Production build: passing.
 - Lint: zero errors and zero warnings.
 - Production bundle: no build warnings; view-level loading keeps the initial JavaScript chunk below the configured 500 kB warning threshold.
@@ -51,9 +52,9 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 - Hosted HTTP/persistence behavior: tests send a complete Runtime V2 session through the fetch client and Web Request handler, verify Bearer and JSON errors, then serialize and restart the service while retaining deployment, session, token, idempotency and audit state.
 - Public launch behavior: tests cover anonymous idempotent redemption, link expiry/use quotas/revocation, deployment-wide session quotas and deactivation, persistence across restart, and continued access for already-created sessions.
 - Participant-bootstrap behavior: tests re-hash the frozen graph, validate the outer document, reject tampering and viewer access, omit session tokens, resolve signed workspace assets, reject unsafe URLs, and download the same contract through anonymous HTTP launch redemption.
-- Browser release behavior: `npm run test:e2e` and `npm run test:e2e:refactor-browser` pass locally and `.github/workflows/refactor-quality.yml` runs both after the full quality gate on pushes and pull requests.
-- Unified release behavior: `npm run quality:release` is the single entry point used locally and by GitHub Actions, so tests, build, strict lint and both browser gates cannot drift into different release definitions.
+- Browser release behavior: `npm run test:e2e`, `npm run test:e2e:refactor-browser`, and `npm run test:e2e:participant-public` pass locally and `.github/workflows/refactor-quality.yml` runs all three through the full quality gate on pushes and pull requests.
+- Unified release behavior: `npm run quality:release` is the single entry point used locally and by GitHub Actions, so tests, build, strict lint and all browser gates cannot drift into different release definitions.
 
 ## Known transition scope
 
-The legacy editor and runner remain available for existing protocols. Hosted collaboration, authentication, public participant links and a managed cloud runtime remain Stage 7 infrastructure work; the transport-neutral collaboration and deployment contracts now provide their application boundaries.
+The legacy editor and runner remain available for existing protocols. The public participant application and hosted execution contract are implemented; managed identity, production storage/CDN adapters, operational controls, and a managed cloud runtime remain deployment infrastructure work.
