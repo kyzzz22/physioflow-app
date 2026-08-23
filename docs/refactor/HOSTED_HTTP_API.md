@@ -43,7 +43,7 @@ The single-node adapter additionally exposes unauthenticated `GET /healthz` for 
 
 ## Persistence
 
-Hosted state has its own versioned schema. It contains deployments, launch-link metadata/token mappings, sessions, scoped participant-token state, global and per-session idempotency records, raw events, snapshots, and audit entries. Actor credentials remain injected by the hosting environment rather than being embedded in the state snapshot. State 1.2 validates tenant propagation and reads legacy 1.0/1.1 snapshots into the `default` tenant.
+Hosted state has its own versioned schema. It contains deployments, launch-link metadata/token mappings, sessions, scoped participant-token state, global and per-session idempotency records, raw events, snapshots, and audit entries. Actor credentials remain injected by the hosting environment rather than being embedded in the state snapshot. State 1.3 validates tenant propagation and credential-protection metadata, reads legacy 1.0/1.1 records into the `default` tenant, and upgrades 1.0–1.2 plaintext credentials at Node-server startup.
 
 `createPersistentHostedExecutionService` serializes mutations through a `load`/`save` store and validates restored relationships before accepting traffic. The included stores are:
 
@@ -51,4 +51,4 @@ Hosted state has its own versioned schema. It contains deployments, launch-link 
 - `WebStorageHostedStateStore` for a durable single-browser sandbox;
 - `FileHostedStateStore` in the Node adapter for validated, mode-`0600`, atomic single-process persistence.
 
-A production store can implement the same interface with transactional SQL, an append-only event database, object storage, or another durable backend. The included Node server also serves the participant application and signed filesystem assets; see `SELF_HOSTING.md`. Application-layer resource isolation is documented in `TENANT_ISOLATION.md`, deployment-level research export in `HOSTED_DATA_EXPORT.md`, and explicit live-state pseudonymization in `DATA_RETENTION.md`. Managed identity, physical storage/key separation, secret hashing, backup expiry, retention scheduling, distributed rate limiting, and operational monitoring remain responsibilities of the hosting environment.
+A production store can implement the same interface with transactional SQL, an append-only event database, object storage, or another durable backend. The included Node server also serves the participant application and signed filesystem assets; see `SELF_HOSTING.md`. Application-layer resource isolation is documented in `TENANT_ISOLATION.md`, bearer/launch-token storage and rotation in `CREDENTIAL_PROTECTION.md`, deployment-level research export in `HOSTED_DATA_EXPORT.md`, and explicit live-state pseudonymization in `DATA_RETENTION.md`. Managed identity, physical storage/key separation, backup expiry, retention scheduling, distributed rate limiting, and operational monitoring remain responsibilities of the hosting environment.

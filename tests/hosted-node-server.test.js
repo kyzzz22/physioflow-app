@@ -15,6 +15,8 @@ const actors = [
   { actorId: 'node-viewer', role: 'viewer', accessToken: 'node-viewer-token' },
   { actorId: 'node-other-owner', role: 'owner', tenantId: 'node-other', accessToken: 'node-other-owner-token' },
 ];
+const oldCredentialKey = { keyId: 'node-old', secret: 'node-old-credential-secret-at-least-32-characters' };
+const newCredentialKey = { keyId: 'node-new', secret: 'node-new-credential-secret-at-least-32-characters' };
 
 async function fixture(root) {
   const content = Buffer.from('verified hosted asset');
@@ -28,10 +30,12 @@ async function fixture(root) {
   return { bundle, content };
 }
 
-function serverOptions(root, sequence) {
+function serverOptions(root, sequence, credentialKeys = [oldCredentialKey]) {
   let id = sequence;
   return {
     actors,
+    credentialKeys,
+    primaryCredentialKeyId: credentialKeys[0].keyId,
     stateFile: join(root, 'state', 'hosted.json'),
     staticDirectory: join(root, 'dist'),
     assetDirectory: join(root, 'assets'),
@@ -92,9 +96,13 @@ test('Node hosted server persists its service, serves the participant app, and d
   assert.equal(persisted.deployments.length, 2);
   assert.equal(persisted.auditEntries.filter(entry => entry.action === 'deployment.asset_uploaded').length, 2);
   assert.equal((await stat(join(root, 'state', 'hosted.json'))).mode & 0o777, 0o600);
+  assert.equal(persisted.credentialProtection.primaryKeyId, 'node-old');
+  assert.equal(JSON.stringify(persisted).includes(link.launchToken), false);
+  assert.match(persisted.launchTokens[0][0], /^hmac-sha256:node-old:/);
 
-  const restarted = await createHostedNodeServer(serverOptions(root, 100));
+  const restarted = await createHostedNodeServer(serverOptions(root, 100, [newCredentialKey, oldCredentialKey]));
   t.after(async () => restarted.close());
+  assert.equal(JSON.parse(await readFile(join(root, 'state', 'hosted.json'), 'utf8')).credentialProtection.primaryKeyId, 'node-new');
   const restartedAddress = await restarted.listen(0);
   const anonymous = new HostedHttpClient({ baseUrl: restartedAddress.baseUrl });
   const redemption = await anonymous.redeemLaunchLink(link.launchToken, { idempotencyKey: 'node-redeem', participantId: 'NODE-PARTICIPANT' });
@@ -106,6 +114,11 @@ test('Node hosted server persists its service, serves the participant app, and d
   const delivered = await fetch(resource.delivery.url);
   assert.equal(delivered.headers.get('content-type'), 'text/plain');
   assert.deepEqual(Buffer.from(await delivered.arrayBuffer()), content);
+  const rotatedState = JSON.parse(await readFile(join(root, 'state', 'hosted.json'), 'utf8'));
+  assert.equal(rotatedState.credentialProtection.primaryKeyId, 'node-new');
+  assert.equal(JSON.stringify(rotatedState).includes(link.launchToken), false);
+  assert.equal(JSON.stringify(rotatedState).includes(redemption.session.participantAccessToken), false);
+  assert.match(rotatedState.participantTokens[0][0], /^hmac-sha256:node-new:/);
   const tampered = new URL(resource.delivery.url);
   tampered.searchParams.set('type', 'text/html');
   assert.equal((await fetch(tampered)).status, 403);
@@ -119,7 +132,7 @@ test('Node hosted server persists its service, serves the participant app, and d
 test('Node hosted server applies bounded source rate limits without trusting forwarded addresses', async t => {
   const root = await mkdtemp(join(tmpdir(), 'physioflow-hosted-limit-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const hosted = await createHostedNodeServer({ actors, stateFile: join(root, 'state.json'), rateLimits: { api: 1 } });
+  const hosted = await createHostedNodeServer({ actors, credentialKeys: [oldCredentialKey], stateFile: join(root, 'state.json'), rateLimits: { api: 1 } });
   t.after(async () => hosted.close());
   const address = await hosted.listen(0);
   const headers = { authorization: 'Bearer node-owner-token', 'x-forwarded-for': '198.51.100.10' };
@@ -143,6 +156,7 @@ test('file hosted state store rejects corrupt or insecurely edited state content
   await writeFile(file, JSON.stringify({ schemaVersion: '1.1.0', deployments: [] }));
   await chmod(file, 0o600);
   await assert.rejects(() => new FileHostedStateStore(file).load(), /Invalid hosted state/);
+  await assert.rejects(() => createHostedNodeServer({ actors, stateFile: join(root, 'missing-key.json') }), /credential protection requires at least one key/);
   await assert.rejects(() => createHostedNodeServer({ actors, stateFile: join(root, 'server.json'), assetDirectory: root, assetSecret: 'node-server-test-secret-at-least-32-characters', host: '0.0.0.0' }), /explicit HTTPS public base URL/);
   await assert.rejects(() => createHostedNodeServer({ actors, stateFile: join(root, 'server.json'), publicBaseUrl: 'http://experiments.example' }), /must use HTTPS/);
 });

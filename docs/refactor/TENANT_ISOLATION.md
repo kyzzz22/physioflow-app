@@ -1,6 +1,6 @@
 # Hosted Tenant Isolation
 
-Hosted state 1.2 assigns every configured actor to one tenant and propagates that tenant to deployments, sessions, participant-token mappings, launch links, audit entries, idempotency scopes, metrics, and filesystem asset namespaces.
+Hosted state 1.3 assigns every configured actor to one tenant and propagates that tenant to deployments, sessions, participant-token mappings, launch links, audit entries, idempotency scopes, metrics, and filesystem asset namespaces.
 
 ## Actor configuration
 
@@ -31,7 +31,7 @@ Signed participant asset URLs remain usable without an actor credential because 
 
 ## Upgrade behavior
 
-State 1.2 reads state 1.0 and 1.1. Historical records are assigned to `default`, legacy idempotency keys remain replayable, and legacy assets continue to use `<asset-root>/<bundleId>/<assetId>`. The next successful persistent mutation writes normalized 1.2 records. New publications always use the isolated asset namespace.
+State 1.3 reads state 1.0–1.2. Historical pre-tenant records are assigned to `default`, legacy idempotency keys remain replayable, and legacy assets continue to use `<asset-root>/<bundleId>/<assetId>`. Node startup immediately rewrites legacy plaintext credentials into the protected 1.3 representation. New publications always use the isolated asset namespace.
 
 ## Boundary of the guarantee
 

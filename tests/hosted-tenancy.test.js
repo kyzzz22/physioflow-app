@@ -84,7 +84,7 @@ test('hosted resources, queues, idempotency and audit are isolated by tenant', a
   assert.equal(JSON.stringify(auditB).includes(deploymentA.deploymentId), false);
 
   const state = await store.load();
-  assert.equal(state.schemaVersion, '1.2.0');
+  assert.equal(state.schemaVersion, '1.3.0');
   assert.equal(state.deployments.every(record => record.tenantId), true);
   assert.equal(state.sessions.every(record => record.tenantId), true);
   assert.equal(state.participantTokens.every(([, record]) => record.tenantId), true);
@@ -126,7 +126,7 @@ test('hosted state 1.1 migrates into the default tenant without breaking idempot
   assert.equal(retried.deploymentId, deployment.deploymentId);
   assert.equal((await restored.getDeployment(deployment.deploymentId, { accessToken: 'legacy-owner-token' })).tenantId, 'default');
   const upgraded = restored.exportState();
-  assert.equal(upgraded.schemaVersion, '1.2.0');
+  assert.equal(upgraded.schemaVersion, '1.3.0');
   assert.equal(upgraded.deployments[0].tenantId, 'default');
   assert.equal(upgraded.deployments[0].assetNamespaceVersion, 1);
   assert.equal(upgraded.auditEntries.every(entry => entry.tenantId === 'default'), true);

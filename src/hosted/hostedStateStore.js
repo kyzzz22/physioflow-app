@@ -17,13 +17,27 @@ const MUTATIONS = new Set([
 
 function clone(value) { return value === undefined ? undefined : structuredClone(value); }
 const TENANT_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const CREDENTIAL_KEY_ID = '[A-Za-z0-9][A-Za-z0-9._-]{0,63}';
+const credentialDigest = new RegExp(`^hmac-sha256:(${CREDENTIAL_KEY_ID}):[a-f0-9]{64}$`);
+const sealedCredential = new RegExp(`^sealed:v1:(${CREDENTIAL_KEY_ID}):[A-Za-z0-9_-]+:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+$`);
 
 function validTenant(value) { return typeof value === 'string' && TENANT_ID.test(value) && value === value.trim(); }
+
+function validateProtectedCredentialFields(value, primaryKeyId, errors, location) {
+  if (Array.isArray(value)) return value.forEach((item, index) => validateProtectedCredentialFields(item, primaryKeyId, errors, `${location}[${index}]`));
+  if (!value || typeof value !== 'object') return;
+  for (const [key, item] of Object.entries(value)) {
+    if (['participantAccessToken', 'launchToken'].includes(key) && typeof item === 'string') {
+      const match = item.match(sealedCredential);
+      if (!match || match[1] !== primaryKeyId) errors.push(`Hosted protected credential ${location}.${key} is invalid`);
+    } else validateProtectedCredentialFields(item, primaryKeyId, errors, `${location}.${key}`);
+  }
+}
 
 export function validateHostedState(state) {
   const errors = [];
   if (!state || typeof state !== 'object') return { valid: false, errors: ['Hosted state must be an object'] };
-  if (![HOSTED_STATE_SCHEMA_VERSION, '1.1.0', '1.0.0'].includes(state.schemaVersion)) errors.push(`Unsupported hosted state version ${state.schemaVersion || '(missing)'}`);
+  if (![HOSTED_STATE_SCHEMA_VERSION, '1.2.0', '1.1.0', '1.0.0'].includes(state.schemaVersion)) errors.push(`Unsupported hosted state version ${state.schemaVersion || '(missing)'}`);
   const requiresTenant = state.schemaVersion === HOSTED_STATE_SCHEMA_VERSION;
   const requiredArrays = ['deployments', 'sessions', 'participantTokens', 'idempotency', 'auditEntries'];
   if (state.schemaVersion !== '1.0.0') requiredArrays.push('launchLinks', 'launchTokens');
@@ -81,6 +95,34 @@ export function validateHostedState(state) {
   if (requiresTenant) {
     for (const entry of state.auditEntries || []) if (!validTenant(entry.tenantId)) errors.push(`Hosted audit entry ${entry.auditId || '(missing)'} must declare a valid tenant`);
   }
+  if (state.credentialProtection) {
+    const protection = state.credentialProtection;
+    const primaryKeyId = protection.primaryKeyId;
+    if (protection.schemaVersion !== '1.0.0' || protection.mode !== 'hmac-sha256+aes-256-gcm' || !new RegExp(`^${CREDENTIAL_KEY_ID}$`).test(primaryKeyId || '')) errors.push('Hosted credential protection metadata is invalid');
+    for (const session of state.sessions || []) {
+      if (typeof session.participantAccessToken === 'string') errors.push(`Protected hosted session ${session.sessionId || '(missing)'} retains a plaintext credential field`);
+      if (!session.dataPurgedAt) {
+        const digestMatch = String(session.participantCredentialDigest || '').match(credentialDigest);
+        const sealedMatch = String(session.participantCredentialCiphertext || '').match(sealedCredential);
+        if (!digestMatch || !sealedMatch || digestMatch[1] !== primaryKeyId || sealedMatch[1] !== primaryKeyId) errors.push(`Protected hosted session ${session.sessionId || '(missing)'} credential metadata is invalid`);
+      }
+      validateProtectedCredentialFields(session.idempotency || [], primaryKeyId, errors, `session ${session.sessionId || '(missing)'} idempotency`);
+    }
+    for (const entry of state.participantTokens || []) {
+      const digestMatch = String(entry?.[0] || '').match(credentialDigest);
+      const sealedMatch = String(entry?.[1]?.credentialCiphertext || '').match(sealedCredential);
+      if (!digestMatch || !sealedMatch || digestMatch[1] !== primaryKeyId || sealedMatch[1] !== primaryKeyId) errors.push('Hosted protected participant-token entry is invalid');
+    }
+    const links = new Map((state.launchLinks || []).map(link => [link.launchLinkId, link]));
+    for (const entry of state.launchTokens || []) {
+      const link = links.get(entry?.[1]);
+      const digestMatch = String(entry?.[0] || '').match(credentialDigest);
+      const linkDigest = String(link?.launchCredentialDigest || '').match(credentialDigest);
+      const sealedMatch = String(link?.launchCredentialCiphertext || '').match(sealedCredential);
+      if (!digestMatch || !linkDigest || !sealedMatch || digestMatch[1] !== primaryKeyId || linkDigest[1] !== primaryKeyId || sealedMatch[1] !== primaryKeyId || entry[0] !== link.launchCredentialDigest) errors.push('Hosted protected launch-token entry is invalid');
+    }
+    validateProtectedCredentialFields(state.idempotency || [], primaryKeyId, errors, 'service idempotency');
+  }
   return { valid: errors.length === 0, errors };
 }
 
@@ -113,12 +155,16 @@ export class WebStorageHostedStateStore {
 
 export async function createPersistentHostedExecutionService(options = {}) {
   if (!options.store?.load || !options.store?.save) throw new Error('Persistent hosted service requires a load/save state store');
-  const restored = await options.store.load();
+  const stored = await options.store.load();
+  const restored = stored && options.stateProtector ? await options.stateProtector.unprotectState(stored) : stored;
   if (restored) {
     const check = validateHostedState(restored);
     if (!check.valid) throw new Error(`Invalid hosted state:\n${check.errors.join('\n')}`);
   }
   const service = new LocalHostedExecutionService({ ...options, state: restored || undefined });
+  if (stored && options.stateProtector && stored.credentialProtection?.primaryKeyId !== options.stateProtector.primaryKeyId) {
+    await options.store.save(await options.stateProtector.protectState(service.exportState()));
+  }
   let tail = Promise.resolve();
   return new Proxy(service, {
     get(target, property) {
@@ -128,7 +174,8 @@ export async function createPersistentHostedExecutionService(options = {}) {
       if (MUTATIONS.has(property)) return (...args) => {
         const operation = tail.catch(() => undefined).then(async () => {
           const result = await value.apply(target, args);
-          await options.store.save(target.exportState());
+          const exported = target.exportState();
+          await options.store.save(options.stateProtector ? await options.stateProtector.protectState(exported) : exported);
           return result;
         });
         tail = operation;

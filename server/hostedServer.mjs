@@ -10,6 +10,8 @@ function jsonEnvironment(name, fallback) {
 
 const actors = jsonEnvironment('PHYSIOFLOW_ACTORS_JSON', null);
 if (!Array.isArray(actors) || !actors.length) throw new Error('Set PHYSIOFLOW_ACTORS_JSON to a non-empty actor credential array');
+const credentialKeys = jsonEnvironment('PHYSIOFLOW_CREDENTIAL_KEYS_JSON', null);
+if (!Array.isArray(credentialKeys) || !credentialKeys.length) throw new Error('Set PHYSIOFLOW_CREDENTIAL_KEYS_JSON to a non-empty credential key array');
 const port = Number(process.env.PORT || 8787);
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer from 1 to 65535');
 const stateFile = resolve(process.env.PHYSIOFLOW_STATE_FILE || './var/hosted-state.json');
@@ -24,6 +26,8 @@ if (!Number.isInteger(trustedProxyHops) || trustedProxyHops < 0) throw new Error
 
 const hosted = await createHostedNodeServer({
   actors,
+  credentialKeys,
+  primaryCredentialKeyId: process.env.PHYSIOFLOW_PRIMARY_CREDENTIAL_KEY_ID || credentialKeys[0].keyId,
   port,
   host: process.env.HOST || '127.0.0.1',
   stateFile,

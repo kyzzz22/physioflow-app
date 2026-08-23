@@ -6,6 +6,7 @@ The hosted service layer turns a portable deployment bundle into a controlled ex
 
 - Role-based access for owner, editor, operator, analyst, viewer, and scoped participant sessions.
 - Server-assigned tenant ownership across deployments, queues, sessions, launch links, exports, retention, audit, metrics, idempotency, and assets.
+- HMAC-indexed, AES-GCM-sealed participant/launch credentials with authenticated key rotation and plaintext-state migration in the Node adapter.
 - Idempotent deployment publication and session creation.
 - Explicit `queued` to `ready` deployment processing.
 - Permission-checked, checksum-locked workspace-asset upload with a readiness gate before processing.

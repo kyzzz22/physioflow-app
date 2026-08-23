@@ -9,6 +9,7 @@ Build the application, provide actor credentials, and start the server:
 ```bash
 npm run build
 PHYSIOFLOW_ACTORS_JSON='[{"actorId":"owner","role":"owner","tenantId":"lab-a","accessToken":"replace-with-a-long-random-secret"}]' \
+PHYSIOFLOW_CREDENTIAL_KEYS_JSON='[{"keyId":"2026-08","secret":"replace-with-an-independent-random-secret-of-at-least-32-characters"}]' \
 PHYSIOFLOW_STATE_FILE='./var/hosted-state.json' \
 HOST='127.0.0.1' PORT='8787' \
 npm run hosted:serve
@@ -21,6 +22,8 @@ The default static directory is `./dist`. Put the service behind an HTTPS revers
 | Variable | Purpose |
 | --- | --- |
 | `PHYSIOFLOW_ACTORS_JSON` | Required JSON array of owner/editor/operator/analyst/viewer credentials and their server-controlled tenant IDs |
+| `PHYSIOFLOW_CREDENTIAL_KEYS_JSON` | Required ordered JSON array of credential-encryption key IDs and secrets of at least 32 characters |
+| `PHYSIOFLOW_PRIMARY_CREDENTIAL_KEY_ID` | Primary key used for new state writes; defaults to the first configured credential key |
 | `PHYSIOFLOW_STATE_FILE` | Atomic JSON state file; defaults to `./var/hosted-state.json` |
 | `PHYSIOFLOW_STATIC_DIR` | Built application directory; defaults to `./dist` |
 | `PHYSIOFLOW_PUBLIC_BASE_URL` | External origin used in signed links |
@@ -32,7 +35,7 @@ The default static directory is `./dist`. Put the service behind an HTTPS revers
 | `PHYSIOFLOW_TRUSTED_PROXY_HOPS` | Exact trusted reverse-proxy hop count; defaults to `0` |
 | `HOST`, `PORT` | Listen address and port |
 
-The state writer validates every snapshot, writes a mode-`0600` temporary file, and atomically renames it into place. The file contains active bearer and launch credentials and must be protected like a secret. Back it up only through encrypted storage and never commit it.
+The state writer validates every snapshot, hashes credential indexes, seals recoverable bearer/launch credentials, writes a mode-`0600` temporary file, and atomically renames it into place. Research data and identifiers remain sensitive even though tokens are encrypted, so use encrypted backups and never commit the file. Keep credential keys separately; see `CREDENTIAL_PROTECTION.md`.
 
 ## Health and recovery
 

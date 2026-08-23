@@ -5,6 +5,7 @@ import { createHostedHttpHandler, createPersistentHostedExecutionService } from 
 import { FileHostedStateStore } from './fileHostedStateStore.mjs';
 import { createFilesystemAssetDelivery } from './filesystemAssetDelivery.mjs';
 import { HostedOperationalMetrics, HostedRequestRateLimiter, normalizeRateLimits, requestRateScope, requestSourceAddress } from './requestProtection.mjs';
+import { createHostedStateCredentialProtector } from './hostedStateCredentialProtector.mjs';
 
 const STATIC_TYPES = Object.freeze({ '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.woff2': 'font/woff2' });
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
@@ -112,9 +113,10 @@ export async function createHostedNodeServer(options = {}) {
   let baseUrl = normalizedPublicBaseUrl(options.publicBaseUrl);
   const listenHost = options.host || '127.0.0.1';
   if (options.assetDirectory && !baseUrl && !LOOPBACK_HOSTS.has(listenHost)) throw new Error('Non-loopback asset hosting requires an explicit HTTPS public base URL');
+  const stateProtector = createHostedStateCredentialProtector({ keys: options.credentialKeys, primaryKeyId: options.primaryCredentialKeyId });
   const assetDelivery = options.assetDirectory ? createFilesystemAssetDelivery({ rootDirectory: options.assetDirectory, secret: options.assetSecret, publicBaseUrl: () => baseUrl, ttlMs: options.assetTtlMs, maximumBytes: maximumAssetBytes, clock: options.epochClock }) : null;
   const store = options.store || new FileHostedStateStore(options.stateFile);
-  const service = await createPersistentHostedExecutionService({ ...options.serviceOptions, actors: options.actors, store, assetResolver: assetDelivery?.resolve });
+  const service = await createPersistentHostedExecutionService({ ...options.serviceOptions, actors: options.actors, store, stateProtector, assetResolver: assetDelivery?.resolve });
   const hosted = createHostedHttpHandler(service, { maximumBodyBytes, allowedOrigins: options.allowedOrigins });
   const readiness = async () => {
     const checks = { state: { ready: false }, assets: { ready: false } };

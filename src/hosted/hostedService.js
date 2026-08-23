@@ -2,10 +2,11 @@ import { validateDeploymentBundle } from '../deployment/index.js';
 import { createParticipantBootstrap } from './participantBootstrap.js';
 
 export const HOSTED_SERVICE_CONTRACT_VERSION = '1.0.0';
-export const HOSTED_STATE_SCHEMA_VERSION = '1.2.0';
+export const HOSTED_STATE_SCHEMA_VERSION = '1.3.0';
 export const HOSTED_DATA_EXPORT_SCHEMA_VERSION = '1.0.0';
 export const DEFAULT_HOSTED_TENANT_ID = 'default';
-const LEGACY_HOSTED_STATE_SCHEMA_VERSIONS = new Set(['1.0.0', '1.1.0']);
+const LEGACY_HOSTED_STATE_SCHEMA_VERSIONS = new Set(['1.0.0', '1.1.0', '1.2.0']);
+const PRE_TENANT_HOSTED_STATE_SCHEMA_VERSIONS = new Set(['1.0.0', '1.1.0']);
 const TENANT_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 const ROLE_PERMISSIONS = Object.freeze({
@@ -123,8 +124,8 @@ export class LocalHostedExecutionService {
 
   restoreState(state) {
     if (state?.schemaVersion !== HOSTED_STATE_SCHEMA_VERSION && !LEGACY_HOSTED_STATE_SCHEMA_VERSIONS.has(state?.schemaVersion)) throw new Error(`Unsupported hosted state version ${state?.schemaVersion || '(missing)'}`);
-    const legacy = LEGACY_HOSTED_STATE_SCHEMA_VERSIONS.has(state.schemaVersion);
-    this.deployments = new Map((state.deployments || []).map(record => [record.deploymentId, { ...clone(record), tenantId: tenantIdOf(record), assetNamespaceVersion: record.assetNamespaceVersion || (legacy ? 1 : 2) }]));
+    const preTenant = PRE_TENANT_HOSTED_STATE_SCHEMA_VERSIONS.has(state.schemaVersion);
+    this.deployments = new Map((state.deployments || []).map(record => [record.deploymentId, { ...clone(record), tenantId: tenantIdOf(record), assetNamespaceVersion: record.assetNamespaceVersion || (preTenant ? 1 : 2) }]));
     this.sessions = new Map((state.sessions || []).map(record => {
       const session = { ...clone(record), tenantId: tenantIdOf(record) };
       session.idempotency = new Map(record.idempotency || []);
@@ -133,7 +134,7 @@ export class LocalHostedExecutionService {
     this.participantTokens = new Map((state.participantTokens || []).map(([token, record]) => [token, { ...clone(record), tenantId: tenantIdOf(record) }]));
     this.launchLinks = new Map((state.launchLinks || []).map(record => [record.launchLinkId, { ...clone(record), tenantId: tenantIdOf(record) }]));
     this.launchTokens = new Map(clone(state.launchTokens || []));
-    this.idempotency = new Map((state.idempotency || []).map(([key, value]) => [legacy ? `${DEFAULT_HOSTED_TENANT_ID}:${key}` : key, clone(value)]));
+    this.idempotency = new Map((state.idempotency || []).map(([key, value]) => [preTenant ? `${DEFAULT_HOSTED_TENANT_ID}:${key}` : key, clone(value)]));
     this.auditEntries = (state.auditEntries || []).map(entry => ({ ...clone(entry), tenantId: tenantIdOf(entry) }));
   }
 
