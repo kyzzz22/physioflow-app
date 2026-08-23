@@ -26,7 +26,7 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 
 ## Acceptance evidence
 
-- Automated tests: 164 passing.
+- Automated tests: 165 passing.
 - Production build: passing.
 - Lint: zero errors and zero warnings.
 - Production bundle: no build warnings; view-level loading keeps the initial JavaScript chunk below the configured 500 kB warning threshold.
@@ -62,6 +62,7 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 - Tenant-isolation behavior: two-tenant tests reuse actor IDs, bundle IDs and idempotency keys while proving separate queues, deployments, sessions, links, data, retention, audit, metrics and asset paths; cross-tenant resource probes return not-found and state 1.1 migrates safely.
 - Credential-protection behavior: tests prove no participant/launch token plaintext survives serialization, lookup keys use HMAC digests, AES-GCM tampering and missing keys fail closed, old plaintext state upgrades eagerly, old-key state rotates to a new primary, and real Node restart preserves redemption/session access.
 - Tenant-capacity behavior: tests prove isolated deployment/session/link/event admission, exact logical event-byte accounting, idempotent retries without double charging, owner-only HTTP visibility, invalid-policy rejection, and capacity release after governed retention purge.
+- Audit-integrity behavior: tests prove authenticated entry linkage and count/head anchoring detect content edits, reordering and knowledgeable tail truncation; real Node startup rejects an edited audit file, old unchained protected state upgrades eagerly, and key rotation re-signs the chain.
 
 ## Known transition scope
 

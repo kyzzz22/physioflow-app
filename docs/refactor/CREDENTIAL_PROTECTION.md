@@ -25,10 +25,10 @@ The first configured key is primary when `PHYSIOFLOW_PRIMARY_CREDENTIAL_KEY_ID` 
 4. Verify readiness, redeem a disposable link, resume an active disposable session, and create a verified backup.
 5. Remove the old key only after every live state copy and retained backup that may require restoration has been rewritten or expired.
 
-The state records only the protection mode and primary key ID, never key material. Ciphertext includes a fresh 96-bit nonce and authentication tag on every write; the purpose and key ID are authenticated as additional data. Any ciphertext modification, missing key, malformed metadata, digest mismatch, or unsafe key configuration stops startup instead of silently dropping credentials.
+The state records only the protection mode and primary key ID, never key material. Ciphertext includes a fresh 96-bit nonce and authentication tag on every write; the purpose and key ID are authenticated as additional data. The same key ring supplies a separately domain-separated audit HMAC chain and anchored head; see `AUDIT_INTEGRITY.md`. Any ciphertext modification, missing key, malformed metadata, credential digest mismatch, or audit-chain mismatch stops startup instead of silently dropping records.
 
 ## Migration and backups
 
-When a 1.0–1.2 plaintext state is opened with credential protection configured, startup normalizes it to state 1.3 and atomically replaces the file before accepting traffic. Existing tokens remain valid. Backup verification can validate the protected structure without possessing decryption keys, while an actual recovery requires both the backup and a matching credential key.
+When a 1.0–1.2 plaintext state or an earlier protected state without audit authentication is opened with credential protection configured, startup normalizes it to state 1.3 and atomically replaces the file before accepting traffic. Existing tokens remain valid. Backup verification can validate the protected structure without possessing decryption keys, while an actual recovery and audit verification require both the backup and a matching credential key.
 
 This protects credentials at rest; it does not encrypt research event payloads, participant identifiers, or asset files. Protect the whole disk/backup separately, use HTTPS in transit, and follow `DATA_RETENTION.md` for removal of research data and expired credentials.

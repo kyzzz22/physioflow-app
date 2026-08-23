@@ -42,6 +42,7 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 | Hosted tenant isolation | Server-bound tenant identity, resource-level ownership checks, tenant queues/idempotency/audit/metrics, non-enumerating cross-tenant errors, isolated asset paths and backwards-compatible state migration |
 | Hosted credential protection | HMAC-indexed token maps, AES-256-GCM recovery fields, authenticated metadata, atomic plaintext migration, multi-key reads, eager primary-key rotation, tamper/wrong-key rejection and restart proof |
 | Hosted tenant capacity | Server-configured per-tenant deployment/session/link/event/byte limits, pre-mutation admission, idempotency-safe accounting, owner-only usage and retention-based event-capacity release |
+| Hosted audit integrity | Domain-separated HMAC entry chain, authenticated count/head anchor, offline edit/reorder/truncation detection, fail-closed startup, legacy upgrade and primary-key rotation |
 | Self-hosted browser release gates | Scripts launch Vite and isolated headless Chrome themselves, exercise legacy and Composer workflows plus a real cross-origin public participant server with server-only refresh recovery, and run in the demo push/PR GitHub Actions job |
 | Reproducible formal versions | Pre-freeze validation, migration review gate, config hash, immutable frozen record, new-version editing |
 | Complete session data | Raw events/responses, normalized CSV, snapshots, manifest, dictionary, quality report and independent validator |

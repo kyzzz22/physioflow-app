@@ -121,8 +121,10 @@ export async function createHostedNodeServer(options = {}) {
   const readiness = async () => {
     const checks = { state: { ready: false }, assets: { ready: false } };
     try {
+      const persisted = await store.load();
+      if (persisted) stateProtector.verifyStateIntegrity(persisted);
       const detail = store.checkReadiness ? await store.checkReadiness() : { initialized: Boolean(await store.load()) };
-      checks.state = { ready: true, ...detail };
+      checks.state = { ready: true, ...detail, integrityVerified: Boolean(persisted?.credentialProtection?.auditIntegrity) };
     } catch { checks.state = { ready: false }; }
     try {
       const invalid = [];

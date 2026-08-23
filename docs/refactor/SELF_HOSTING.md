@@ -36,11 +36,11 @@ The default static directory is `./dist`. Put the service behind an HTTPS revers
 | `PHYSIOFLOW_TRUSTED_PROXY_HOPS` | Exact trusted reverse-proxy hop count; defaults to `0` |
 | `HOST`, `PORT` | Listen address and port |
 
-The state writer validates every snapshot, hashes credential indexes, seals recoverable bearer/launch credentials, writes a mode-`0600` temporary file, and atomically renames it into place. Research data and identifiers remain sensitive even though tokens are encrypted, so use encrypted backups and never commit the file. Keep credential keys separately; see `CREDENTIAL_PROTECTION.md`.
+The state writer validates every snapshot, hashes credential indexes, seals recoverable bearer/launch credentials, authenticates the complete audit sequence and anchored head, writes a mode-`0600` temporary file, and atomically renames it into place. Startup rejects offline audit edits before serving traffic. Research data and identifiers remain sensitive even though tokens are encrypted, so use encrypted backups and never commit the file. Keep credential keys separately; see `CREDENTIAL_PROTECTION.md` and `AUDIT_INTEGRITY.md`.
 
 ## Health and recovery
 
-`GET /healthz` is a lightweight process-liveness check. `GET /readyz` verifies that the state store can be read and written and that every processed deployment still has valid workspace assets. It returns HTTP 503 when either check fails; queued deployments may legitimately have missing assets and do not make the server unavailable.
+`GET /healthz` is a lightweight process-liveness check. `GET /readyz` verifies that the state store can be read and written, cryptographically rechecks the persisted audit chain, and confirms that every processed deployment still has valid workspace assets. It returns HTTP 503 when any check fails; queued deployments may legitimately have missing assets and do not make the server unavailable.
 
 The server applies bounded per-source limits to public redemption, API calls, asset upload and signed download. `GET /metrics` requires `audit.read` and exposes only aggregate process/resource counts. Forwarded addresses are ignored unless an exact trusted-proxy hop count is configured. See `HOSTED_OPERATIONS.md`.
 

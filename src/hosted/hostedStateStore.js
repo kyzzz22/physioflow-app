@@ -99,6 +99,19 @@ export function validateHostedState(state) {
     const protection = state.credentialProtection;
     const primaryKeyId = protection.primaryKeyId;
     if (protection.schemaVersion !== '1.0.0' || protection.mode !== 'hmac-sha256+aes-256-gcm' || !new RegExp(`^${CREDENTIAL_KEY_ID}$`).test(primaryKeyId || '')) errors.push('Hosted credential protection metadata is invalid');
+    const auditIntegrity = protection.auditIntegrity;
+    if (auditIntegrity) {
+      const anchorMatch = String(auditIntegrity.anchorDigest || '').match(credentialDigest);
+      const headMatch = auditIntegrity.headDigest === null ? null : String(auditIntegrity.headDigest || '').match(credentialDigest);
+      if (auditIntegrity.mode !== 'hmac-sha256-chain' || auditIntegrity.keyId !== primaryKeyId || !Number.isSafeInteger(auditIntegrity.entryCount) || auditIntegrity.entryCount < 0 || auditIntegrity.entryCount !== (state.auditEntries || []).length || anchorMatch?.[1] !== primaryKeyId || (auditIntegrity.entryCount === 0 ? auditIntegrity.headDigest !== null : headMatch?.[1] !== primaryKeyId)) errors.push('Hosted audit integrity metadata is invalid');
+      let previousAuditDigest = null;
+      for (const [index, entry] of (state.auditEntries || []).entries()) {
+        const digestMatch = String(entry.auditDigest || '').match(credentialDigest);
+        if (entry.sequence !== index + 1 || entry.previousAuditDigest !== previousAuditDigest || digestMatch?.[1] !== primaryKeyId) errors.push(`Hosted protected audit entry ${entry.auditId || index + 1} chain metadata is invalid`);
+        previousAuditDigest = entry.auditDigest;
+      }
+      if (auditIntegrity.headDigest !== previousAuditDigest) errors.push('Hosted audit integrity head does not match its entries');
+    } else if ((state.auditEntries || []).some(entry => Object.prototype.hasOwnProperty.call(entry, 'auditDigest') || Object.prototype.hasOwnProperty.call(entry, 'previousAuditDigest'))) errors.push('Hosted audit entries contain integrity fields without metadata');
     for (const session of state.sessions || []) {
       if (typeof session.participantAccessToken === 'string') errors.push(`Protected hosted session ${session.sessionId || '(missing)'} retains a plaintext credential field`);
       if (!session.dataPurgedAt) {
@@ -162,7 +175,7 @@ export async function createPersistentHostedExecutionService(options = {}) {
     if (!check.valid) throw new Error(`Invalid hosted state:\n${check.errors.join('\n')}`);
   }
   const service = new LocalHostedExecutionService({ ...options, state: restored || undefined });
-  if (stored && options.stateProtector && stored.credentialProtection?.primaryKeyId !== options.stateProtector.primaryKeyId) {
+  if (stored && options.stateProtector && (options.stateProtector.requiresRewrite?.(stored) ?? stored.credentialProtection?.primaryKeyId !== options.stateProtector.primaryKeyId)) {
     await options.store.save(await options.stateProtector.protectState(service.exportState()));
   }
   let tail = Promise.resolve();

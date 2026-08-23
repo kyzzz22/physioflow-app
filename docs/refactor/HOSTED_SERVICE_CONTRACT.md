@@ -19,6 +19,7 @@ The hosted service layer turns a portable deployment bundle into a controlled ex
 - Separate metadata and raw-data permissions.
 - Deployment-level export of the frozen bundle, every session/event/snapshot, enrollment metadata, related audit provenance, and integrity diagnostics without bearer credentials.
 - Immutable, sequential audit entries for publication, processing, session creation, ingestion, synchronization, and completion.
+- Persisted audit HMAC chain with authenticated count/head anchoring, legacy upgrade, key rotation, and fail-closed startup verification.
 - Deployment-level session quotas, optional expiry and explicit deactivation.
 - Opaque participant launch tokens with independent expiry, use quotas, idempotent redemption and immediate revocation.
 - Opt-in deployment retention periods with owner-only plan/confirm pseudonymization and durable purge tombstones.

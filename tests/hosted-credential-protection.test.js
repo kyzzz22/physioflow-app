@@ -19,7 +19,10 @@ function rawState() {
     launchLinks: [{ launchLinkId: 'link_1', deploymentId: 'deployment_1', tenantId: 'tenant-a' }],
     launchTokens: [['launch-plaintext-token', 'link_1']],
     idempotency: [['key', { result: { launchToken: 'launch-plaintext-token', session: { participantAccessToken: 'participant-plaintext-token' } } }]],
-    auditEntries: [{ auditId: 'audit_1', tenantId: 'tenant-a' }],
+    auditEntries: [
+      { auditId: 'audit_1', sequence: 1, tenantId: 'tenant-a', action: 'deployment.published', detail: { value: 1 } },
+      { auditId: 'audit_2', sequence: 2, tenantId: 'tenant-a', action: 'session.created', detail: { value: 2 } },
+    ],
   };
 }
 
@@ -33,6 +36,9 @@ test('hosted credential protection hashes lookup keys and seals every recoverabl
   assert.match(protectedState.participantTokens[0][0], /^hmac-sha256:old-key:[a-f0-9]{64}$/);
   assert.match(protectedState.launchTokens[0][0], /^hmac-sha256:old-key:[a-f0-9]{64}$/);
   assert.equal(protectedState.credentialProtection.mode, 'hmac-sha256+aes-256-gcm');
+  assert.equal(protectedState.credentialProtection.auditIntegrity.mode, 'hmac-sha256-chain');
+  assert.equal(protectedState.credentialProtection.auditIntegrity.entryCount, 2);
+  assert.equal(protectedState.credentialProtection.auditIntegrity.headDigest, protectedState.auditEntries[1].auditDigest);
   assert.deepEqual(validateHostedState(protectedState), { valid: true, errors: [] });
   assert.deepEqual(protector.unprotectState(protectedState), raw);
   assert.deepEqual(protector.unprotectState(raw), raw);
@@ -55,6 +61,8 @@ test('hosted credential keys rotate by reading old ciphertext and rewriting with
   const rotated = rotating.protectState(rotating.unprotectState(oldState));
   assert.equal(rotated.credentialProtection.primaryKeyId, 'new-key');
   assert.match(rotated.participantTokens[0][0], /^hmac-sha256:new-key:/);
+  assert.equal(rotated.credentialProtection.auditIntegrity.keyId, 'new-key');
+  assert.match(rotated.auditEntries[0].auditDigest, /^hmac-sha256:new-key:/);
   assert.deepEqual(createHostedStateCredentialProtector({ keys: [newKey] }).unprotectState(rotated), rawState());
   assert.throws(() => createHostedStateCredentialProtector({ keys: [newKey] }).unprotectState(oldState), /old-key is required/);
 });
@@ -67,8 +75,42 @@ test('persistent hosted startup eagerly replaces a legacy plaintext state', asyn
   const upgraded = await store.load();
   assert.equal(upgraded.schemaVersion, HOSTED_STATE_SCHEMA_VERSION);
   assert.equal(upgraded.credentialProtection.primaryKeyId, 'new-key');
+  assert.equal(upgraded.credentialProtection.auditIntegrity.keyId, 'new-key');
   assert.equal(JSON.stringify(upgraded).includes('participant-plaintext-token'), false);
   assert.equal(JSON.stringify(upgraded).includes('launch-plaintext-token'), false);
+  const protector = createHostedStateCredentialProtector({ keys: [newKey] });
+  const legacyProtected = protector.protectState(rawState());
+  delete legacyProtected.credentialProtection.auditIntegrity;
+  legacyProtected.auditEntries = legacyProtected.auditEntries.map(({ auditDigest, previousAuditDigest, ...entry }) => entry);
+  const protectedStore = new MemoryHostedStateStore(legacyProtected);
+  await createPersistentHostedExecutionService({ store: protectedStore, stateProtector: protector });
+  assert.equal((await protectedStore.load()).credentialProtection.auditIntegrity.keyId, 'new-key');
+});
+
+test('hosted audit integrity detects content changes, reordering, and anchored truncation', () => {
+  const protector = createHostedStateCredentialProtector({ keys: [oldKey] });
+  const protectedState = protector.protectState(rawState());
+  const contentTamper = structuredClone(protectedState);
+  contentTamper.auditEntries[0].detail.value = 9;
+  assert.throws(() => protector.unprotectState(contentTamper), /digest does not match/);
+  const reordered = structuredClone(protectedState);
+  reordered.auditEntries.reverse();
+  assert.throws(() => protector.unprotectState(reordered), /chain linkage does not match/);
+  const truncated = structuredClone(protectedState);
+  truncated.auditEntries.pop();
+  truncated.credentialProtection.auditIntegrity.entryCount = 1;
+  truncated.credentialProtection.auditIntegrity.headDigest = truncated.auditEntries[0].auditDigest;
+  assert.throws(() => protector.unprotectState(truncated), /digest does not match/);
+  const legacyProtected = structuredClone(protectedState);
+  delete legacyProtected.credentialProtection.auditIntegrity;
+  legacyProtected.auditEntries = legacyProtected.auditEntries.map(entry => {
+    const next = { ...entry };
+    delete next.previousAuditDigest;
+    delete next.auditDigest;
+    return next;
+  });
+  assert.deepEqual(protector.unprotectState(legacyProtected), rawState());
+  assert.equal(protector.requiresRewrite(legacyProtected), true);
 });
 
 test('hosted credential protection rejects ciphertext tampering and unsafe key configuration', () => {

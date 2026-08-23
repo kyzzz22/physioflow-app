@@ -6,8 +6,22 @@ const KEY_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const DIGEST = /^hmac-sha256:([A-Za-z0-9][A-Za-z0-9._-]{0,63}):[a-f0-9]{64}$/;
 const SEALED = /^sealed:v1:([A-Za-z0-9][A-Za-z0-9._-]{0,63}):([A-Za-z0-9_-]+):([A-Za-z0-9_-]+):([A-Za-z0-9_-]+)$/;
 const TOKEN_FIELDS = new Set(['participantAccessToken', 'launchToken']);
+const AUDIT_INTEGRITY_MODE = 'hmac-sha256-chain';
 
 function clone(value) { return value === undefined ? undefined : globalThis.structuredClone(value); }
+
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])]));
+}
+
+function withoutAuditIntegrity(entry) {
+  const next = clone(entry);
+  delete next.previousAuditDigest;
+  delete next.auditDigest;
+  return next;
+}
 
 function normalizedKeys(keys) {
   if (!Array.isArray(keys) || !keys.length) throw new Error('Hosted credential protection requires at least one key');
@@ -74,6 +88,54 @@ export function createHostedStateCredentialProtector(options = {}) {
     if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) throw new Error('Hosted credential state digest does not match its sealed value');
   }
 
+  function auditPayload(entry, previousAuditDigest, index) {
+    return JSON.stringify(canonical({ entry: withoutAuditIntegrity(entry), index, previousAuditDigest }));
+  }
+
+  function auditAnchorPayload(entryCount, headDigest) {
+    return JSON.stringify(canonical({ entryCount, headDigest }));
+  }
+
+  function protectAudit(entries) {
+    let previousAuditDigest = null;
+    const protectedEntries = (entries || []).map((entry, index) => {
+      if (Object.prototype.hasOwnProperty.call(entry, 'auditDigest') || Object.prototype.hasOwnProperty.call(entry, 'previousAuditDigest')) throw new Error('Hosted audit entry is already integrity protected');
+      const auditDigest = digest(auditPayload(entry, previousAuditDigest, index + 1), 'audit-entry');
+      const next = { ...entry, previousAuditDigest, auditDigest };
+      previousAuditDigest = auditDigest;
+      return next;
+    });
+    const entryCount = protectedEntries.length;
+    const headDigest = previousAuditDigest;
+    return {
+      entries: protectedEntries,
+      metadata: {
+        mode: AUDIT_INTEGRITY_MODE,
+        keyId: primary.keyId,
+        entryCount,
+        headDigest,
+        anchorDigest: digest(auditAnchorPayload(entryCount, headDigest), 'audit-anchor'),
+      },
+    };
+  }
+
+  function unprotectAudit(entries, metadata) {
+    if (!metadata) return clone(entries || []);
+    const anchorMatch = String(metadata.anchorDigest || '').match(DIGEST);
+    const headMatch = metadata.headDigest === null ? null : String(metadata.headDigest || '').match(DIGEST);
+    if (metadata.mode !== AUDIT_INTEGRITY_MODE || !byId.has(metadata.keyId) || anchorMatch?.[1] !== metadata.keyId || (metadata.entryCount === 0 ? metadata.headDigest !== null : headMatch?.[1] !== metadata.keyId) || !Number.isSafeInteger(metadata.entryCount) || metadata.entryCount < 0 || metadata.entryCount !== (entries || []).length) throw new Error('Hosted audit integrity metadata is invalid');
+    let previousAuditDigest = null;
+    const unprotected = (entries || []).map((entry, index) => {
+      if (entry.previousAuditDigest !== previousAuditDigest || String(entry.auditDigest || '').match(DIGEST)?.[1] !== metadata.keyId) throw new Error('Hosted audit chain linkage does not match');
+      verifyDigest(entry.auditDigest, auditPayload(entry, previousAuditDigest, index + 1), 'audit-entry');
+      previousAuditDigest = entry.auditDigest;
+      return withoutAuditIntegrity(entry);
+    });
+    if (metadata.headDigest !== previousAuditDigest) throw new Error('Hosted audit chain head does not match');
+    verifyDigest(metadata.anchorDigest, auditAnchorPayload(metadata.entryCount, metadata.headDigest), 'audit-anchor');
+    return unprotected;
+  }
+
   function protectState(input) {
     if (input?.credentialProtection) throw new Error('Hosted credential state is already protected');
     const state = clone(input);
@@ -96,7 +158,9 @@ export function createHostedStateCredentialProtector(options = {}) {
       return [link.launchCredentialDigest, launchLinkId];
     });
     state.idempotency = (state.idempotency || []).map(([key, value]) => [key, credentialFields(value, (token, field) => seal(token, `idempotency:${field}`))]);
-    state.credentialProtection = { schemaVersion: HOSTED_CREDENTIAL_PROTECTION_VERSION, mode: MODE, primaryKeyId: primary.keyId };
+    const audit = protectAudit(state.auditEntries || []);
+    state.auditEntries = audit.entries;
+    state.credentialProtection = { schemaVersion: HOSTED_CREDENTIAL_PROTECTION_VERSION, mode: MODE, primaryKeyId: primary.keyId, auditIntegrity: audit.metadata };
     return state;
   }
 
@@ -137,6 +201,7 @@ export function createHostedStateCredentialProtector(options = {}) {
       return [token, launchLinkId];
     });
     state.idempotency = (state.idempotency || []).map(([key, value]) => [key, credentialFields(value, (token, field) => unseal(token, `idempotency:${field}`))]);
+    state.auditEntries = unprotectAudit(state.auditEntries || [], input.credentialProtection.auditIntegrity);
     delete state.credentialProtection;
     return state;
   }
@@ -145,6 +210,11 @@ export function createHostedStateCredentialProtector(options = {}) {
     primaryKeyId: primary.keyId,
     protectState,
     unprotectState,
+    verifyStateIntegrity: state => {
+      if (state?.credentialProtection?.auditIntegrity) unprotectAudit(state.auditEntries || [], state.credentialProtection.auditIntegrity);
+      return true;
+    },
+    requiresRewrite: state => !state?.credentialProtection || state.credentialProtection.primaryKeyId !== primary.keyId || state.credentialProtection.auditIntegrity?.keyId !== primary.keyId,
     isDigest: value => DIGEST.test(value || ''),
   };
 }
