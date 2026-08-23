@@ -9,6 +9,7 @@
 - [x] Self-hosted legacy and Composer V2 browser gates pass from clean profiles.
 - [x] Collaboration change sets export, merge independent edits, require conflict resolution, reject unsafe input and retain audit provenance.
 - [x] Portable deployment bundles reject drafts and detect protocol or manifest tampering.
+- [x] Hosted service enforces roles, idempotency, deployment queues, session revisions, contiguous event ingestion and audit provenance.
 - [x] Complete session package includes all raw, normalized, metadata, dictionary, manifest, and quality files.
 - [x] Emotion, Stroop, and Go/No-Go migrations exceed 90% native mapping and retain every source payload.
 - [ ] A human pilot follows `OPERATOR_PILOT_GUIDE.md` and `USABILITY_STUDY_PROTOCOL.md`; `npm run verify:usability-study -- <results.json>` returns `passed: true`.

@@ -26,6 +26,7 @@ import { createProjectComponentRegistry, exampleReactionButtonPackage, installCo
 import { exampleSimulatedConnector, installDeviceConnector, uninstallDeviceConnector } from './devices/index.js';
 import { createProtocolChangeSet, mergeProtocolChangeSet } from './collaboration/index.js';
 import { createDeploymentBundle, validateDeploymentBundle } from './deployment/index.js';
+import { HostedExecutionClient, LocalHostedExecutionService } from './hosted/index.js';
 
 const NODE_WIDTH = 188;
 const NODE_HEIGHT = 112;
@@ -499,6 +500,14 @@ function DeploymentCatalog({ protocol, onMessage }) {
   const [environment, setEnvironment] = useState('portable');
   const [error, setError] = useState('');
   const [inspection, setInspection] = useState(null);
+  const [hostedDeployment, setHostedDeployment] = useState(null);
+  const [hostedSession, setHostedSession] = useState(null);
+  const [participantId, setParticipantId] = useState('SANDBOX-P001');
+  const sandboxRef = useRef(null);
+  if (!sandboxRef.current) {
+    const service = new LocalHostedExecutionService({ actors: [{ actorId: 'local-owner', role: 'owner', accessToken: 'local-owner-token' }] });
+    sandboxRef.current = new HostedExecutionClient(service, 'local-owner-token');
+  }
   const frozen = protocol.version?.status === 'frozen';
   const exportBundle = async () => {
     try {
@@ -519,12 +528,33 @@ function DeploymentCatalog({ protocol, onMessage }) {
     } catch (nextError) { setInspection(null); setError(nextError.message); }
     event.target.value = '';
   };
+  const publishToSandbox = async () => {
+    try {
+      const bundle = await createDeploymentBundle(protocol, { providerId: 'org.physioflow.local-sandbox', environment: 'sandbox', createdBy: 'local-owner' });
+      const client = sandboxRef.current;
+      const queued = await client.publish(bundle, { idempotencyKey: `composer:${protocol.protocolId}:${protocol.freeze.configHash}` });
+      const ready = client.processNextDeployment() || client.deployment(queued.deploymentId);
+      setHostedDeployment(ready);
+      setHostedSession(null);
+      setError('');
+      onMessage(`Sandbox deployment ${ready.status}`);
+    } catch (nextError) { setError(nextError.message); }
+  };
+  const createSandboxSession = async () => {
+    try {
+      const session = await sandboxRef.current.createSession(hostedDeployment.deploymentId, { participantId: participantId.trim() || undefined, idempotencyKey: `participant:${participantId.trim() || 'generated'}` });
+      setHostedSession(session);
+      setError('');
+      onMessage(`Created hosted sandbox session ${session.sessionId}`);
+    } catch (nextError) { setError(nextError.message); }
+  };
   return <section className="deployment-catalog">
     <h3>Portable deployment</h3>
     <p>Package one frozen protocol, its dependency manifest, execution policy, and integrity hashes for a compatible local or remote execution provider.</p>
     <label>Provider ID<input value={providerId} onChange={event => setProviderId(event.target.value)} /></label>
     <label>Environment<input value={environment} onChange={event => setEnvironment(event.target.value)} /></label>
     <button disabled={!frozen} onClick={exportBundle}>Export deployment bundle</button>
+    <button disabled={!frozen} onClick={publishToSandbox}>Publish to local hosted sandbox</button>
     {!frozen && <small>Freeze this protocol version before deployment.</small>}
     <label className="deployment-import">Inspect deployment bundle<input type="file" accept="application/json,.json" onChange={inspectBundle} /></label>
     {error && <small className="package-error">{error}</small>}
@@ -532,6 +562,13 @@ function DeploymentCatalog({ protocol, onMessage }) {
       <b>{inspection.result.valid ? 'Bundle integrity verified' : 'Bundle rejected'}</b>
       <small>{inspection.bundle.bundleId || 'Unknown bundle'} · {inspection.bundle.target?.providerId || 'Unknown provider'}</small>
       {inspection.result.errors.map(item => <small key={item}>{item}</small>)}
+    </article>}
+    {hostedDeployment && <article className="deployment-valid">
+      <b>Hosted sandbox · {hostedDeployment.status}</b>
+      <small>{hostedDeployment.deploymentId} · revision {hostedDeployment.revision}</small>
+      <label>Participant ID<input value={participantId} onChange={event => setParticipantId(event.target.value)} /></label>
+      <button onClick={createSandboxSession}>Create sandbox session</button>
+      {hostedSession && <small>Session {hostedSession.sessionId} · {hostedSession.status} · revision {hostedSession.revision}</small>}
     </article>}
   </section>;
 }

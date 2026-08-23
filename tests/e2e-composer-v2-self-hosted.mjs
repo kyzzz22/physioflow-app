@@ -107,6 +107,16 @@ try {
   await waitFor(`document.body.textContent.includes('No projects yet')`, 'clean dashboard');
   await clickText('＋ New protocol');
   await waitFor(`document.body.textContent.includes('Composer V2')`, 'Composer V2');
+  await clickText('Freeze version');
+  await waitFor(`[...document.querySelectorAll('button')].some(button => button.textContent.includes('Create editable version'))`, 'frozen protocol version');
+  await clickText('Advanced');
+  await waitFor(`document.body.textContent.includes('Portable deployment')`, 'frozen deployment panel');
+  await clickText('Publish to local hosted sandbox');
+  await waitFor(`document.body.textContent.includes('Hosted sandbox') && document.body.textContent.includes('ready')`, 'ready hosted sandbox deployment');
+  await clickText('Create sandbox session');
+  await waitFor(`document.body.textContent.includes('Created hosted sandbox session') && document.body.textContent.includes('Session hosted_session_')`, 'hosted sandbox participant session');
+  await clickText('Create editable version');
+  await waitFor(`[...document.querySelectorAll('button')].some(button => button.textContent.includes('Freeze version') && !button.disabled)`, 'editable protocol version');
   await clickText('Design');
   await field('New variable name', 'score');
   await field('New variable type', 'number', 'change');
@@ -131,6 +141,7 @@ try {
   await waitFor(`document.body.textContent.includes('Collaboration change sets')`, 'collaboration change-set panel');
   await waitFor(`document.body.textContent.includes('Portable deployment')`, 'portable deployment panel');
   assert.equal(await evaluate(`[...document.querySelectorAll('button')].some(button => button.textContent.includes('Export deployment bundle') && button.disabled)`), true);
+  assert.equal(await evaluate(`[...document.querySelectorAll('button')].some(button => button.textContent.includes('Publish to local hosted sandbox') && button.disabled)`), true);
   await clickText('Use current as baseline');
   await waitFor(`document.body.textContent.includes('Collaboration baseline updated')`, 'collaboration baseline');
   await clickText('Install Reaction Button example');
@@ -142,7 +153,7 @@ try {
   await clickText('Export changes');
   await waitFor(`document.body.textContent.includes('Exported') && document.body.textContent.includes('collaboration operation')`, 'collaboration change-set export');
 
-  console.log(JSON.stringify({ status: 'passed', composer: 'v2', nodes: 5, reusableSubflow: true, controlHandler: 'core.value-switch@1.0.0', collaborationChangeSet: true, portableDeployment: true, sdkComponent: 'example.reaction-button@1.0.0', deviceConnector: 'org.physioflow.simulated-sensor@1.0.0' }, null, 2));
+  console.log(JSON.stringify({ status: 'passed', composer: 'v2', nodes: 5, reusableSubflow: true, controlHandler: 'core.value-switch@1.0.0', collaborationChangeSet: true, portableDeployment: true, hostedService: true, hostedSandboxLifecycle: true, sdkComponent: 'example.reaction-button@1.0.0', deviceConnector: 'org.physioflow.simulated-sensor@1.0.0' }, null, 2));
 } finally {
   socket.close();
   await cleanup();

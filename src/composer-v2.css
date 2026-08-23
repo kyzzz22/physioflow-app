@@ -155,6 +155,8 @@
 .deployment-valid, .deployment-invalid { display: grid; gap: 5px; margin-top: 8px; padding: 8px; border: 1px solid #5a9c70; border-radius: 7px; }
 .deployment-invalid { border-color: #bd5b5b; }
 .deployment-valid small, .deployment-invalid small { color: var(--muted, #667085); font-size: .62rem; overflow-wrap: anywhere; }
+.deployment-valid label { display: grid; gap: 3px; color: var(--muted, #667085); font-size: .62rem; }
+.deployment-valid button { padding: 6px; border: 1px solid #5a9c70; border-radius: 6px; background: #5a9c7010; color: #34734a; }
 .composer-v2.locked .composer-palette, .composer-v2.locked .composer-inspector .inspector-card, .composer-v2.locked .composer-node { pointer-events: none; opacity: .72; }
 .composer-v2.locked .deployment-catalog { pointer-events: auto; }
 .migration-review-warning { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; padding: 9px; border: 1px solid #e2ba7b; border-radius: 7px; background: #fff7e8; color: #7a4a00; font-size: .68rem; }

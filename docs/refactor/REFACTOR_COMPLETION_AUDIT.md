@@ -27,7 +27,8 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 | Extensible custom control handlers | Versioned trusted-handler registry, frozen cloned inputs, synchronous execution, declared-branch enforcement, event allow-lists, registry-driven runtime dispatch and a working Value switch example |
 | Local-first collaboration foundation | Versioned change-set envelope, base/result hashes, stable entity and field operations, deterministic three-way conflict detection, explicit resolution, Composer import/export and protocol audit history |
 | Portable deployment foundation | Frozen protocol snapshot, dependency manifest, execution policy, provider target, nested integrity hashes, Composer export/inspection and versioned provider registry with submit/status/cancel reference implementation |
-| Self-hosted Composer browser release gate | Script launches Vite and isolated headless Chrome itself, exercises V2 variable/subflow/SDK/device workflows, and runs in the demo push/PR GitHub Actions job |
+| Hosted service application layer | Role permissions, idempotent publication/session creation, deployment queue, scoped participant tokens, optimistic revisions, append-only event batches, completion revocation, data separation, audit log and Composer local sandbox |
+| Self-hosted Composer browser release gate | Script launches Vite and isolated headless Chrome itself, exercises freeze/hosted publication/session and V2 variable/subflow/SDK/device workflows, and runs in the demo push/PR GitHub Actions job |
 | Reproducible formal versions | Pre-freeze validation, migration review gate, config hash, immutable frozen record, new-version editing |
 | Complete session data | Raw events/responses, normalized CSV, snapshots, manifest, dictionary, quality report and independent validator |
 | Legacy migration | Copy-and-convert workflow, original payload preservation, report/review gate, CLI/in-app paths, representative coverage tests |
@@ -41,4 +42,4 @@ This audit distinguishes the accepted end-to-end refactor MVP from work that rem
 
 Hardware-specific adapters can now be added behind the connector port without changing protocol/runtime semantics. Human usability evidence requires external participation beyond source changes.
 
-Online presence, authentication, live cursors, managed hosting and remote data storage remain outside the local-first MVP boundary. The collaboration change-set and portable deployment contracts now provide transport-neutral boundaries for those services.
+Online presence, managed identity, live cursors, durable multi-tenant hosting and remote data storage remain outside the local-first MVP boundary. Collaboration, portable deployment and hosted-service contracts now provide transport-neutral application boundaries for those services.
