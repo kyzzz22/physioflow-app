@@ -19,6 +19,7 @@ The HTTP adapter exposes Hosted Service Contract 1.0 without coupling the core s
 | POST | `/v1/deployments` | `deployment.publish` | Validate and enqueue a frozen deployment bundle |
 | POST | `/v1/deployments/process-next` | `deployment.manage` | Advance the next queued deployment to ready |
 | GET | `/v1/deployments/:id` | `deployment.read` | Read deployment metadata |
+| GET | `/v1/deployments/:id/data` | `data.read` | Export every session record, frozen provenance and related audit entry |
 | GET | `/v1/deployments/:id/assets` | `deployment.read` | Inspect workspace-asset readiness |
 | PUT | `/v1/deployments/:id/assets/:assetId` | `deployment.asset.write` | Upload one checksum-locked workspace binary |
 | POST | `/v1/deployments/:id/sessions` | `session.start` | Create a scoped participant session |
@@ -44,4 +45,4 @@ Hosted state has its own versioned schema. It contains deployments, launch-link 
 - `WebStorageHostedStateStore` for a durable single-browser sandbox;
 - `FileHostedStateStore` in the Node adapter for validated, mode-`0600`, atomic single-process persistence.
 
-A production store can implement the same interface with transactional SQL, an append-only event database, object storage, or another durable backend. The included Node server also serves the participant application and signed filesystem assets; see `SELF_HOSTING.md`. Encryption, tenant isolation, secret hashing, backups, retention enforcement, rate limiting, and operational monitoring remain responsibilities of that adapter and its hosting environment.
+A production store can implement the same interface with transactional SQL, an append-only event database, object storage, or another durable backend. The included Node server also serves the participant application and signed filesystem assets; see `SELF_HOSTING.md`. Deployment-level research export is documented in `HOSTED_DATA_EXPORT.md`. Encryption, tenant isolation, secret hashing, backups, retention enforcement, rate limiting, and operational monitoring remain responsibilities of that adapter and its hosting environment.

@@ -14,6 +14,7 @@ The hosted service layer turns a portable deployment bundle into a controlled ex
 - Idempotent event batches that reject reuse with different content.
 - Participant-token revocation when a session completes.
 - Separate metadata and raw-data permissions.
+- Deployment-level export of the frozen bundle, every session/event/snapshot, enrollment metadata, related audit provenance, and integrity diagnostics without bearer credentials.
 - Immutable, sequential audit entries for publication, processing, session creation, ingestion, synchronization, and completion.
 - Deployment-level session quotas, optional expiry and explicit deactivation.
 - Opaque participant launch tokens with independent expiry, use quotas, idempotent redemption and immediate revocation.
@@ -37,7 +38,7 @@ The standalone participant surface consumes this contract at `/participant`, wit
 - append event batch;
 - synchronize runtime state;
 - complete session;
-- read session data and audit history.
+- read session data, export all deployment data, and inspect audit history.
 
 ## Security boundary
 

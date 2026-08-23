@@ -3,6 +3,7 @@ import { createParticipantBootstrap } from './participantBootstrap.js';
 
 export const HOSTED_SERVICE_CONTRACT_VERSION = '1.0.0';
 export const HOSTED_STATE_SCHEMA_VERSION = '1.1.0';
+export const HOSTED_DATA_EXPORT_SCHEMA_VERSION = '1.0.0';
 const LEGACY_HOSTED_STATE_SCHEMA_VERSION = '1.0.0';
 
 const ROLE_PERMISSIONS = Object.freeze({
@@ -39,6 +40,19 @@ function publicLaunchLink(record) {
 
 function expired(expiresAt, now) {
   return Boolean(expiresAt && Number.isFinite(Date.parse(expiresAt)) && Date.parse(expiresAt) <= Date.parse(now));
+}
+
+function sessionExportIntegrity(session) {
+  const issues = [];
+  if (session.eventCount !== session.events.length) issues.push(`Session ${session.sessionId} event count does not match stored events`);
+  const eventIds = new Set();
+  session.events.forEach((event, index) => {
+    if (event.sequence !== index + 1) issues.push(`Session ${session.sessionId} event sequence is not contiguous at ${index + 1}`);
+    if (!event.eventId || eventIds.has(event.eventId)) issues.push(`Session ${session.sessionId} has a duplicate or missing event ID at ${index + 1}`);
+    eventIds.add(event.eventId);
+  });
+  if (session.runtimeSnapshot && session.runtimeSnapshot.eventSequence !== session.events.length) issues.push(`Session ${session.sessionId} snapshot sequence does not match stored events`);
+  return issues;
 }
 
 function validateActor(actor) {
@@ -449,6 +463,32 @@ export class LocalHostedExecutionService {
     return { session: publicSession(record), events: clone(record.events), runtimeSnapshot: clone(record.runtimeSnapshot) };
   }
 
+  readDeploymentData(deploymentId, context = {}) {
+    this.authorize(context, 'data.read');
+    const deployment = this.deployments.get(deploymentId);
+    if (!deployment) throw new Error(`Unknown hosted deployment ${deploymentId}`);
+    const storedSessions = [...this.sessions.values()].filter(session => session.deploymentId === deploymentId);
+    const sessionIds = new Set(storedSessions.map(session => session.sessionId));
+    const sessions = storedSessions.map(record => ({ session: publicSession(record), events: clone(record.events), runtimeSnapshot: clone(record.runtimeSnapshot) }));
+    const launchLinks = [...this.launchLinks.values()].filter(link => link.deploymentId === deploymentId).map(publicLaunchLink);
+    const audit = this.auditEntries.filter(entry => entry.resource?.deploymentId === deploymentId || sessionIds.has(entry.resource?.sessionId)).map(clone);
+    const issues = storedSessions.flatMap(sessionExportIntegrity);
+    if (deployment.sessionCount !== sessions.length) issues.push(`Deployment ${deploymentId} session count does not match stored sessions`);
+    const statusCounts = {};
+    for (const { session } of sessions) statusCounts[session.status] = (statusCounts[session.status] || 0) + 1;
+    return {
+      schemaVersion: HOSTED_DATA_EXPORT_SCHEMA_VERSION,
+      generatedAt: this.clock(),
+      deployment: this.deploymentView(deployment),
+      bundle: clone(deployment.bundle),
+      launchLinks,
+      sessions,
+      audit,
+      summary: { sessionCount: sessions.length, eventCount: sessions.reduce((total, item) => total + item.events.length, 0), statusCounts },
+      integrity: { valid: issues.length === 0, issues },
+    };
+  }
+
   readAudit(context = {}) {
     this.authorize(context, 'audit.read');
     return this.auditEntries.map(clone);
@@ -476,5 +516,6 @@ export class HostedExecutionClient {
   syncState(id, state, options) { return this.service.syncSessionState(id, state, options, this.context); }
   completeSession(id, options) { return this.service.completeSession(id, options, this.context); }
   sessionData(id) { return this.service.readSessionData(id, this.context); }
+  deploymentData(id) { return this.service.readDeploymentData(id, this.context); }
   audit() { return this.service.readAudit(this.context); }
 }

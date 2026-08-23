@@ -61,7 +61,16 @@ test('Hosted HTTP API carries a complete Runtime V2 session with stable errors a
   const stored = await owner.sessionData(session.sessionId);
   assert.equal(stored.session.status, 'completed');
   assert.deepEqual(stored.events, runtime.events);
+  const exported = await owner.deploymentData(deployment.deploymentId);
+  assert.equal(exported.schemaVersion, '1.0.0');
+  assert.equal(exported.bundle.bundleHash, bundle.bundleHash);
+  assert.deepEqual(exported.summary, { sessionCount: 1, eventCount: runtime.events.length, statusCounts: { completed: 1 } });
+  assert.equal(exported.integrity.valid, true);
+  assert.deepEqual(exported.sessions[0].events, runtime.events);
+  assert.equal(exported.audit.every(entry => entry.resource.deploymentId === deployment.deploymentId || entry.resource.sessionId === session.sessionId), true);
+  assert.equal(JSON.stringify(exported).includes(session.participantAccessToken), false);
   await assert.rejects(() => viewer.sessionData(session.sessionId), error => error instanceof HostedHttpError && error.status === 403 && error.code === 'forbidden');
+  await assert.rejects(() => viewer.deploymentData(deployment.deploymentId), error => error instanceof HostedHttpError && error.status === 403 && error.code === 'forbidden');
   const missingAuth = new HostedHttpClient({ baseUrl: 'https://hosted.example', accessToken: 'invalid-token', fetch: transport });
   await assert.rejects(() => missingAuth.deployment(deployment.deploymentId), error => error.status === 403);
 });
@@ -123,6 +132,7 @@ test('public launch token survives persistence and enforces anonymous redemption
   const restarted = await createPersistentHostedExecutionService({ ...serviceOptions(), store });
   const secondTransport = (input, init) => createHostedHttpHandler(restarted)(new Request(input, init));
   const anonymous = new HostedHttpClient({ baseUrl: 'https://hosted.example', fetch: secondTransport });
+  const restartedOwner = new HostedHttpClient({ baseUrl: 'https://hosted.example', accessToken: 'owner-http-token', fetch: secondTransport });
   const restartedOperator = new HostedHttpClient({ baseUrl: 'https://hosted.example', accessToken: 'operator-http-token', fetch: secondTransport });
   const redeemed = await anonymous.redeemLaunchLink(link.launchToken, { idempotencyKey: 'public-redeem', participantId: 'PUBLIC-HTTP' });
   assert.equal(redeemed.session.participantId, 'PUBLIC-HTTP');
@@ -133,4 +143,8 @@ test('public launch token survives persistence and enforces anonymous redemption
   const saved = await store.load();
   assert.equal(saved.launchLinks[0].useCount, 1);
   assert.equal(saved.sessions.length, 1);
+  const exported = await restartedOwner.deploymentData(deployment.deploymentId);
+  assert.equal(exported.launchLinks[0].launchLinkId, link.launchLinkId);
+  assert.equal(JSON.stringify(exported).includes(link.launchToken), false);
+  assert.equal(JSON.stringify(exported).includes(redeemed.session.participantAccessToken), false);
 });

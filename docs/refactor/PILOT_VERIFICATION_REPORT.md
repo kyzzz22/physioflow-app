@@ -55,6 +55,7 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 - Browser release behavior: `npm run test:e2e`, `npm run test:e2e:refactor-browser`, and `npm run test:e2e:participant-public` pass locally and `.github/workflows/refactor-quality.yml` runs all three through the full quality gate on pushes and pull requests.
 - Unified release behavior: `npm run quality:release` is the single entry point used locally and by GitHub Actions, so tests, build, strict lint and all browser gates cannot drift into different release definitions.
 - Single-node hosting behavior: the real-network test blocks incomplete deployment processing, rejects unauthorized and incorrect uploads, audits a valid atomic upload, persists a deployment and launch link, reconstructs the service, redeems a participant, validates Bootstrap, downloads a checksum-verified signed asset, and rejects URL or file-content tampering.
+- Hosted data-export behavior: the HTTP test exports the exact frozen bundle, every session event and snapshot, related audit provenance and aggregate counts, confirms integrity, rejects viewer access, and proves participant bearer credentials are absent.
 
 ## Known transition scope
 

@@ -94,6 +94,8 @@ export function createHostedHttpHandler(service, options = {}) {
       if (method === 'GET' && path === '/v1/audit') return json(await service.readAudit(context));
       let match = path.match(/^\/v1\/deployments\/([^/]+)$/);
       if (method === 'GET' && match) return json(await service.getDeployment(decodeURIComponent(match[1]), context));
+      match = path.match(/^\/v1\/deployments\/([^/]+)\/data$/);
+      if (method === 'GET' && match) return json(await service.readDeploymentData(decodeURIComponent(match[1]), context));
       match = path.match(/^\/v1\/deployments\/([^/]+)\/deactivate$/);
       if (method === 'POST' && match) {
         const body = await readJson(request, maximumBytes);
@@ -191,6 +193,7 @@ export class HostedHttpClient {
 
   publish(bundle, options = {}) { return this.request('POST', '/deployments', { bundle, options }, options); }
   deployment(id) { return this.request('GET', `/deployments/${encodeURIComponent(id)}`); }
+  deploymentData(id) { return this.request('GET', `/deployments/${encodeURIComponent(id)}/data`); }
   processNextDeployment() { return this.request('POST', '/deployments/process-next'); }
   createSession(id, request = {}) { return this.request('POST', `/deployments/${encodeURIComponent(id)}/sessions`, request, request); }
   deploymentAssets(id) { return this.request('GET', `/deployments/${encodeURIComponent(id)}/assets`); }

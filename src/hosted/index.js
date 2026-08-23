@@ -1,5 +1,6 @@
 export {
   HostedExecutionClient,
+  HOSTED_DATA_EXPORT_SCHEMA_VERSION,
   HOSTED_SERVICE_CONTRACT_VERSION,
   HOSTED_STATE_SCHEMA_VERSION,
   LocalHostedExecutionService,
