@@ -14,6 +14,7 @@
 - [x] `/participant` redeems fragment credentials, validates Bootstrap, resumes from a hosted checkpoint without local recovery data, and completes through an explicitly allowed CORS origin.
 - [x] Hosted HTTP transport and persistent-state recovery preserve authentication boundaries, idempotency, session data and audit history.
 - [x] Single-node Node hosting restores atomic file state after restart and rejects corrupt state, unsafe asset paths, checksum mismatches, expired links and signature tampering.
+- [x] Workspace binaries are authenticated, checksum-locked, atomically uploaded and audited before deployment readiness; incomplete or immutable deployments reject processing or replacement.
 - [x] Participant launch tokens enforce expiry, quotas, revocation and deployment deactivation without interrupting active sessions.
 - [x] Participant bootstrap verifies the frozen graph, omits credentials and marks unsafe or unresolved resources unavailable.
 - [x] Complete session package includes all raw, normalized, metadata, dictionary, manifest, and quality files.

@@ -9,7 +9,7 @@ async function fixture() {
   const protocol = createProtocolGraph({ idFactory: createSequentialIdFactory(), now: '2026-08-23T00:00:00.000Z' });
   protocol.assets = [
     { id: 'asset_remote', name: 'Remote image', mediaType: 'image/png', sourceUrl: 'https://cdn.example.test/image.png', checksum: 'sha256:remote' },
-    { id: 'asset_workspace', name: 'Workspace video', mediaType: 'video/mp4', checksum: 'sha256:workspace' },
+    { id: 'asset_workspace', name: 'Workspace video', mediaType: 'video/mp4', checksum: `sha256:${'a'.repeat(64)}` },
     { id: 'asset_unsafe', name: 'Unsafe media', mediaType: 'text/html', sourceUrl: 'javascript:alert(1)' },
   ];
   const frozen = await freezeProtocolGraph(protocol, createCoreComponentRegistry(), { now: '2026-08-23T01:00:00.000Z' });

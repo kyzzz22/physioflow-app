@@ -43,14 +43,14 @@ export function resolveParticipantResourceUrl(resources, { assetId = null, nodeI
 
 function protocolResources(protocol) {
   const resources = (protocol.assets || []).map(asset => ({
-    resourceId: `asset:${asset.id || asset.assetId}`,
+    resourceId: `asset:${asset.id || asset.assetId || asset.asset_id}`,
     kind: 'asset',
-    assetId: asset.id || asset.assetId,
+    assetId: asset.id || asset.assetId || asset.asset_id,
     nodeId: null,
-    name: asset.name || asset.fileName || '',
-    mediaType: asset.mediaType || asset.type || null,
+    name: asset.name || asset.fileName || asset.file_name || '',
+    mediaType: asset.mediaType || asset.mime_type || asset.type || null,
     checksum: asset.checksum || asset.hash || null,
-    sourceUrl: asset.sourceUrl || asset.url || null,
+    sourceUrl: asset.sourceUrl || asset.source_url || asset.url || null,
     asset: clone(asset),
   }));
   for (const node of protocol.graph?.nodes || []) {

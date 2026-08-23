@@ -16,6 +16,42 @@ function normalizedPublicBaseUrl(value) {
   return url.origin;
 }
 
+function accessContext(request) {
+  const match = (request.headers.get('authorization') || '').match(/^Bearer\s+(.+)$/i);
+  if (!match) throw Object.assign(new Error('Bearer access token is required'), { status: 401, code: 'unauthorized' });
+  return { accessToken: match[1] };
+}
+
+function corsOrigin(request, allowedOrigins) {
+  const origin = request.headers.get('origin');
+  if (!origin || !allowedOrigins) return null;
+  if (allowedOrigins === '*') return '*';
+  if (typeof allowedOrigins === 'function') return allowedOrigins(origin) ? origin : null;
+  return (Array.isArray(allowedOrigins) ? allowedOrigins : [allowedOrigins]).includes(origin) ? origin : null;
+}
+
+function jsonResponse(value, status, request, allowedOrigins) {
+  const headers = new globalThis.Headers({ 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
+  const origin = corsOrigin(request, allowedOrigins);
+  if (origin) { headers.set('access-control-allow-origin', origin); if (origin !== '*') headers.set('vary', 'Origin'); }
+  return new Response(JSON.stringify(value), { status, headers });
+}
+
+function assetRequirementsWithoutStore(deployment) {
+  const assets = (deployment.bundle?.dependencies?.assets || []).filter(asset => asset.source === 'workspace').map(asset => ({ ...asset, status: 'missing', size: null }));
+  return { deploymentId: deployment.deploymentId, bundleId: deployment.bundleId, ready: assets.length === 0, assets };
+}
+
+function hostedNodeError(error) {
+  if (error?.status) return { status: error.status, code: error.code || 'invalid_request', message: error.message };
+  const message = error?.message || String(error);
+  if (/permission .* required/i.test(message)) return { status: 403, code: 'forbidden', message };
+  if (/^Unknown hosted/i.test(message)) return { status: 404, code: 'not_found', message };
+  if (/conflict|checksum|already|expired|deactivated|quota|exhausted| is (?:ready|completed|failed)/i.test(message)) return { status: 409, code: 'conflict', message };
+  if (/requires|required|invalid|not declared|must be/i.test(message)) return { status: 400, code: 'invalid_request', message };
+  return { status: 500, code: 'internal_error', message: 'Hosted server request failed' };
+}
+
 async function bodyOf(request, maximumBytes) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return undefined;
   const chunks = [];
@@ -56,26 +92,59 @@ async function staticResponse(request, staticDirectory) {
 export async function createHostedNodeServer(options = {}) {
   if (!Array.isArray(options.actors) || !options.actors.length) throw new Error('Hosted Node server requires at least one configured actor');
   const maximumBodyBytes = options.maximumBodyBytes || 10 * 1024 * 1024;
+  const maximumAssetBytes = options.maximumAssetBytes || 250 * 1024 * 1024;
   let baseUrl = normalizedPublicBaseUrl(options.publicBaseUrl);
   const listenHost = options.host || '127.0.0.1';
   if (options.assetDirectory && !baseUrl && !LOOPBACK_HOSTS.has(listenHost)) throw new Error('Non-loopback asset hosting requires an explicit HTTPS public base URL');
-  const assetDelivery = options.assetDirectory ? createFilesystemAssetDelivery({ rootDirectory: options.assetDirectory, secret: options.assetSecret, publicBaseUrl: () => baseUrl, ttlMs: options.assetTtlMs, clock: options.epochClock }) : null;
+  const assetDelivery = options.assetDirectory ? createFilesystemAssetDelivery({ rootDirectory: options.assetDirectory, secret: options.assetSecret, publicBaseUrl: () => baseUrl, ttlMs: options.assetTtlMs, maximumBytes: maximumAssetBytes, clock: options.epochClock }) : null;
   const store = options.store || new FileHostedStateStore(options.stateFile);
   const service = await createPersistentHostedExecutionService({ ...options.serviceOptions, actors: options.actors, store, assetResolver: assetDelivery?.resolve });
   const hosted = createHostedHttpHandler(service, { maximumBodyBytes, allowedOrigins: options.allowedOrigins });
   const server = createServer(async (incoming, outgoing) => {
     try {
       const requestUrl = `${baseUrl || `http://${incoming.headers.host}`}${incoming.url}`;
-      const request = new Request(requestUrl, { method: incoming.method, headers: incoming.headers, body: await bodyOf(incoming, maximumBodyBytes) });
-      if (new URL(request.url).pathname === '/healthz') return sendNodeResponse(outgoing, new Response(JSON.stringify({ status: 'ok' }), { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }), incoming.method === 'HEAD');
+      const pathname = new URL(requestUrl).pathname;
+      const uploadMatch = pathname.match(/^\/v1\/deployments\/([^/]+)\/assets\/([^/]+)$/);
+      const request = new Request(requestUrl, { method: incoming.method, headers: incoming.headers, body: await bodyOf(incoming, incoming.method === 'PUT' && uploadMatch ? maximumAssetBytes : maximumBodyBytes) });
+      if (pathname === '/healthz') return sendNodeResponse(outgoing, new Response(JSON.stringify({ status: 'ok' }), { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }), incoming.method === 'HEAD');
       const asset = await assetDelivery?.response(request);
       if (asset) return sendNodeResponse(outgoing, asset, incoming.method === 'HEAD');
-      if (new URL(request.url).pathname.startsWith('/v1/')) return sendNodeResponse(outgoing, await hosted(request), incoming.method === 'HEAD');
+      const assetListMatch = pathname.match(/^\/v1\/deployments\/([^/]+)\/assets$/);
+      if (incoming.method === 'GET' && assetListMatch) {
+        const deploymentId = decodeURIComponent(assetListMatch[1]);
+        await service.authorize(accessContext(request), 'deployment.read');
+        const deployment = service.deployments.get(deploymentId);
+        if (!deployment) return sendNodeResponse(outgoing, jsonResponse({ error: { code: 'not_found', message: `Unknown hosted deployment ${deploymentId}` } }, 404, request, options.allowedOrigins));
+        return sendNodeResponse(outgoing, jsonResponse(assetDelivery ? await assetDelivery.status(deployment) : assetRequirementsWithoutStore(deployment), 200, request, options.allowedOrigins));
+      }
+      if (incoming.method === 'PUT' && uploadMatch) {
+        const deploymentId = decodeURIComponent(uploadMatch[1]);
+        const assetId = decodeURIComponent(uploadMatch[2]);
+        const context = accessContext(request);
+        await service.authorize(context, 'deployment.asset.write');
+        const deployment = service.deployments.get(deploymentId);
+        if (!deployment) return sendNodeResponse(outgoing, jsonResponse({ error: { code: 'not_found', message: `Unknown hosted deployment ${deploymentId}` } }, 404, request, options.allowedOrigins));
+        if (deployment.status !== 'queued') return sendNodeResponse(outgoing, jsonResponse({ error: { code: 'conflict', message: `Hosted deployment ${deploymentId} is ${deployment.status}` } }, 409, request, options.allowedOrigins));
+        if (!assetDelivery) return sendNodeResponse(outgoing, jsonResponse({ error: { code: 'asset_storage_unavailable', message: 'Hosted asset storage is not configured' } }, 503, request, options.allowedOrigins));
+        const uploaded = await assetDelivery.upload(deployment, assetId, await request.arrayBuffer(), request.headers.get('content-type'));
+        if (uploaded.outcome === 'uploaded') await service.recordDeploymentAsset(deploymentId, uploaded, context);
+        return sendNodeResponse(outgoing, jsonResponse(uploaded, uploaded.outcome === 'uploaded' ? 201 : 200, request, options.allowedOrigins));
+      }
+      if (incoming.method === 'POST' && pathname === '/v1/deployments/process-next') {
+        await service.authorize(accessContext(request), 'deployment.manage');
+        const queued = [...service.deployments.values()].find(deployment => deployment.status === 'queued');
+        if (queued) {
+          const requirements = assetDelivery ? await assetDelivery.status(queued) : assetRequirementsWithoutStore(queued);
+          if (!requirements.ready) return sendNodeResponse(outgoing, jsonResponse({ error: { code: 'assets_incomplete', message: 'Hosted deployment workspace assets are incomplete', detail: requirements } }, 409, request, options.allowedOrigins));
+        }
+      }
+      if (pathname.startsWith('/v1/')) return sendNodeResponse(outgoing, await hosted(request), incoming.method === 'HEAD');
       const staticFile = await staticResponse(request, options.staticDirectory);
       return sendNodeResponse(outgoing, staticFile || new Response('Not found', { status: 404 }), incoming.method === 'HEAD');
     } catch (error) {
-      const status = error?.status || 500;
-      return sendNodeResponse(outgoing, new Response(status === 500 ? 'Hosted server request failed' : error.message, { status, headers: { 'cache-control': 'no-store' } }));
+      const normalized = hostedNodeError(error);
+      const request = new Request(`${baseUrl || `http://${incoming.headers.host}`}${incoming.url}`, { headers: incoming.headers });
+      return sendNodeResponse(outgoing, jsonResponse({ error: { code: normalized.code, message: normalized.message } }, normalized.status, request, options.allowedOrigins));
     }
   });
 

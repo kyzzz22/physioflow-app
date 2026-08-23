@@ -1,6 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
-import { readFile, stat } from 'node:fs/promises';
-import { resolve, sep } from 'node:path';
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { dirname, resolve, sep } from 'node:path';
 
 const SAFE_ID = /^[A-Za-z0-9._-]+$/;
 const SAFE_MEDIA_TYPE = /^[a-z0-9][a-z0-9.+-]*\/[a-z0-9][a-z0-9.+-]*$/i;
@@ -36,14 +36,66 @@ function verifyContentChecksum(content, checksum) {
 
 async function verifyChecksum(file, checksum) { verifyContentChecksum(await readFile(file), checksum); }
 
+function workspaceAssets(deployment) {
+  return (deployment?.bundle?.dependencies?.assets || []).filter(asset => asset.source === 'workspace');
+}
+
 export function createFilesystemAssetDelivery(options = {}) {
   if (!options.rootDirectory) throw new Error('Filesystem asset delivery requires a root directory');
   if (!options.secret || String(options.secret).length < 32) throw new Error('Filesystem asset delivery requires a secret of at least 32 characters');
   const clock = options.clock || (() => Date.now());
   const ttlMs = options.ttlMs || 15 * 60 * 1000;
+  const maximumBytes = options.maximumBytes || 250 * 1024 * 1024;
   const publicBaseUrl = typeof options.publicBaseUrl === 'function' ? options.publicBaseUrl : () => options.publicBaseUrl;
 
   return {
+    async status(deployment) {
+      const assets = [];
+      for (const asset of workspaceAssets(deployment)) {
+        try {
+          const file = assetPath(options.rootDirectory, deployment.bundleId, asset.id);
+          const details = await stat(file);
+          if (!details.isFile()) throw new Error('not_file');
+          await verifyChecksum(file, asset.checksum);
+          assets.push({ ...asset, status: 'ready', size: details.size });
+        } catch (error) {
+          assets.push({ ...asset, status: error?.code === 'ENOENT' ? 'missing' : 'invalid', size: null });
+        }
+      }
+      return { deploymentId: deployment.deploymentId, bundleId: deployment.bundleId, ready: assets.every(asset => asset.status === 'ready'), assets };
+    },
+
+    async upload(deployment, assetId, content, mediaType) {
+      const asset = workspaceAssets(deployment).find(item => item.id === assetId);
+      if (!asset) throw Object.assign(new Error(`Asset ${assetId} is not declared as a workspace dependency`), { status: 404 });
+      const bytes = Buffer.isBuffer(content) ? content : Buffer.from(content || []);
+      if (!bytes.length) throw Object.assign(new Error('Asset upload body is empty'), { status: 400 });
+      if (bytes.length > maximumBytes) throw Object.assign(new Error('Asset upload body is too large'), { status: 413 });
+      try { verifyContentChecksum(bytes, asset.checksum); }
+      catch (error) { throw Object.assign(error, { status: 409 }); }
+      const declaredType = asset.mediaType || 'application/octet-stream';
+      const suppliedType = String(mediaType || '').split(';')[0].trim();
+      if (suppliedType && declaredType !== suppliedType) throw Object.assign(new Error(`Asset media type must be ${declaredType}`), { status: 409 });
+      const file = assetPath(options.rootDirectory, deployment.bundleId, asset.id);
+      try {
+        const existing = await readFile(file);
+        verifyContentChecksum(existing, asset.checksum);
+        return { assetId: asset.id, checksum: asset.checksum || null, mediaType: declaredType, size: existing.length, status: 'ready', outcome: 'unchanged' };
+      } catch (error) {
+        if (error?.code !== 'ENOENT') throw Object.assign(new Error(`Existing asset ${asset.id} is invalid and must be repaired outside the upload API`), { status: 409 });
+      }
+      await mkdir(dirname(file), { recursive: true, mode: 0o700 });
+      const temporary = `${file}.${process.pid}.${globalThis.crypto.randomUUID()}.tmp`;
+      try {
+        await writeFile(temporary, bytes, { mode: 0o600, flag: 'wx' });
+        await rename(temporary, file);
+      } catch (error) {
+        await rm(temporary, { force: true }).catch(() => {});
+        throw error;
+      }
+      return { assetId: asset.id, checksum: asset.checksum || null, mediaType: declaredType, size: bytes.length, status: 'ready', outcome: 'uploaded' };
+    },
+
     async resolve(asset, context) {
       const assetId = safeId(asset.id || asset.assetId, 'ID');
       const bundleId = safeId(context.bundleId, 'bundle ID');

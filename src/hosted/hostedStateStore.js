@@ -2,6 +2,7 @@ import { HOSTED_STATE_SCHEMA_VERSION, LocalHostedExecutionService } from './host
 
 const MUTATIONS = new Set([
   'publishDeployment',
+  'recordDeploymentAsset',
   'processNextDeployment',
   'createSession',
   'deactivateDeployment',

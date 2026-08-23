@@ -123,7 +123,7 @@ npm run desktop:dev  # Tauri hot-reload
 npm run desktop:build  # → src-tauri/target/release/bundle/
 
 # Tests & lint
-npm test             # 155 automated tests
+npm test             # 158 automated tests
 npm run lint         # ESLint
 npm run quality:release  # build + lint + all tests and browser gates
 ```

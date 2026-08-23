@@ -1,6 +1,6 @@
 # Single-Node Self-Hosting
 
-PhysioFlow includes a dependency-free Node server for a small trusted deployment. It serves the built web application and `/participant`, mounts Hosted HTTP API v1, persists service state atomically, exposes `/healthz`, and can deliver pre-provisioned workspace assets through expiring HMAC-signed URLs.
+PhysioFlow includes a dependency-free Node server for a small trusted deployment. It serves the built web application and `/participant`, mounts Hosted HTTP API v1, persists service state atomically, exposes `/healthz`, accepts checksum-locked workspace assets, and delivers them through expiring HMAC-signed URLs.
 
 ## Start
 
@@ -25,26 +25,27 @@ The default static directory is `./dist`. Put the service behind an HTTPS revers
 | `PHYSIOFLOW_STATIC_DIR` | Built application directory; defaults to `./dist` |
 | `PHYSIOFLOW_PUBLIC_BASE_URL` | External origin used in signed links |
 | `PHYSIOFLOW_ALLOWED_ORIGINS_JSON` | Exact CORS origin array when the participant app is hosted separately |
-| `PHYSIOFLOW_ASSET_DIR` | Optional pre-provisioned asset root |
+| `PHYSIOFLOW_ASSET_DIR` | Optional root for uploaded workspace assets |
 | `PHYSIOFLOW_ASSET_SECRET` | Required with asset delivery; at least 32 characters |
+| `PHYSIOFLOW_MAX_ASSET_BYTES` | Per-asset upload limit; defaults to 250 MiB |
 | `HOST`, `PORT` | Listen address and port |
 
 The state writer validates every snapshot, writes a mode-`0600` temporary file, and atomically renames it into place. The file contains active bearer and launch credentials and must be protected like a secret. Back it up only through encrypted storage and never commit it.
 
 ## Workspace assets
 
-Binary assets are provisioned using this path convention:
+Authenticated deployment uploads are stored using this path convention:
 
 ```text
 <PHYSIOFLOW_ASSET_DIR>/<deployment bundle ID>/<asset ID>
 ```
 
-When Bootstrap is requested, the resolver verifies that the file is inside the configured root, checks the protocol's SHA-256 checksum, and returns a 15-minute signed URL. Asset delivery validates expiry, media type, path identifiers, and the constant-time HMAC signature. It responds only to `GET` and `HEAD`.
+Use the deployment asset API or `uploadDeploymentAssets` coordinator after publication. Only declared workspace assets can be uploaded, and only while the deployment is queued. The service validates permission, size, media type, and SHA-256 content before an atomic write and persistent audit entry. Deployment processing remains blocked until every required asset is valid.
 
-This adapter deliberately does not accept anonymous file uploads. An operator or deployment pipeline must provision files before participants launch. This avoids turning the reference server into an unaudited general-purpose upload surface.
+When Bootstrap is requested, the resolver verifies that the file is inside the configured root, checks the protocol's SHA-256 checksum, and returns a 15-minute signed URL. Asset delivery validates expiry, media type, checksum, path identifiers, and the constant-time HMAC signature. It responds only to `GET` and `HEAD`. See `DEPLOYMENT_ASSETS.md`.
 
 ## Scope
 
 The adapter is appropriate for one trusted process or a small lab server. It is not a multi-process database and does not provide tenant isolation, managed identity, key rotation, distributed locking, rate limiting, automated backups, or observability. Production multi-tenant deployments should retain the same service/store/asset boundaries while replacing the filesystem adapters with transactional storage and managed object delivery.
 
-`tests/hosted-node-server.test.js` exercises real network publication, process-level service reconstruction from disk, public redemption, Bootstrap validation, participant static delivery, checksum validation, signed asset download, and signature rejection.
+`tests/hosted-node-server.test.js` exercises real network publication, asset readiness blocking, authenticated upload, process-level service reconstruction from disk, public redemption, Bootstrap validation, participant static delivery, checksum validation, signed asset download, and signature/file-replacement rejection.

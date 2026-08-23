@@ -7,3 +7,4 @@ export {
   validateDeploymentBundle,
   validateExecutionProvider,
 } from './deploymentBundle.js';
+export { uploadDeploymentAssets, workspaceDeploymentAssets } from './deploymentAssets.js';

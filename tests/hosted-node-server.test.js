@@ -10,7 +10,10 @@ import { HostedHttpClient, validateParticipantBootstrap } from '../src/hosted/in
 import { createHostedNodeServer } from '../server/createHostedNodeServer.mjs';
 import { FileHostedStateStore } from '../server/fileHostedStateStore.mjs';
 
-const actors = [{ actorId: 'node-owner', role: 'owner', accessToken: 'node-owner-token' }];
+const actors = [
+  { actorId: 'node-owner', role: 'owner', accessToken: 'node-owner-token' },
+  { actorId: 'node-viewer', role: 'viewer', accessToken: 'node-viewer-token' },
+];
 
 async function fixture(root) {
   const content = Buffer.from('verified hosted asset');
@@ -19,8 +22,6 @@ async function fixture(root) {
   protocol.assets = [{ id: 'asset_node', name: 'Node asset', mediaType: 'text/plain', checksum }];
   const frozen = await freezeProtocolGraph(protocol, createCoreComponentRegistry(), { now: '2026-08-23T01:00:00.000Z' });
   const bundle = await createDeploymentBundle(frozen, { bundleId: 'node_server_bundle', createdAt: '2026-08-23T02:00:00.000Z' });
-  await mkdir(join(root, 'assets', bundle.bundleId), { recursive: true });
-  await writeFile(join(root, 'assets', bundle.bundleId, 'asset_node'), content);
   await mkdir(join(root, 'dist'), { recursive: true });
   await writeFile(join(root, 'dist', 'index.html'), '<!doctype html><title>Hosted participant</title><main>participant application</main>');
   return { bundle, content };
@@ -46,8 +47,18 @@ test('Node hosted server persists its service, serves the participant app, and d
   t.after(async () => first.close());
   const firstAddress = await first.listen(0);
   const owner = new HostedHttpClient({ baseUrl: firstAddress.baseUrl, accessToken: 'node-owner-token' });
+  const viewer = new HostedHttpClient({ baseUrl: firstAddress.baseUrl, accessToken: 'node-viewer-token' });
   const deployment = await owner.publish(bundle, { idempotencyKey: 'node-publish' });
+  await assert.rejects(() => owner.processNextDeployment(), error => error.status === 409 && error.code === 'assets_incomplete');
+  assert.equal((await owner.deploymentAssets(deployment.deploymentId)).assets[0].status, 'missing');
+  await assert.rejects(() => viewer.uploadDeploymentAsset(deployment.deploymentId, 'asset_node', content, { mediaType: 'text/plain' }), error => error.status === 403 && error.code === 'forbidden');
+  await assert.rejects(() => owner.uploadDeploymentAsset(deployment.deploymentId, 'asset_node', 'incorrect content', { mediaType: 'text/plain' }), error => error.status === 409);
+  const uploaded = await owner.uploadDeploymentAsset(deployment.deploymentId, 'asset_node', content, { mediaType: 'text/plain' });
+  assert.equal(uploaded.status, 'ready');
+  assert.equal((await owner.uploadDeploymentAsset(deployment.deploymentId, 'asset_node', content, { mediaType: 'text/plain' })).outcome, 'unchanged');
+  assert.equal((await owner.deploymentAssets(deployment.deploymentId)).ready, true);
   await owner.processNextDeployment();
+  await assert.rejects(() => owner.uploadDeploymentAsset(deployment.deploymentId, 'asset_node', content, { mediaType: 'text/plain' }), error => error.status === 409);
   const link = await owner.createLaunchLink(deployment.deploymentId, { idempotencyKey: 'node-link', maximumUses: 1 });
   assert.match(await fetch(`${firstAddress.baseUrl}/participant`).then(response => response.text()), /participant application/);
   assert.deepEqual(await fetch(`${firstAddress.baseUrl}/healthz`).then(response => response.json()), { status: 'ok' });
@@ -55,6 +66,7 @@ test('Node hosted server persists its service, serves the participant app, and d
 
   const persisted = JSON.parse(await readFile(join(root, 'state', 'hosted.json'), 'utf8'));
   assert.equal(persisted.deployments.length, 1);
+  assert.equal(persisted.auditEntries.filter(entry => entry.action === 'deployment.asset_uploaded').length, 1);
   assert.equal((await stat(join(root, 'state', 'hosted.json'))).mode & 0o777, 0o600);
 
   const restarted = await createHostedNodeServer(serverOptions(root, 100));

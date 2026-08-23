@@ -19,6 +19,8 @@ The HTTP adapter exposes Hosted Service Contract 1.0 without coupling the core s
 | POST | `/v1/deployments` | `deployment.publish` | Validate and enqueue a frozen deployment bundle |
 | POST | `/v1/deployments/process-next` | `deployment.manage` | Advance the next queued deployment to ready |
 | GET | `/v1/deployments/:id` | `deployment.read` | Read deployment metadata |
+| GET | `/v1/deployments/:id/assets` | `deployment.read` | Inspect workspace-asset readiness |
+| PUT | `/v1/deployments/:id/assets/:assetId` | `deployment.asset.write` | Upload one checksum-locked workspace binary |
 | POST | `/v1/deployments/:id/sessions` | `session.start` | Create a scoped participant session |
 | POST | `/v1/deployments/:id/launch-links` | `session.start` | Create a limited, expiring participant launch token |
 | POST | `/v1/deployments/:id/deactivate` | `deployment.manage` | Stop new sessions without interrupting existing ones |

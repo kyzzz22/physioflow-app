@@ -193,6 +193,26 @@ export class HostedHttpClient {
   deployment(id) { return this.request('GET', `/deployments/${encodeURIComponent(id)}`); }
   processNextDeployment() { return this.request('POST', '/deployments/process-next'); }
   createSession(id, request = {}) { return this.request('POST', `/deployments/${encodeURIComponent(id)}/sessions`, request, request); }
+  deploymentAssets(id) { return this.request('GET', `/deployments/${encodeURIComponent(id)}/assets`); }
+  async uploadDeploymentAsset(id, assetId, content, options = {}) {
+    if (content === undefined || content === null) throw new Error('Hosted asset upload requires content');
+    const controller = new globalThis.AbortController();
+    const timeout = setTimeout(() => controller.abort(), options.timeoutMs || this.timeoutMs);
+    try {
+      const response = await this.fetch(`${this.baseUrl}/${HOSTED_HTTP_API_VERSION}/deployments/${encodeURIComponent(id)}/assets/${encodeURIComponent(assetId)}`, {
+        method: 'PUT',
+        headers: { ...(this.accessToken ? { authorization: `Bearer ${this.accessToken}` } : {}), accept: 'application/json', 'content-type': options.mediaType || 'application/octet-stream' },
+        body: content,
+        signal: controller.signal,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new HostedHttpError(payload.error?.message || `Hosted asset upload failed with status ${response.status}`, { status: response.status, code: payload.error?.code });
+      return payload;
+    } catch (error) {
+      if (error?.name === 'AbortError') throw new HostedHttpError('Hosted asset upload timed out', { status: 0, code: 'timeout' });
+      throw error;
+    } finally { clearTimeout(timeout); }
+  }
   deactivateDeployment(id, request = {}) { return this.request('POST', `/deployments/${encodeURIComponent(id)}/deactivate`, request, request); }
   createLaunchLink(id, request = {}) { return this.request('POST', `/deployments/${encodeURIComponent(id)}/launch-links`, request, request); }
   revokeLaunchLink(id, request = {}) { return this.request('POST', `/launch-links/${encodeURIComponent(id)}/revoke`, request, request); }

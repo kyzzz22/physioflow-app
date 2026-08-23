@@ -6,9 +6,9 @@ export const HOSTED_STATE_SCHEMA_VERSION = '1.1.0';
 const LEGACY_HOSTED_STATE_SCHEMA_VERSION = '1.0.0';
 
 const ROLE_PERMISSIONS = Object.freeze({
-  owner: ['deployment.publish', 'deployment.read', 'deployment.manage', 'session.start', 'session.read', 'session.bootstrap', 'session.manage', 'data.ingest', 'data.read', 'audit.read'],
-  editor: ['deployment.publish', 'deployment.read', 'session.read'],
-  operator: ['deployment.read', 'deployment.manage', 'session.start', 'session.read', 'session.bootstrap', 'session.manage', 'data.ingest', 'data.read'],
+  owner: ['deployment.publish', 'deployment.read', 'deployment.manage', 'deployment.asset.write', 'session.start', 'session.read', 'session.bootstrap', 'session.manage', 'data.ingest', 'data.read', 'audit.read'],
+  editor: ['deployment.publish', 'deployment.read', 'deployment.asset.write', 'session.read'],
+  operator: ['deployment.read', 'deployment.manage', 'deployment.asset.write', 'session.start', 'session.read', 'session.bootstrap', 'session.manage', 'data.ingest', 'data.read'],
   analyst: ['deployment.read', 'session.read', 'data.read'],
   viewer: ['deployment.read', 'session.read'],
 });
@@ -217,6 +217,18 @@ export class LocalHostedExecutionService {
     const record = this.deployments.get(deploymentId);
     if (!record) throw new Error(`Unknown hosted deployment ${deploymentId}`);
     return this.deploymentView(record);
+  }
+
+  recordDeploymentAsset(deploymentId, asset, context = {}) {
+    const actor = this.authorize(context, 'deployment.asset.write');
+    const deployment = this.deployments.get(deploymentId);
+    if (!deployment) throw new Error(`Unknown hosted deployment ${deploymentId}`);
+    if (deployment.status !== 'queued') throw new Error(`Hosted deployment ${deploymentId} is ${deployment.status}`);
+    const declared = deployment.bundle.dependencies?.assets?.find(item => item.id === asset?.assetId && item.source === 'workspace');
+    if (!declared) throw new Error(`Hosted deployment asset ${asset?.assetId || '(missing)'} is not a declared workspace asset`);
+    if (declared.checksum && asset.checksum !== declared.checksum) throw new Error(`Hosted deployment asset ${asset.assetId} checksum does not match its manifest`);
+    this.audit('deployment.asset_uploaded', actor, { deploymentId, assetId: asset.assetId }, { checksum: asset.checksum || null, size: asset.size, mediaType: asset.mediaType || null });
+    return clone(asset);
   }
 
   processNextDeployment(context = {}) {

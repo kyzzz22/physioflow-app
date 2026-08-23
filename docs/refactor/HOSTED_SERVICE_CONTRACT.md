@@ -7,6 +7,7 @@ The hosted service layer turns a portable deployment bundle into a controlled ex
 - Role-based access for owner, editor, operator, analyst, viewer, and scoped participant sessions.
 - Idempotent deployment publication and session creation.
 - Explicit `queued` to `ready` deployment processing.
+- Permission-checked, checksum-locked workspace-asset upload with a readiness gate before processing.
 - Opaque, single-session participant access tokens.
 - Optimistic revision checks for runtime-state synchronization.
 - Append-only event ingestion with strict session/protocol/version identity and contiguous sequences.
@@ -31,7 +32,7 @@ The standalone participant surface consumes this contract at `/participant`, wit
 
 `HostedExecutionClient` is the application-facing interface. A production adapter can map its operations to authenticated HTTP or RPC endpoints while retaining the same semantics:
 
-- publish/get/process deployment;
+- publish/get/process deployment and inspect/upload its workspace assets;
 - create/get session;
 - append event batch;
 - synchronize runtime state;

@@ -5,6 +5,8 @@ export const EXECUTION_PROVIDER_CONTRACT_VERSION = '1.0.0';
 
 const PROVIDER_ID = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
 const SEMVER = /^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/;
+const ASSET_ID = /^[A-Za-z0-9._-]+$/;
+const SHA256 = /^(?:sha256:)?[a-f0-9]{64}$/i;
 
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
@@ -28,11 +30,11 @@ function unsignedBundle(bundle) {
 function dependencyManifest(protocol) {
   return {
     assets: (protocol.assets || []).map(asset => ({
-      id: asset.id || asset.assetId,
-      name: asset.name || asset.fileName || '',
-      mediaType: asset.mediaType || asset.type || null,
+      id: asset.id || asset.assetId || asset.asset_id,
+      name: asset.name || asset.fileName || asset.file_name || '',
+      mediaType: asset.mediaType || asset.mime_type || asset.type || null,
       checksum: asset.checksum || asset.hash || null,
-      source: asset.sourceUrl ? 'remote' : 'workspace',
+      source: asset.sourceUrl || asset.source_url || asset.url ? 'remote' : 'workspace',
     })),
     componentPackages: (protocol.componentPackages || []).map(item => ({ packageId: item.packageId, version: item.version, approvedPermissions: [...(item.approvedPermissions || [])] })),
     deviceConnectors: (protocol.deviceConnectors || []).map(item => ({ connectorId: item.connectorId, version: item.version, transport: item.transport, approvedPermissions: [...(item.approvedPermissions || [])] })),
@@ -47,6 +49,11 @@ export async function createDeploymentBundle(protocol, options = {}) {
   if (!PROVIDER_ID.test(providerId)) throw new Error('Deployment provider ID must use lowercase dot/dash notation');
   if (options.maximumSessions !== undefined && options.maximumSessions !== null && (!Number.isInteger(options.maximumSessions) || options.maximumSessions < 1)) throw new Error('Deployment maximum sessions must be a positive integer');
   if (options.expiresAt && !Number.isFinite(Date.parse(options.expiresAt))) throw new Error('Deployment expiry must be a valid timestamp');
+  const dependencies = dependencyManifest(protocol);
+  for (const asset of dependencies.assets) {
+    if (!ASSET_ID.test(asset.id || '')) throw new Error('Deployment asset IDs may contain only letters, numbers, dot, dash and underscore');
+    if (asset.source === 'workspace' && !SHA256.test(asset.checksum || '')) throw new Error(`Workspace deployment asset ${asset.id} requires a SHA-256 checksum`);
+  }
   const bundle = {
     schemaVersion: DEPLOYMENT_BUNDLE_SCHEMA_VERSION,
     bundleId: options.bundleId || `deployment_${globalThis.crypto.randomUUID()}`,
@@ -65,7 +72,7 @@ export async function createDeploymentBundle(protocol, options = {}) {
       dataContractVersion: protocol.freeze.dataContractVersion,
       snapshot: structuredClone(protocol),
     },
-    dependencies: dependencyManifest(protocol),
+    dependencies,
     executionPolicy: {
       mode: options.mode || 'participant-browser',
       maximumSessions: options.maximumSessions ?? null,
@@ -90,6 +97,12 @@ export async function validateDeploymentBundle(bundle) {
     const actualProtocolHash = await hashProtocolGraph(bundle.protocol.snapshot);
     if (actualProtocolHash !== bundle.protocol.configHash || bundle.protocol.snapshot.freeze?.configHash !== bundle.protocol.configHash) errors.push('Deployment protocol snapshot hash does not match the manifest');
     if (JSON.stringify(canonical(bundle.dependencies || {})) !== JSON.stringify(canonical(dependencyManifest(bundle.protocol.snapshot)))) errors.push('Deployment dependency manifest does not match the protocol snapshot');
+  }
+  const assetIds = new Set();
+  for (const asset of bundle.dependencies?.assets || []) {
+    if (!ASSET_ID.test(asset.id || '') || assetIds.has(asset.id)) errors.push('Deployment asset IDs must be safe and unique');
+    assetIds.add(asset.id);
+    if (asset.source === 'workspace' && !SHA256.test(asset.checksum || '')) errors.push(`Workspace deployment asset ${asset.id || '(missing)'} requires a SHA-256 checksum`);
   }
   if (!bundle.bundleHash?.match(/^[a-f0-9]{64}$/)) errors.push('Deployment bundle hash is invalid');
   else if (await sha256(unsignedBundle(bundle)) !== bundle.bundleHash) errors.push('Deployment bundle content does not match its hash');
