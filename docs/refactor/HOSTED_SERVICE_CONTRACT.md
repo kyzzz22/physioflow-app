@@ -7,6 +7,7 @@ The hosted service layer turns a portable deployment bundle into a controlled ex
 - Role-based access for owner, editor, operator, analyst, viewer, and scoped participant sessions.
 - Server-assigned tenant ownership across deployments, queues, sessions, launch links, exports, retention, audit, metrics, idempotency, and assets.
 - HMAC-indexed, AES-GCM-sealed participant/launch credentials with authenticated key rotation and plaintext-state migration in the Node adapter.
+- Tenant-local deployment, session, launch-link, retained-event and event-byte admission limits with owner-visible remaining capacity.
 - Idempotent deployment publication and session creation.
 - Explicit `queued` to `ready` deployment processing.
 - Permission-checked, checksum-locked workspace-asset upload with a readiness gate before processing.
@@ -43,6 +44,7 @@ The standalone participant surface consumes this contract at `/participant`, wit
 - complete session;
 - preview and execute governed retention cleanup;
 - read session data, export all deployment data, and inspect audit history.
+- inspect the authenticated tenant's configured capacity, usage, and remaining allowance.
 
 ## Security boundary
 

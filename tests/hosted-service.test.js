@@ -62,6 +62,53 @@ test('hosted service enforces roles, queues deployments and honors publish idemp
   assert.equal(viewer.deployment(published.deploymentId).status, 'ready');
 });
 
+test('hosted tenant capacity is isolated, observable, and enforced without charging idempotent retries', async () => {
+  const { bundle } = await fixture();
+  let id = 0;
+  const actors = [
+    { actorId: 'owner-a', role: 'owner', accessToken: 'owner-a-token', tenantId: 'tenant-a' },
+    { actorId: 'owner-b', role: 'owner', accessToken: 'owner-b-token', tenantId: 'tenant-b' },
+  ];
+  const firstEventBytes = new TextEncoder().encode(JSON.stringify(event({ sessionId: 'placeholder', protocolId: bundle.protocol.protocolId, protocolVersion: bundle.protocol.version }, 1))).length;
+  const service = new LocalHostedExecutionService({
+    actors,
+    tenantLimits: {
+      'tenant-a': { maximumDeployments: 1, maximumSessions: 1, maximumLaunchLinks: 1, maximumStoredEvents: 1, maximumStoredEventBytes: firstEventBytes + 100 },
+      'tenant-b': { maximumStoredEventBytes: 0 },
+    },
+    idFactory: prefix => `${prefix}_capacity_${++id}`,
+    clock: () => '2026-08-23T03:00:00.000Z',
+  });
+  const ownerA = new HostedExecutionClient(service, 'owner-a-token');
+  const ownerB = new HostedExecutionClient(service, 'owner-b-token');
+  const deployment = await ownerA.publish(bundle, { idempotencyKey: 'capacity-publish' });
+  assert.equal((await ownerA.publish(bundle, { idempotencyKey: 'capacity-publish' })).deploymentId, deployment.deploymentId);
+  await assert.rejects(() => ownerA.publish(bundle, { idempotencyKey: 'capacity-publish-2' }), /deployments quota is exhausted/);
+  const deploymentB = await ownerB.publish(bundle, { idempotencyKey: 'tenant-b-publish' });
+  assert.equal(deploymentB.tenantId, 'tenant-b');
+  ownerA.processNextDeployment();
+  ownerA.createLaunchLink(deployment.deploymentId, { idempotencyKey: 'capacity-link' });
+  assert.throws(() => ownerA.createLaunchLink(deployment.deploymentId, { idempotencyKey: 'capacity-link-2' }), /launch links quota is exhausted/);
+  const session = await ownerA.createSession(deployment.deploymentId, { idempotencyKey: 'capacity-session' });
+  await assert.rejects(() => ownerA.createSession(deployment.deploymentId, { idempotencyKey: 'capacity-session-2' }), /sessions quota is exhausted/);
+  const participant = new HostedExecutionClient(service, session.participantAccessToken);
+  const storedEvent = event(session, 1);
+  participant.appendEvents(session.sessionId, [storedEvent], { batchId: 'capacity-events', expectedRevision: 1 });
+  assert.equal(participant.appendEvents(session.sessionId, [storedEvent], { batchId: 'capacity-events', expectedRevision: 1 }).accepted, 1);
+  assert.throws(() => participant.appendEvents(session.sessionId, [event(session, 2)], { batchId: 'capacity-events-2', expectedRevision: 2 }), /stored events quota is exhausted/);
+  const capacity = ownerA.tenantCapacity();
+  assert.deepEqual(capacity.usage, { deployments: 1, sessions: 1, launchLinks: 1, storedEvents: 1, storedEventBytes: new TextEncoder().encode(JSON.stringify(storedEvent)).length });
+  assert.equal(capacity.remaining.deployments, 0);
+  assert.equal(capacity.remaining.storedEvents, 0);
+  assert.equal(ownerB.tenantCapacity().limits.maximumDeployments, null);
+  ownerB.processNextDeployment();
+  const sessionB = await ownerB.createSession(deploymentB.deploymentId, { idempotencyKey: 'tenant-b-session' });
+  const participantB = new HostedExecutionClient(service, sessionB.participantAccessToken);
+  assert.throws(() => participantB.appendEvents(sessionB.sessionId, [event(sessionB, 1)], { batchId: 'tenant-b-events', expectedRevision: 1 }), /stored event bytes quota is exhausted/);
+  assert.throws(() => new LocalHostedExecutionService({ actors, tenantLimits: { 'tenant-a': { maximumSessions: -1 } } }), /non-negative safe integer/);
+  assert.throws(() => new LocalHostedExecutionService({ actors, tenantLimits: { 'tenant-a': { unknown: 1 } } }), /unsupported field/);
+});
+
 test('hosted participant sessions ingest contiguous idempotent batches with revision control', async () => {
   const { bundle } = await fixture();
   const service = createService();

@@ -20,6 +20,7 @@
 - [x] Data retention is opt-in, owner-planned and explicitly confirmed; purge removes participant credentials, identifiers, raw events, snapshots and cached response copies while preserving a validated audit tombstone across restart.
 - [x] Server-assigned tenant identity scopes queues, idempotency, deployments, sessions, links, data, retention, audit, metrics and filesystem assets; cross-tenant probes disclose no resource existence.
 - [x] Persisted participant and launch credentials contain no plaintext, use HMAC lookup indexes and authenticated encryption, reject tampering/missing keys, and rotate without breaking restart idempotency.
+- [x] Server-configured tenant capacity limits reject deployment/session/link/event growth before mutation, expose only owner-scoped usage, and do not double-charge idempotent retries.
 - [x] Workspace binaries are authenticated, checksum-locked, atomically uploaded and audited before deployment readiness; incomplete or immutable deployments reject processing or replacement.
 - [x] Participant launch tokens enforce expiry, quotas, revocation and deployment deactivation without interrupting active sessions.
 - [x] Participant bootstrap verifies the frozen graph, omits credentials and marks unsafe or unresolved resources unavailable.

@@ -43,6 +43,10 @@ test('Hosted HTTP API carries a complete Runtime V2 session with stable errors a
   const operator = new HostedHttpClient({ baseUrl: 'https://hosted.example', accessToken: 'operator-http-token', fetch: transport });
   const viewer = new HostedHttpClient({ baseUrl: 'https://hosted.example', accessToken: 'viewer-http-token', fetch: transport });
   const deployment = await owner.publish(bundle, { idempotencyKey: 'http-publish' });
+  const capacity = await owner.tenantCapacity();
+  assert.equal(capacity.usage.deployments, 1);
+  assert.equal(capacity.limits.maximumDeployments, null);
+  await assert.rejects(() => viewer.tenantCapacity(), error => error instanceof HostedHttpError && error.status === 403 && error.code === 'forbidden');
   assert.equal((await handler(new Request('https://hosted.example/v1/audit'))).status, 401);
   assert.equal((await handler(new Request('https://hosted.example/v1/deployments', { method: 'POST', headers: { authorization: 'Bearer owner-http-token', 'content-type': 'application/json' }, body: '{' }))).status, 400);
   assert.equal(deployment.status, 'queued');
@@ -73,6 +77,10 @@ test('Hosted HTTP API carries a complete Runtime V2 session with stable errors a
   await assert.rejects(() => viewer.deploymentData(deployment.deploymentId), error => error instanceof HostedHttpError && error.status === 403 && error.code === 'forbidden');
   const missingAuth = new HostedHttpClient({ baseUrl: 'https://hosted.example', accessToken: 'invalid-token', fetch: transport });
   await assert.rejects(() => missingAuth.deployment(deployment.deploymentId), error => error.status === 403);
+  const limitedService = new LocalHostedExecutionService({ ...serviceOptions(), tenantLimits: { default: { maximumDeployments: 0 } } });
+  const limitedHandler = createHostedHttpHandler(limitedService);
+  const limitedOwner = new HostedHttpClient({ baseUrl: 'https://limited.example', accessToken: 'owner-http-token', fetch: (input, init) => limitedHandler(new Request(input, init)) });
+  await assert.rejects(() => limitedOwner.publish(bundle, { idempotencyKey: 'limited-publish' }), error => error instanceof HostedHttpError && error.status === 409 && error.code === 'conflict');
 });
 
 test('Hosted HTTP API grants CORS only to configured participant application origins', async () => {

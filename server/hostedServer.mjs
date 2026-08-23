@@ -19,6 +19,7 @@ const staticDirectory = process.env.PHYSIOFLOW_STATIC_DIR ? resolve(process.env.
 const assetDirectory = process.env.PHYSIOFLOW_ASSET_DIR ? resolve(process.env.PHYSIOFLOW_ASSET_DIR) : null;
 const allowedOrigins = jsonEnvironment('PHYSIOFLOW_ALLOWED_ORIGINS_JSON', null);
 const rateLimits = jsonEnvironment('PHYSIOFLOW_RATE_LIMITS_JSON', undefined);
+const tenantLimits = jsonEnvironment('PHYSIOFLOW_TENANT_LIMITS_JSON', undefined);
 const maximumAssetBytes = Number(process.env.PHYSIOFLOW_MAX_ASSET_BYTES || 250 * 1024 * 1024);
 if (!Number.isInteger(maximumAssetBytes) || maximumAssetBytes < 1) throw new Error('PHYSIOFLOW_MAX_ASSET_BYTES must be a positive integer');
 const trustedProxyHops = Number(process.env.PHYSIOFLOW_TRUSTED_PROXY_HOPS || 0);
@@ -39,6 +40,7 @@ const hosted = await createHostedNodeServer({
   maximumAssetBytes,
   rateLimits,
   trustedProxyHops,
+  serviceOptions: { tenantLimits },
 });
 const listening = await hosted.listen();
 console.log(`PhysioFlow hosted service listening at ${listening.baseUrl}`);

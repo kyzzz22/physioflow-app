@@ -22,6 +22,7 @@ The single-node adapter additionally exposes unauthenticated `GET /healthz` for 
 | --- | --- | --- | --- |
 | POST | `/v1/deployments` | `deployment.publish` | Validate and enqueue a frozen deployment bundle |
 | POST | `/v1/deployments/process-next` | `deployment.manage` | Advance the next queued deployment to ready |
+| GET | `/v1/tenant-capacity` | `audit.read` | Read this tenant's limits, usage and remaining logical capacity |
 | GET | `/v1/deployments/:id` | `deployment.read` | Read deployment metadata |
 | GET | `/v1/deployments/:id/data` | `data.read` | Export every session record, frozen provenance and related audit entry |
 | GET | `/v1/deployments/:id/retention-plan?asOf=...` | `data.purge` | Preview terminal session data eligible under the frozen retention policy |
@@ -51,4 +52,4 @@ Hosted state has its own versioned schema. It contains deployments, launch-link 
 - `WebStorageHostedStateStore` for a durable single-browser sandbox;
 - `FileHostedStateStore` in the Node adapter for validated, mode-`0600`, atomic single-process persistence.
 
-A production store can implement the same interface with transactional SQL, an append-only event database, object storage, or another durable backend. The included Node server also serves the participant application and signed filesystem assets; see `SELF_HOSTING.md`. Application-layer resource isolation is documented in `TENANT_ISOLATION.md`, bearer/launch-token storage and rotation in `CREDENTIAL_PROTECTION.md`, deployment-level research export in `HOSTED_DATA_EXPORT.md`, and explicit live-state pseudonymization in `DATA_RETENTION.md`. Managed identity, physical storage/key separation, backup expiry, retention scheduling, distributed rate limiting, and operational monitoring remain responsibilities of the hosting environment.
+A production store can implement the same interface with transactional SQL, an append-only event database, object storage, or another durable backend. The included Node server also serves the participant application and signed filesystem assets; see `SELF_HOSTING.md`. Application-layer resource isolation is documented in `TENANT_ISOLATION.md`, capacity admission in `TENANT_CAPACITY.md`, bearer/launch-token storage and rotation in `CREDENTIAL_PROTECTION.md`, deployment-level research export in `HOSTED_DATA_EXPORT.md`, and explicit live-state pseudonymization in `DATA_RETENTION.md`. Managed identity, physical storage/key separation, backup expiry, retention scheduling, distributed rate limiting, and operational monitoring remain responsibilities of the hosting environment.

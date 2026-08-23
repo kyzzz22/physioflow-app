@@ -32,6 +32,7 @@ The default static directory is `./dist`. Put the service behind an HTTPS revers
 | `PHYSIOFLOW_ASSET_SECRET` | Required with asset delivery; at least 32 characters |
 | `PHYSIOFLOW_MAX_ASSET_BYTES` | Per-asset upload limit; defaults to 250 MiB |
 | `PHYSIOFLOW_RATE_LIMITS_JSON` | Optional fixed-window limits; use `false` only behind an equivalent gateway |
+| `PHYSIOFLOW_TENANT_LIMITS_JSON` | Optional per-tenant deployment/session/link/event-count/event-byte capacity object |
 | `PHYSIOFLOW_TRUSTED_PROXY_HOPS` | Exact trusted reverse-proxy hop count; defaults to `0` |
 | `HOST`, `PORT` | Listen address and port |
 
@@ -42,6 +43,8 @@ The state writer validates every snapshot, hashes credential indexes, seals reco
 `GET /healthz` is a lightweight process-liveness check. `GET /readyz` verifies that the state store can be read and written and that every processed deployment still has valid workspace assets. It returns HTTP 503 when either check fails; queued deployments may legitimately have missing assets and do not make the server unavailable.
 
 The server applies bounded per-source limits to public redemption, API calls, asset upload and signed download. `GET /metrics` requires `audit.read` and exposes only aggregate process/resource counts. Forwarded addresses are ignored unless an exact trusted-proxy hop count is configured. See `HOSTED_OPERATIONS.md`.
+
+Tenant capacity limits reject new logical resources before mutation and expose owner-only usage through `GET /v1/tenant-capacity`. Retention purge releases raw-event capacity. See `TENANT_CAPACITY.md`.
 
 Use the offline `hosted:backup`, `hosted:backup:verify`, and `hosted:restore` commands for checksum-inventoried state and asset backups. Restore refuses existing targets. Stop the server before creating a backup and rehearse recovery separately; see `BACKUP_AND_RECOVERY.md`.
 

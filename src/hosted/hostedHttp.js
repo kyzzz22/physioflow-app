@@ -91,6 +91,7 @@ export function createHostedHttpHandler(service, options = {}) {
         return json(await service.publishDeployment(body.bundle, { ...(body.options || {}), idempotencyKey }, context), 201);
       }
       if (method === 'POST' && path === '/v1/deployments/process-next') return json(await service.processNextDeployment(context));
+      if (method === 'GET' && path === '/v1/tenant-capacity') return json(await service.readTenantCapacity(context));
       if (method === 'GET' && path === '/v1/audit') return json(await service.readAudit(context));
       let match = path.match(/^\/v1\/deployments\/([^/]+)$/);
       if (method === 'GET' && match) return json(await service.getDeployment(decodeURIComponent(match[1]), context));
@@ -239,5 +240,6 @@ export class HostedHttpClient {
   syncState(id, state, options) { return this.request('PUT', `/sessions/${encodeURIComponent(id)}/state`, { state, options }); }
   completeSession(id, options) { return this.request('POST', `/sessions/${encodeURIComponent(id)}/complete`, { options }); }
   sessionData(id) { return this.request('GET', `/sessions/${encodeURIComponent(id)}/data`); }
+  tenantCapacity() { return this.request('GET', '/tenant-capacity'); }
   audit() { return this.request('GET', '/audit'); }
 }

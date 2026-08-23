@@ -30,7 +30,7 @@ test('hosted retention requires an owner plan and irreversibly pseudonymizes all
   const store = new MemoryHostedStateStore();
   let now = '2026-01-02T00:00:00.000Z';
   let id = 0;
-  const serviceOptions = { actors, store, clock: () => now, idFactory: prefix => `${prefix}_retention_${++id}` };
+  const serviceOptions = { actors, store, tenantLimits: { default: { maximumStoredEvents: 1 } }, clock: () => now, idFactory: prefix => `${prefix}_retention_${++id}` };
   const service = await createPersistentHostedExecutionService(serviceOptions);
   const handler = createHostedHttpHandler(service);
   const fetch = (input, init) => handler(new Request(input, init));
@@ -57,6 +57,7 @@ test('hosted retention requires an owner plan and irreversibly pseudonymizes all
   };
   const synced = await participant.syncState(session.sessionId, snapshot, { syncId: 'retention-state', expectedRevision: receipt.revision });
   await participant.completeSession(session.sessionId, { completionId: 'retention-complete', expectedRevision: synced.revision });
+  assert.equal((await owner.tenantCapacity()).remaining.storedEvents, 0);
 
   const early = await owner.retentionPlan(deployment.deploymentId, { asOf: '2026-01-31T23:59:59.999Z' });
   assert.equal(early.enabled, true);
@@ -78,6 +79,7 @@ test('hosted retention requires an owner plan and irreversibly pseudonymizes all
   assert.deepEqual(purged.purgedSessions, [session.sessionId]);
   assert.equal(purged.purgedEventCount, 1);
   assert.deepEqual(await owner.purgeExpiredData(deployment.deploymentId, purgeRequest), purged);
+  assert.equal((await owner.tenantCapacity()).remaining.storedEvents, 1);
 
   const purgedCreationRetry = await operator.createSession(deployment.deploymentId, { idempotencyKey: 'retention-session', participantId: 'PARTICIPANT-TO-PURGE' });
   assert.equal(purgedCreationRetry.sessionId, session.sessionId);

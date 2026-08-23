@@ -25,6 +25,7 @@ Tenant IDs are 1–128 characters and may contain letters, numbers, dot, undersc
 - Audit reads and resource metrics include only the authenticated actor's tenant.
 - Request counters are recorded per authenticated tenant; unauthenticated launch and signed-delivery traffic is kept in a separate public bucket.
 - Authenticated rate-limit windows are tenant-partitioned, so tenants sharing a proxy address do not consume each other's allowance.
+- Optional capacity policies independently bound each tenant's deployments, sessions, launch links, retained events, and logical event bytes; owner-visible usage contains no other tenant totals.
 - New filesystem assets use `<asset-root>/<tenantId>/<deploymentId>/<assetId>`, preventing deployments with the same portable bundle ID from sharing files.
 
 Signed participant asset URLs remain usable without an actor credential because they contain an expiry, checksum, media type, and HMAC signature. The tenant/deployment path is covered by that signature.
@@ -35,4 +36,4 @@ State 1.3 reads state 1.0–1.2. Historical pre-tenant records are assigned to `
 
 ## Boundary of the guarantee
 
-This is application-layer tenant isolation with validated persistent relationships. The single-node adapter still stores all tenants in one state file and one backup set; readiness is process-wide. Production installations needing contractual or regulatory separation should add managed identity, tenant-aware database row policies, encryption/key separation, per-tenant backup lifecycle, quotas, and independent audit export. Never treat a user-supplied tenant header as identity—the tenant comes only from the server-configured bearer credential or scoped participant/launch record.
+This is application-layer tenant isolation with validated persistent relationships and logical admission quotas. The single-node adapter still stores all tenants in one state file and one backup set; readiness is process-wide. Production installations needing contractual or regulatory separation should add managed identity, tenant-aware database row policies, encryption/key separation, per-tenant backup lifecycle, physical storage quotas, and independent audit export. Never treat a user-supplied tenant header as identity—the tenant comes only from the server-configured bearer credential or scoped participant/launch record. See `TENANT_CAPACITY.md`.

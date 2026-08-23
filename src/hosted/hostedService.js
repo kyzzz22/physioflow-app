@@ -8,6 +8,7 @@ export const DEFAULT_HOSTED_TENANT_ID = 'default';
 const LEGACY_HOSTED_STATE_SCHEMA_VERSIONS = new Set(['1.0.0', '1.1.0', '1.2.0']);
 const PRE_TENANT_HOSTED_STATE_SCHEMA_VERSIONS = new Set(['1.0.0', '1.1.0']);
 const TENANT_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const TENANT_LIMIT_FIELDS = Object.freeze(['maximumDeployments', 'maximumSessions', 'maximumLaunchLinks', 'maximumStoredEvents', 'maximumStoredEventBytes']);
 
 const ROLE_PERMISSIONS = Object.freeze({
   owner: ['deployment.publish', 'deployment.read', 'deployment.manage', 'deployment.asset.write', 'session.start', 'session.read', 'session.bootstrap', 'session.manage', 'data.ingest', 'data.read', 'data.purge', 'audit.read'],
@@ -22,6 +23,28 @@ const TERMINAL_SESSION_STATES = new Set(['completed', 'failed', 'cancelled']);
 function clone(value) { return value === undefined ? undefined : structuredClone(value); }
 
 function tenantIdOf(record) { return record?.tenantId || DEFAULT_HOSTED_TENANT_ID; }
+
+function normalizeTenantLimits(value) {
+  if (value === undefined || value === null) return new Map();
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Hosted tenant limits must be an object keyed by tenant ID');
+  return new Map(Object.entries(value).map(([tenantId, policy]) => {
+    if (!TENANT_ID.test(tenantId) || tenantId !== tenantId.trim()) throw new Error(`Hosted tenant limit ID ${tenantId || '(missing)'} is invalid`);
+    if (!policy || typeof policy !== 'object' || Array.isArray(policy)) throw new Error(`Hosted tenant limits for ${tenantId} must be an object`);
+    const unknown = Object.keys(policy).filter(key => !TENANT_LIMIT_FIELDS.includes(key));
+    if (unknown.length) throw new Error(`Hosted tenant limits for ${tenantId} contain unsupported field ${unknown[0]}`);
+    const normalized = {};
+    for (const field of TENANT_LIMIT_FIELDS) {
+      const limit = policy[field] ?? null;
+      if (limit !== null && (!Number.isSafeInteger(limit) || limit < 0)) throw new Error(`Hosted tenant limit ${tenantId}.${field} must be a non-negative safe integer or null`);
+      normalized[field] = limit;
+    }
+    return [tenantId, Object.freeze(normalized)];
+  }));
+}
+
+function eventStorageBytes(event) {
+  return new TextEncoder().encode(JSON.stringify(event)).length;
+}
 
 function publicDeployment(record) {
   const next = clone(record);
@@ -114,6 +137,7 @@ export class LocalHostedExecutionService {
     this.launchTokens = new Map();
     this.idempotency = new Map();
     this.auditEntries = [];
+    this.tenantLimits = normalizeTenantLimits(options.tenantLimits);
     for (const actor of options.actors || []) {
       validateActor(actor);
       if (this.actors.has(actor.accessToken)) throw new Error('Hosted actor access tokens must be unique');
@@ -177,6 +201,51 @@ export class LocalHostedExecutionService {
     return this.actors.get(context.accessToken)?.tenantId || this.participantTokens.get(context.accessToken)?.tenantId || null;
   }
 
+  tenantUsage(tenantId) {
+    const deployments = [...this.deployments.values()].filter(record => tenantIdOf(record) === tenantId);
+    const deploymentIds = new Set(deployments.map(record => record.deploymentId));
+    const sessions = [...this.sessions.values()].filter(record => tenantIdOf(record) === tenantId);
+    const launchLinks = [...this.launchLinks.values()].filter(record => tenantIdOf(record) === tenantId && deploymentIds.has(record.deploymentId));
+    return {
+      deployments: deployments.length,
+      sessions: sessions.length,
+      launchLinks: launchLinks.length,
+      storedEvents: sessions.reduce((total, record) => total + record.events.length, 0),
+      storedEventBytes: sessions.reduce((total, record) => total + record.events.reduce((sum, event) => sum + eventStorageBytes(event), 0), 0),
+    };
+  }
+
+  assertTenantCapacity(tenantId, additions) {
+    const limits = this.tenantLimits.get(tenantId);
+    if (!limits) return;
+    const usage = this.tenantUsage(tenantId);
+    const checks = [
+      ['maximumDeployments', 'deployments'],
+      ['maximumSessions', 'sessions'],
+      ['maximumLaunchLinks', 'launch links'],
+      ['maximumStoredEvents', 'stored events'],
+      ['maximumStoredEventBytes', 'stored event bytes'],
+    ];
+    for (const [limitField, label] of checks) {
+      const usageField = limitField.replace(/^maximum/, '').replace(/^./, value => value.toLowerCase());
+      const limit = limits[limitField];
+      const next = usage[usageField] + (additions[limitField] || 0);
+      if (limit !== null && next > limit) throw new Error(`Hosted tenant ${tenantId} ${label} quota is exhausted`);
+    }
+  }
+
+  readTenantCapacity(context = {}) {
+    const actor = this.authorize(context, 'audit.read');
+    const limits = this.tenantLimits.get(actor.tenantId) || Object.fromEntries(TENANT_LIMIT_FIELDS.map(field => [field, null]));
+    const usage = this.tenantUsage(actor.tenantId);
+    const remaining = {};
+    for (const field of TENANT_LIMIT_FIELDS) {
+      const usageField = field.replace(/^maximum/, '').replace(/^./, value => value.toLowerCase());
+      remaining[usageField] = limits[field] === null ? null : Math.max(0, limits[field] - usage[usageField]);
+    }
+    return { schemaVersion: '1.0.0', tenantId: actor.tenantId, measuredAt: this.clock(), limits: clone(limits), usage, remaining };
+  }
+
   audit(action, actor, resource = {}, detail = {}) {
     const entry = Object.freeze({
       auditId: this.idFactory('audit'),
@@ -223,6 +292,7 @@ export class LocalHostedExecutionService {
 
   createSessionRecord(deployment, request, actor) {
     this.requireAcceptingSessions(deployment);
+    this.assertTenantCapacity(tenantIdOf(deployment), { maximumSessions: 1 });
     const now = this.clock();
     const sessionId = this.idFactory('hosted_session');
     const participantId = request.participantId || this.idFactory('participant');
@@ -262,6 +332,7 @@ export class LocalHostedExecutionService {
     const check = await validateDeploymentBundle(bundle);
     if (!check.valid) throw new Error(`Invalid deployment bundle:\n${check.errors.join('\n')}`);
     return this.idempotent(actor, 'deployment.publish', options.idempotencyKey, bundle.bundleHash, () => {
+      this.assertTenantCapacity(actor.tenantId, { maximumDeployments: 1 });
       const now = this.clock();
       const deploymentId = this.idFactory('hosted_deployment');
       const record = {
@@ -351,6 +422,7 @@ export class LocalHostedExecutionService {
     if (request.expiresAt && !Number.isFinite(Date.parse(request.expiresAt))) throw new Error('Hosted launch link expiry must be a valid timestamp');
     return this.idempotent(actor, `launch-link.create:${deploymentId}`, request.idempotencyKey, JSON.stringify({ maximumUses, expiresAt: request.expiresAt || null }), () => {
       this.requireAcceptingSessions(deployment);
+      this.assertTenantCapacity(tenantIdOf(deployment), { maximumLaunchLinks: 1 });
       if (request.expiresAt && expired(request.expiresAt, this.clock())) throw new Error('Hosted launch link expiry must be in the future');
       const launchLinkId = this.idFactory('launch_link');
       const launchToken = this.idFactory('launch_token');
@@ -448,6 +520,10 @@ export class LocalHostedExecutionService {
       previousElapsed = event.elapsedMonotonicMs;
       expectedSequence += 1;
     }
+    this.assertTenantCapacity(tenantIdOf(record), {
+      maximumStoredEvents: events.length,
+      maximumStoredEventBytes: events.reduce((total, event) => total + eventStorageBytes(event), 0),
+    });
     const next = {
       ...record,
       status: record.status === 'ready' ? 'running' : record.status,
@@ -640,5 +716,6 @@ export class HostedExecutionClient {
   purgeExpiredData(id, request) { return this.service.purgeExpiredSessionData(id, request, this.context); }
   sessionData(id) { return this.service.readSessionData(id, this.context); }
   deploymentData(id) { return this.service.readDeploymentData(id, this.context); }
+  tenantCapacity() { return this.service.readTenantCapacity(this.context); }
   audit() { return this.service.readAudit(this.context); }
 }

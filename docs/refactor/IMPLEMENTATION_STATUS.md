@@ -12,7 +12,7 @@ The planned MVP refactor phases 0–6 are implemented on the `demo` branch.
 | 5 — Data | Raw JSONL, normalized CSV, snapshots, manifests, data dictionary, quality report, full package download, participant/media/device lifecycle events, reaction times, device provenance, and independently tested validator |
 | 6 — Migration/Pilot | In-app and CLI migration, migration reports, native Questionnaire adapter, review gate, freeze hashes, three representative migration tests, operator guide, and release gate |
 
-Current automated gate: `npm run quality:release` passes as one authoritative local/CI command: 163 tests, a production build without bundle warnings, strict zero-warning lint, and three isolated browser flows.
+Current automated gate: `npm run quality:release` passes as one authoritative local/CI command: 164 tests, a production build without bundle warnings, strict zero-warning lint, and three isolated browser flows.
 
 Composer V2 now includes a typed variable catalog with scope, source, default value, and export policy, plus a variable picker for condition inputs. Variable renames update node and participant-UI bindings atomically; referenced variables cannot be removed accidentally.
 
@@ -55,6 +55,8 @@ Governed hosted retention is opt-in through the integrity-protected deployment p
 Hosted tenant isolation assigns server-controlled ownership to every deployment-derived record and access path. Queue processing, idempotency, resource lookup, export, retention, audit, metrics and filesystem assets are tenant-scoped; cross-tenant IDs are indistinguishable from missing records. Legacy pre-tenant state migrates into `default` without losing idempotent retries or existing asset paths. See `TENANT_ISOLATION.md`.
 
 Hosted state 1.3 protects persisted participant and launch credentials without weakening restart idempotency: lookup indexes are HMAC-SHA-256 digests and recoverable response credentials are sealed with authenticated AES-256-GCM. Versioned key rings support eager rotation and old plaintext states are atomically upgraded at startup. See `CREDENTIAL_PROTECTION.md`.
+
+Hosted tenant capacity policies bound deployment, session, launch-link, retained-event and logical event-byte growth independently per server-assigned tenant. Admission occurs before mutation, idempotent retries are not charged twice, retention purge releases event capacity, and owners can inspect only their tenant's limits and remaining allowance. See `TENANT_CAPACITY.md`.
 
 Runtime V2 now attaches directly to a hosted participant session through a serialized synchronization controller. It sends incremental events before their matching snapshot, retries lost acknowledgements idempotently, records completed or failed terminal states exactly once, exposes sync errors/retry in the runner, and prevents leaving a terminal run until required hosted synchronization succeeds.
 
