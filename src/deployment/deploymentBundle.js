@@ -45,6 +45,8 @@ export async function createDeploymentBundle(protocol, options = {}) {
   if (actualHash !== protocol.freeze.configHash) throw new Error('Frozen protocol configuration no longer matches its hash');
   const providerId = options.providerId || 'org.physioflow.portable';
   if (!PROVIDER_ID.test(providerId)) throw new Error('Deployment provider ID must use lowercase dot/dash notation');
+  if (options.maximumSessions !== undefined && options.maximumSessions !== null && (!Number.isInteger(options.maximumSessions) || options.maximumSessions < 1)) throw new Error('Deployment maximum sessions must be a positive integer');
+  if (options.expiresAt && !Number.isFinite(Date.parse(options.expiresAt))) throw new Error('Deployment expiry must be a valid timestamp');
   const bundle = {
     schemaVersion: DEPLOYMENT_BUNDLE_SCHEMA_VERSION,
     bundleId: options.bundleId || `deployment_${globalThis.crypto.randomUUID()}`,
@@ -91,6 +93,8 @@ export async function validateDeploymentBundle(bundle) {
   }
   if (!bundle.bundleHash?.match(/^[a-f0-9]{64}$/)) errors.push('Deployment bundle hash is invalid');
   else if (await sha256(unsignedBundle(bundle)) !== bundle.bundleHash) errors.push('Deployment bundle content does not match its hash');
+  if (bundle.executionPolicy?.maximumSessions !== null && bundle.executionPolicy?.maximumSessions !== undefined && (!Number.isInteger(bundle.executionPolicy.maximumSessions) || bundle.executionPolicy.maximumSessions < 1)) errors.push('Deployment maximum sessions must be a positive integer');
+  if (bundle.executionPolicy?.expiresAt && !Number.isFinite(Date.parse(bundle.executionPolicy.expiresAt))) errors.push('Deployment expiry must be a valid timestamp');
   return { valid: errors.length === 0, errors };
 }
 

@@ -20,13 +20,13 @@ const actors = [
   { actorId: 'viewer-http', role: 'viewer', accessToken: 'viewer-http-token' },
 ];
 
-async function fixture() {
+async function fixture(deploymentOptions = {}) {
   const protocol = await freezeProtocolGraph(
     createProtocolGraph({ idFactory: createSequentialIdFactory(), now: '2026-08-23T00:00:00.000Z' }),
     createCoreComponentRegistry(),
     { now: '2026-08-23T01:00:00.000Z' },
   );
-  return { protocol, bundle: await createDeploymentBundle(protocol, { bundleId: 'http_bundle', createdAt: '2026-08-23T02:00:00.000Z' }) };
+  return { protocol, bundle: await createDeploymentBundle(protocol, { bundleId: 'http_bundle', createdAt: '2026-08-23T02:00:00.000Z', ...deploymentOptions }) };
 }
 
 function serviceOptions() {
@@ -89,4 +89,36 @@ test('persistent hosted state restores deployments, scoped sessions and data aft
   const invalid = structuredClone(serialized);
   invalid.sessions[0].deploymentId = 'missing-deployment';
   await assert.rejects(() => createPersistentHostedExecutionService({ ...serviceOptions(), store: new MemoryHostedStateStore(invalid) }), /unknown deployment/);
+  const legacy = structuredClone(serialized);
+  legacy.schemaVersion = '1.0.0';
+  delete legacy.launchLinks;
+  delete legacy.launchTokens;
+  const migratedLegacy = await createPersistentHostedExecutionService({ ...serviceOptions(), store: new MemoryHostedStateStore(legacy) });
+  assert.equal((await new HostedExecutionClient(migratedLegacy, 'owner-http-token').deployment(deployment.deploymentId)).status, 'ready');
+});
+
+test('public launch token survives persistence and enforces anonymous redemption and deployment shutdown over HTTP', async () => {
+  const { bundle } = await fixture({ maximumSessions: 1, expiresAt: '2026-08-24T00:00:00.000Z' });
+  const store = new MemoryHostedStateStore();
+  const firstService = await createPersistentHostedExecutionService({ ...serviceOptions(), store });
+  const firstTransport = (input, init) => createHostedHttpHandler(firstService)(new Request(input, init));
+  const owner = new HostedHttpClient({ baseUrl: 'https://hosted.example', accessToken: 'owner-http-token', fetch: firstTransport });
+  const operator = new HostedHttpClient({ baseUrl: 'https://hosted.example', accessToken: 'operator-http-token', fetch: firstTransport });
+  const deployment = await owner.publish(bundle, { idempotencyKey: 'public-publish' });
+  await operator.processNextDeployment();
+  const link = await operator.createLaunchLink(deployment.deploymentId, { idempotencyKey: 'public-link', maximumUses: 1, expiresAt: '2026-08-23T23:00:00.000Z' });
+
+  const restarted = await createPersistentHostedExecutionService({ ...serviceOptions(), store });
+  const secondTransport = (input, init) => createHostedHttpHandler(restarted)(new Request(input, init));
+  const anonymous = new HostedHttpClient({ baseUrl: 'https://hosted.example', fetch: secondTransport });
+  const restartedOperator = new HostedHttpClient({ baseUrl: 'https://hosted.example', accessToken: 'operator-http-token', fetch: secondTransport });
+  const redeemed = await anonymous.redeemLaunchLink(link.launchToken, { idempotencyKey: 'public-redeem', participantId: 'PUBLIC-HTTP' });
+  assert.equal(redeemed.session.participantId, 'PUBLIC-HTTP');
+  assert.equal((await anonymous.redeemLaunchLink(link.launchToken, { idempotencyKey: 'public-redeem', participantId: 'PUBLIC-HTTP' })).session.sessionId, redeemed.session.sessionId);
+  await assert.rejects(() => anonymous.redeemLaunchLink(link.launchToken, { idempotencyKey: 'public-redeem-2' }), error => error.status === 409 && error.code === 'conflict');
+  const current = await restartedOperator.deployment(deployment.deploymentId);
+  assert.equal((await restartedOperator.deactivateDeployment(deployment.deploymentId, { idempotencyKey: 'public-stop', expectedRevision: current.revision })).status, 'deactivated');
+  const saved = await store.load();
+  assert.equal(saved.launchLinks[0].useCount, 1);
+  assert.equal(saved.sessions.length, 1);
 });

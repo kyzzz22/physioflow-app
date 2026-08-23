@@ -10,6 +10,8 @@ PhysioFlow deployment bundles separate experiment design from the system that ho
 4. Validate the bundle before handing it to a provider.
 5. A provider implementing `submit`, `status`, and `cancel` can accept the same bundle without changing the runtime or protocol model.
 
+The execution policy can bound the total number of participant sessions and set an expiry timestamp. Hosted services enforce those immutable bundle limits in addition to any narrower per-link use count or expiry.
+
 Composer can also inspect an imported deployment bundle and reports protocol or manifest tampering before any execution request is made.
 
 ## Safety and reproducibility

@@ -503,6 +503,8 @@ function DeploymentCatalog({ protocol, onHostedRun, onMessage }) {
   const [hostedDeployment, setHostedDeployment] = useState(null);
   const [hostedSession, setHostedSession] = useState(null);
   const [participantId, setParticipantId] = useState('SANDBOX-P001');
+  const [maximumSessions, setMaximumSessions] = useState('5');
+  const [launchLink, setLaunchLink] = useState(null);
   const sandboxRef = useRef(null);
   const participantClientRef = useRef(null);
   if (!sandboxRef.current) {
@@ -512,7 +514,7 @@ function DeploymentCatalog({ protocol, onHostedRun, onMessage }) {
   const frozen = protocol.version?.status === 'frozen';
   const exportBundle = async () => {
     try {
-      const bundle = await createDeploymentBundle(protocol, { providerId: providerId.trim(), environment: environment.trim(), createdBy: 'local-operator' });
+      const bundle = await createDeploymentBundle(protocol, { providerId: providerId.trim(), environment: environment.trim(), createdBy: 'local-operator', maximumSessions: Number(maximumSessions) });
       downloadJson(`${protocol.metadata?.name || 'protocol'}.deployment.json`, bundle);
       setError('');
       onMessage(`Exported deployment bundle ${bundle.bundleId}`);
@@ -531,12 +533,13 @@ function DeploymentCatalog({ protocol, onHostedRun, onMessage }) {
   };
   const publishToSandbox = async () => {
     try {
-      const bundle = await createDeploymentBundle(protocol, { providerId: 'org.physioflow.local-sandbox', environment: 'sandbox', createdBy: 'local-owner' });
+      const bundle = await createDeploymentBundle(protocol, { providerId: 'org.physioflow.local-sandbox', environment: 'sandbox', createdBy: 'local-owner', maximumSessions: Number(maximumSessions) });
       const client = sandboxRef.current;
-      const queued = await client.publish(bundle, { idempotencyKey: `composer:${protocol.protocolId}:${protocol.freeze.configHash}` });
+      const queued = await client.publish(bundle, { idempotencyKey: `composer:${protocol.protocolId}:${protocol.freeze.configHash}:${maximumSessions}` });
       const ready = client.processNextDeployment() || client.deployment(queued.deploymentId);
       setHostedDeployment(ready);
       setHostedSession(null);
+      setLaunchLink(null);
       setError('');
       onMessage(`Sandbox deployment ${ready.status}`);
     } catch (nextError) { setError(nextError.message); }
@@ -550,11 +553,46 @@ function DeploymentCatalog({ protocol, onHostedRun, onMessage }) {
       onMessage(`Created hosted sandbox session ${session.sessionId}`);
     } catch (nextError) { setError(nextError.message); }
   };
+  const createSandboxLaunchLink = async () => {
+    try {
+      const link = await sandboxRef.current.createLaunchLink(hostedDeployment.deploymentId, { idempotencyKey: `launch:${hostedDeployment.deploymentId}`, maximumUses: 1 });
+      setLaunchLink(link);
+      setError('');
+      onMessage(`Created revocable launch token ${link.launchLinkId}`);
+    } catch (nextError) { setError(nextError.message); }
+  };
+  const redeemSandboxLaunchLink = async () => {
+    try {
+      const result = await sandboxRef.current.redeemLaunchLink(launchLink.launchToken, { idempotencyKey: `redeem:${participantId.trim() || 'generated'}`, participantId: participantId.trim() || undefined });
+      participantClientRef.current = new HostedExecutionClient(sandboxRef.current.service, result.session.participantAccessToken);
+      setHostedSession(result.session);
+      setLaunchLink(current => ({ ...current, ...result.launchLink }));
+      setError('');
+      onMessage(`Redeemed launch token for ${result.session.sessionId}`);
+    } catch (nextError) { setError(nextError.message); }
+  };
+  const revokeSandboxLaunchLink = async () => {
+    try {
+      const revoked = await sandboxRef.current.revokeLaunchLink(launchLink.launchLinkId, { idempotencyKey: `revoke:${launchLink.launchLinkId}`, expectedRevision: launchLink.revision });
+      setLaunchLink(current => ({ ...current, ...revoked }));
+      setError('');
+      onMessage(`Revoked launch token ${revoked.launchLinkId}`);
+    } catch (nextError) { setError(nextError.message); }
+  };
+  const deactivateSandbox = async () => {
+    try {
+      const deactivated = await sandboxRef.current.deactivateDeployment(hostedDeployment.deploymentId, { idempotencyKey: `deactivate:${hostedDeployment.deploymentId}`, expectedRevision: hostedDeployment.revision });
+      setHostedDeployment(deactivated);
+      setError('');
+      onMessage(`Deactivated sandbox deployment ${deactivated.deploymentId}`);
+    } catch (nextError) { setError(nextError.message); }
+  };
   return <section className="deployment-catalog">
     <h3>Portable deployment</h3>
     <p>Package one frozen protocol, its dependency manifest, execution policy, and integrity hashes for a compatible local or remote execution provider.</p>
     <label>Provider ID<input value={providerId} onChange={event => setProviderId(event.target.value)} /></label>
     <label>Environment<input value={environment} onChange={event => setEnvironment(event.target.value)} /></label>
+    <label>Session quota<input type="number" min="1" step="1" value={maximumSessions} onChange={event => setMaximumSessions(event.target.value)} /></label>
     <button disabled={!frozen} onClick={exportBundle}>Export deployment bundle</button>
     <button disabled={!frozen} onClick={publishToSandbox}>Publish to local hosted sandbox</button>
     {!frozen && <small>Freeze this protocol version before deployment.</small>}
@@ -567,9 +605,12 @@ function DeploymentCatalog({ protocol, onHostedRun, onMessage }) {
     </article>}
     {hostedDeployment && <article className="deployment-valid">
       <b>Hosted sandbox · {hostedDeployment.status}</b>
-      <small>{hostedDeployment.deploymentId} · revision {hostedDeployment.revision}</small>
+      <small>{hostedDeployment.deploymentId} · revision {hostedDeployment.revision} · {hostedDeployment.sessionCount}/{hostedDeployment.maximumSessions ?? '∞'} sessions</small>
       <label>Participant ID<input value={participantId} onChange={event => setParticipantId(event.target.value)} /></label>
-      <button onClick={createSandboxSession}>Create sandbox session</button>
+      <button disabled={hostedDeployment.status !== 'ready'} onClick={createSandboxSession}>Create sandbox session</button>
+      <button disabled={hostedDeployment.status !== 'ready' || Boolean(launchLink)} onClick={createSandboxLaunchLink}>Create one-use launch token</button>
+      {launchLink && <><small>Launch {launchLink.launchLinkId} · {launchLink.status} · {launchLink.useCount}/{launchLink.maximumUses} uses</small><code>{launchLink.launchToken}</code><button disabled={launchLink.status !== 'active' || launchLink.useCount >= launchLink.maximumUses} onClick={redeemSandboxLaunchLink}>Redeem launch token</button><button disabled={launchLink.status !== 'active'} onClick={revokeSandboxLaunchLink}>Revoke launch token</button></>}
+      <button disabled={hostedDeployment.status === 'deactivated'} onClick={deactivateSandbox}>Deactivate deployment</button>
       {hostedSession && <><small>Session {hostedSession.sessionId} · {hostedSession.status} · revision {hostedSession.revision}</small><button onClick={() => {
         const session = structuredClone(hostedSession);
         delete session.participantAccessToken;

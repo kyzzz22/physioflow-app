@@ -12,7 +12,7 @@ The planned MVP refactor phases 0–6 are implemented on the `demo` branch.
 | 5 — Data | Raw JSONL, normalized CSV, snapshots, manifests, data dictionary, quality report, full package download, participant/media/device lifecycle events, reaction times, device provenance, and independently tested validator |
 | 6 — Migration/Pilot | In-app and CLI migration, migration reports, native Questionnaire adapter, review gate, freeze hashes, three representative migration tests, operator guide, and release gate |
 
-Current automated gate: `npm run quality:release` passes as one authoritative local/CI command: 134 tests, a production build without bundle warnings, strict zero-warning lint, and both isolated browser flows.
+Current automated gate: `npm run quality:release` passes as one authoritative local/CI command: 147 tests, a production build without bundle warnings, strict zero-warning lint, and both isolated browser flows.
 
 Composer V2 now includes a typed variable catalog with scope, source, default value, and export policy, plus a variable picker for condition inputs. Variable renames update node and participant-UI bindings atomically; referenced variables cannot be removed accidentally.
 
@@ -51,6 +51,8 @@ Hosted Service Contract 1.0 adds role-separated publication, an explicit deploym
 Runtime V2 now attaches directly to a hosted participant session through a serialized synchronization controller. It sends incremental events before their matching snapshot, retries lost acknowledgements idempotently, records completed or failed terminal states exactly once, exposes sync errors/retry in the runner, and prevents leaving a terminal run until required hosted synchronization succeeds.
 
 Hosted HTTP API v1 adds a framework-neutral Web Request/Response handler and a fetch-based client with Bearer authentication, bounded JSON bodies, stable status/error semantics, request timeouts and no-store security headers. A versioned hosted-state snapshot plus serialized `load`/`save` store boundary restores deployments, sessions, scoped tokens, idempotency, raw data and audit history after service restart. See `HOSTED_HTTP_API.md`.
+
+Public participant entry is now controlled by opaque launch tokens rather than exposing operator credentials. Deployment session quotas and expiry are inherited from the integrity-protected bundle; each link adds its own expiry/use limit, redemption is idempotent, revocation is immediate, and deployment deactivation blocks new sessions without killing active ones. These controls persist across service restart and are available through the HTTP API and Composer sandbox.
 
 The final hardening pass makes frozen protocols immutable: editing always creates a new draft protocol version with a distinct ID. Formal validation now checks participant UI completion paths, media sources, durations, rating ranges, migration review, and every required condition/loop control exit before preview or freeze.
 

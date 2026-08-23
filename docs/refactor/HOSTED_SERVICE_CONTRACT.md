@@ -14,8 +14,12 @@ The hosted service layer turns a portable deployment bundle into a controlled ex
 - Participant-token revocation when a session completes.
 - Separate metadata and raw-data permissions.
 - Immutable, sequential audit entries for publication, processing, session creation, ingestion, synchronization, and completion.
+- Deployment-level session quotas, optional expiry and explicit deactivation.
+- Opaque participant launch tokens with independent expiry, use quotas, idempotent redemption and immediate revocation.
 
 Composer Advanced includes a local hosted sandbox. A frozen version can be published, processed to ready, and used to create a participant session without a network service. This proves the application workflow while keeping development and offline use possible.
+
+The sandbox also exercises the public-entry lifecycle: create a one-use launch token, redeem it without an actor credential, run the resulting scoped session, revoke unused tokens, or deactivate the deployment. Deactivation blocks new sessions while already-issued participant sessions remain usable so active experiments are not destroyed.
 
 `HostedRuntimeSync` connects that session to Runtime V2. It uploads only unacknowledged event sequences, synchronizes the matching runtime snapshot under optimistic revision control, and finalizes a completed or failed hosted session only after both are accepted. Event, state, and terminal operations use deterministic idempotency identifiers, so a lost acknowledgement can be retried without duplicating remote records. The runner exposes sync progress and retry, and does not enable return-to-projects until required hosted finalization succeeds.
 

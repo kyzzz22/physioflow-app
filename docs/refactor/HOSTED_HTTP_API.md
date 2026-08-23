@@ -19,6 +19,10 @@ The HTTP adapter exposes Hosted Service Contract 1.0 without coupling the core s
 | POST | `/v1/deployments/process-next` | `deployment.manage` | Advance the next queued deployment to ready |
 | GET | `/v1/deployments/:id` | `deployment.read` | Read deployment metadata |
 | POST | `/v1/deployments/:id/sessions` | `session.start` | Create a scoped participant session |
+| POST | `/v1/deployments/:id/launch-links` | `session.start` | Create a limited, expiring participant launch token |
+| POST | `/v1/deployments/:id/deactivate` | `deployment.manage` | Stop new sessions without interrupting existing ones |
+| POST | `/v1/launch-links/redeem` | Public launch token | Idempotently exchange a launch token for one scoped session |
+| POST | `/v1/launch-links/:id/revoke` | `deployment.manage` | Revoke an unexpired launch token |
 | GET | `/v1/sessions/:id` | `session.read` | Read session metadata without raw events |
 | POST | `/v1/sessions/:id/events` | `data.ingest` | Append one contiguous idempotent event batch |
 | PUT | `/v1/sessions/:id/state` | `session.manage` | Synchronize the snapshot matching ingested events |
@@ -28,7 +32,7 @@ The HTTP adapter exposes Hosted Service Contract 1.0 without coupling the core s
 
 ## Persistence
 
-Hosted state has its own versioned schema. It contains deployments, sessions, scoped participant-token state, global and per-session idempotency records, raw events, snapshots, and audit entries. Actor credentials remain injected by the hosting environment rather than being embedded in the state snapshot.
+Hosted state has its own versioned schema. It contains deployments, launch-link metadata/token mappings, sessions, scoped participant-token state, global and per-session idempotency records, raw events, snapshots, and audit entries. Actor credentials remain injected by the hosting environment rather than being embedded in the state snapshot. State 1.1 reads legacy 1.0 snapshots and writes the expanded launch-link schema.
 
 `createPersistentHostedExecutionService` serializes mutations through a `load`/`save` store and validates restored relationships before accepting traffic. The included stores are:
 

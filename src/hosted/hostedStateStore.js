@@ -4,6 +4,10 @@ const MUTATIONS = new Set([
   'publishDeployment',
   'processNextDeployment',
   'createSession',
+  'deactivateDeployment',
+  'createLaunchLink',
+  'revokeLaunchLink',
+  'redeemLaunchLink',
   'appendEvents',
   'syncSessionState',
   'completeSession',
@@ -14,8 +18,10 @@ function clone(value) { return value === undefined ? undefined : structuredClone
 export function validateHostedState(state) {
   const errors = [];
   if (!state || typeof state !== 'object') return { valid: false, errors: ['Hosted state must be an object'] };
-  if (state.schemaVersion !== HOSTED_STATE_SCHEMA_VERSION) errors.push(`Unsupported hosted state version ${state.schemaVersion || '(missing)'}`);
-  for (const key of ['deployments', 'sessions', 'participantTokens', 'idempotency', 'auditEntries']) {
+  if (![HOSTED_STATE_SCHEMA_VERSION, '1.0.0'].includes(state.schemaVersion)) errors.push(`Unsupported hosted state version ${state.schemaVersion || '(missing)'}`);
+  const requiredArrays = ['deployments', 'sessions', 'participantTokens', 'idempotency', 'auditEntries'];
+  if (state.schemaVersion === HOSTED_STATE_SCHEMA_VERSION) requiredArrays.push('launchLinks', 'launchTokens');
+  for (const key of requiredArrays) {
     if (!Array.isArray(state[key])) errors.push(`Hosted state ${key} must be an array`);
   }
   const deploymentIds = new Set();
@@ -29,6 +35,15 @@ export function validateHostedState(state) {
     sessionIds.add(session.sessionId);
     if (!deploymentIds.has(session.deploymentId)) errors.push(`Hosted session ${session.sessionId || '(missing)'} references an unknown deployment`);
     if (!Array.isArray(session.idempotency)) errors.push(`Hosted session ${session.sessionId || '(missing)'} idempotency state must be an array`);
+  }
+  const launchLinkIds = new Set();
+  for (const link of state.launchLinks || []) {
+    if (!link.launchLinkId || launchLinkIds.has(link.launchLinkId)) errors.push('Hosted launch link IDs must be present and unique');
+    launchLinkIds.add(link.launchLinkId);
+    if (!deploymentIds.has(link.deploymentId)) errors.push(`Hosted launch link ${link.launchLinkId || '(missing)'} references an unknown deployment`);
+  }
+  for (const entry of state.launchTokens || []) {
+    if (!Array.isArray(entry) || entry.length !== 2 || !launchLinkIds.has(entry[1])) errors.push('Hosted launch tokens must reference a known launch link');
   }
   return { valid: errors.length === 0, errors };
 }

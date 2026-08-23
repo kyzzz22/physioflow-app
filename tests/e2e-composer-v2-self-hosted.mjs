@@ -113,8 +113,10 @@ try {
   await waitFor(`document.body.textContent.includes('Portable deployment')`, 'frozen deployment panel');
   await clickText('Publish to local hosted sandbox');
   await waitFor(`document.body.textContent.includes('Hosted sandbox') && document.body.textContent.includes('ready')`, 'ready hosted sandbox deployment');
-  await clickText('Create sandbox session');
-  await waitFor(`document.body.textContent.includes('Created hosted sandbox session') && document.body.textContent.includes('Session hosted_session_')`, 'hosted sandbox participant session');
+  await clickText('Create one-use launch token');
+  await waitFor(`document.body.textContent.includes('Created revocable launch token') && document.body.textContent.includes('Launch launch_link_')`, 'hosted sandbox launch token');
+  await clickText('Redeem launch token');
+  await waitFor(`document.body.textContent.includes('Redeemed launch token') && document.body.textContent.includes('Session hosted_session_')`, 'hosted sandbox participant session');
   await clickText('Run hosted session');
   await waitFor(`document.body.textContent.includes('RUNTIME V2 READY')`, 'hosted Runtime V2');
   await clickText('Begin experiment');
@@ -160,7 +162,7 @@ try {
   await clickText('Export changes');
   await waitFor(`document.body.textContent.includes('Exported') && document.body.textContent.includes('collaboration operation')`, 'collaboration change-set export');
 
-  console.log(JSON.stringify({ status: 'passed', composer: 'v2', nodes: 5, reusableSubflow: true, controlHandler: 'core.value-switch@1.0.0', collaborationChangeSet: true, portableDeployment: true, hostedService: true, hostedSandboxLifecycle: true, hostedRuntimeSync: true, sdkComponent: 'example.reaction-button@1.0.0', deviceConnector: 'org.physioflow.simulated-sensor@1.0.0' }, null, 2));
+  console.log(JSON.stringify({ status: 'passed', composer: 'v2', nodes: 5, reusableSubflow: true, controlHandler: 'core.value-switch@1.0.0', collaborationChangeSet: true, portableDeployment: true, hostedService: true, hostedSandboxLifecycle: true, hostedPublicLaunch: true, hostedRuntimeSync: true, sdkComponent: 'example.reaction-button@1.0.0', deviceConnector: 'org.physioflow.simulated-sensor@1.0.0' }, null, 2));
 } finally {
   socket.close();
   await cleanup();
