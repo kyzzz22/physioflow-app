@@ -12,7 +12,7 @@ The planned MVP refactor phases 0–6 are implemented on the `demo` branch.
 | 5 — Data | Raw JSONL, normalized CSV, snapshots, manifests, data dictionary, quality report, full package download, participant/media/device lifecycle events, reaction times, device provenance, and independently tested validator |
 | 6 — Migration/Pilot | In-app and CLI migration, migration reports, native Questionnaire adapter, review gate, freeze hashes, three representative migration tests, operator guide, and release gate |
 
-Current automated gate: `npm run quality:release` passes as one authoritative local/CI command: 158 tests, a production build without bundle warnings, strict zero-warning lint, and three isolated browser flows.
+Current automated gate: `npm run quality:release` passes as one authoritative local/CI command: 149 tests, a production build without bundle warnings, strict zero-warning lint, and three isolated browser flows.
 
 Composer V2 now includes a typed variable catalog with scope, source, default value, and export policy, plus a variable picker for condition inputs. Variable renames update node and participant-UI bindings atomically; referenced variables cannot be removed accidentally.
 
@@ -36,7 +36,7 @@ The release gate includes a deterministic refactor E2E test (compose → validat
 
 The release gate includes three self-hosted browser tests. The legacy compatibility flow verifies the formal-storage gate and completes, saves, and reloads a preview session. The Composer V2 flow freezes a minimal graph, publishes it through the hosted sandbox queue, creates and runs a participant session through successful hosted synchronization, creates a new editable version, then exercises typed variables, reusable subflows, SDK components and device connectors. The public-participant flow runs a real cross-origin hosted HTTP server, redeems a fragment launch token from `/participant`, validates Bootstrap, deletes local recovery data, restores from the hosted checkpoint after a full page reload, and completes synchronization. All launch isolated Vite and headless Chrome processes, and GitHub Actions runs them through the complete quality gate for `demo` pushes and pull requests.
 
-The production bundle now loads Composer V2, the legacy visual workspace, Session Review, Guide, Analytics, and both runtime runners as view-level chunks while keeping the first-screen Dashboard synchronous. This removes the ineffective dynamic-import warning and reduces the initial JavaScript chunk from roughly 749 kB to 489 kB without changing local-first behavior.
+The production bundle loads Composer V2, the legacy visual workspace, Session Review, Guide, Analytics, and both runtime runners as view-level chunks while keeping the first-screen Dashboard synchronous. React, React DOM, and Scheduler now occupy a stable vendor chunk, keeping the growing application entry well below the 500 kB warning threshold without changing local-first behavior.
 
 Returning from either runtime runner now reloads the saved session index before showing Dashboard. A completed local session is therefore visible immediately instead of appearing only after a full application reload.
 
@@ -61,6 +61,8 @@ Participant Bootstrap Contract 1.0 lets a scoped session retrieve the exact froz
 The standalone participant application now provides the real public execution surface at `/participant`. Launch credentials remain in the URL fragment, HTTP redemption is deterministic and idempotent across refreshes, CORS origins are explicitly configured, current hosted revisions are fetched before synchronization, and the newest local or server checkpoint resumes Runtime V2 without opening any researcher interface. See `PUBLIC_PARTICIPANT_APP.md`.
 
 The single-node Node adapter makes the hosted boundary directly runnable: it serves the built researcher/participant application, exposes health and API routes, restores validated state from an atomic mode-`0600` JSON store, accepts permission-checked workspace assets, gates deployment readiness on their SHA-256 integrity, and resolves them to expiring HMAC-signed URLs. Its real-network test uploads, processes, restarts, redeems, bootstraps, downloads an asset, and rejects a tampered signature. See `SELF_HOSTING.md`.
+
+Single-node recovery tooling now creates an offline atomic directory backup with a validated state snapshot, private asset copies and a complete SHA-256 inventory; verification detects altered/missing/unexpected files, and restore validates first and refuses existing targets. `/readyz` separately checks state-store readability/writability and processed-asset integrity. See `BACKUP_AND_RECOVERY.md`.
 
 The deployment asset pipeline replaces manual provisioning with authenticated, manifest-constrained upload. Workspace dependencies require safe IDs and SHA-256 checksums; owner/editor/operator uploads are size/type/content checked, atomically stored and audited; incomplete assets block readiness; ready deployments reject replacement. A browser-neutral coordinator loads local workspace binaries, uploads with progress, and verifies server readiness. See `DEPLOYMENT_ASSETS.md`.
 

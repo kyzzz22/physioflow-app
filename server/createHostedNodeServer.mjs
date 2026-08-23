@@ -100,13 +100,45 @@ export async function createHostedNodeServer(options = {}) {
   const store = options.store || new FileHostedStateStore(options.stateFile);
   const service = await createPersistentHostedExecutionService({ ...options.serviceOptions, actors: options.actors, store, assetResolver: assetDelivery?.resolve });
   const hosted = createHostedHttpHandler(service, { maximumBodyBytes, allowedOrigins: options.allowedOrigins });
+  const readiness = async () => {
+    const checks = { state: { ready: false }, assets: { ready: false } };
+    try {
+      const detail = store.checkReadiness ? await store.checkReadiness() : { initialized: Boolean(await store.load()) };
+      checks.state = { ready: true, ...detail };
+    } catch { checks.state = { ready: false }; }
+    try {
+      const invalid = [];
+      if (assetDelivery) {
+        for (const deployment of service.deployments.values()) {
+          if (deployment.status === 'queued') continue;
+          const status = await assetDelivery.status(deployment);
+          if (!status.ready) invalid.push(deployment.deploymentId);
+        }
+      } else {
+        for (const deployment of service.deployments.values()) {
+          if (deployment.status === 'queued') continue;
+          if ((deployment.bundle?.dependencies?.assets || []).some(asset => asset.source === 'workspace')) invalid.push(deployment.deploymentId);
+        }
+      }
+      checks.assets = { ready: invalid.length === 0, invalidDeployments: invalid.length };
+    } catch { checks.assets = { ready: false }; }
+    return { status: Object.values(checks).every(check => check.ready) ? 'ready' : 'not_ready', checks };
+  };
   const server = createServer(async (incoming, outgoing) => {
     try {
       const requestUrl = `${baseUrl || `http://${incoming.headers.host}`}${incoming.url}`;
       const pathname = new URL(requestUrl).pathname;
       const uploadMatch = pathname.match(/^\/v1\/deployments\/([^/]+)\/assets\/([^/]+)$/);
       const request = new Request(requestUrl, { method: incoming.method, headers: incoming.headers, body: await bodyOf(incoming, incoming.method === 'PUT' && uploadMatch ? maximumAssetBytes : maximumBodyBytes) });
-      if (pathname === '/healthz') return sendNodeResponse(outgoing, new Response(JSON.stringify({ status: 'ok' }), { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }), incoming.method === 'HEAD');
+      if (pathname === '/healthz') {
+        if (!['GET', 'HEAD'].includes(incoming.method)) return sendNodeResponse(outgoing, new Response('Method not allowed', { status: 405, headers: { allow: 'GET, HEAD', 'cache-control': 'no-store' } }));
+        return sendNodeResponse(outgoing, new Response(JSON.stringify({ status: 'ok' }), { headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } }), incoming.method === 'HEAD');
+      }
+      if (pathname === '/readyz') {
+        if (!['GET', 'HEAD'].includes(incoming.method)) return sendNodeResponse(outgoing, new Response('Method not allowed', { status: 405, headers: { allow: 'GET, HEAD', 'cache-control': 'no-store' } }));
+        const result = await readiness();
+        return sendNodeResponse(outgoing, new Response(JSON.stringify(result), { status: result.status === 'ready' ? 200 : 503, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } }), incoming.method === 'HEAD');
+      }
       const asset = await assetDelivery?.response(request);
       if (asset) return sendNodeResponse(outgoing, asset, incoming.method === 'HEAD');
       const assetListMatch = pathname.match(/^\/v1\/deployments\/([^/]+)\/assets$/);
@@ -151,6 +183,7 @@ export async function createHostedNodeServer(options = {}) {
   return {
     server,
     service,
+    readiness,
     async listen(port = options.port ?? 8787, host = listenHost) {
       await new Promise((resolveListen, rejectListen) => { server.once('error', rejectListen); server.listen(port, host, resolveListen); });
       const address = server.address();

@@ -26,7 +26,7 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 
 ## Acceptance evidence
 
-- Automated tests: 158 passing.
+- Automated tests: 149 passing.
 - Production build: passing.
 - Lint: zero errors and zero warnings.
 - Production bundle: no build warnings; view-level loading keeps the initial JavaScript chunk below the configured 500 kB warning threshold.
@@ -56,6 +56,7 @@ Target: `demo` branch, Protocol Graph / Composer V2 / Runtime V2
 - Unified release behavior: `npm run quality:release` is the single entry point used locally and by GitHub Actions, so tests, build, strict lint and all browser gates cannot drift into different release definitions.
 - Single-node hosting behavior: the real-network test blocks incomplete deployment processing, rejects unauthorized and incorrect uploads, audits a valid atomic upload, persists a deployment and launch link, reconstructs the service, redeems a participant, validates Bootstrap, downloads a checksum-verified signed asset, and rejects URL or file-content tampering.
 - Hosted data-export behavior: the HTTP test exports the exact frozen bundle, every session event and snapshot, related audit provenance and aggregate counts, confirms integrity, rejects viewer access, and proves participant bearer credentials are absent.
+- Backup/recovery behavior: tests create a private checksum-inventoried state/asset snapshot, verify and restore it, reject overwrite, tampering and symbolic links, and prove `/readyz` degrades when a processed asset changes.
 
 ## Known transition scope
 

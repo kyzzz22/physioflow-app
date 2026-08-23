@@ -62,6 +62,10 @@ test('Node hosted server persists its service, serves the participant app, and d
   const link = await owner.createLaunchLink(deployment.deploymentId, { idempotencyKey: 'node-link', maximumUses: 1 });
   assert.match(await fetch(`${firstAddress.baseUrl}/participant`).then(response => response.text()), /participant application/);
   assert.deepEqual(await fetch(`${firstAddress.baseUrl}/healthz`).then(response => response.json()), { status: 'ok' });
+  const ready = await fetch(`${firstAddress.baseUrl}/readyz`);
+  assert.equal(ready.status, 200);
+  assert.equal((await ready.json()).status, 'ready');
+  assert.equal((await fetch(`${firstAddress.baseUrl}/readyz`, { method: 'POST' })).status, 405);
   await first.close();
 
   const persisted = JSON.parse(await readFile(join(root, 'state', 'hosted.json'), 'utf8'));
@@ -87,6 +91,9 @@ test('Node hosted server persists its service, serves the participant app, and d
   assert.equal((await fetch(tampered)).status, 403);
   await writeFile(join(root, 'assets', bundle.bundleId, 'asset_node'), 'replaced asset content');
   assert.equal((await fetch(resource.delivery.url)).status, 409);
+  const notReady = await fetch(`${restartedAddress.baseUrl}/readyz`);
+  assert.equal(notReady.status, 503);
+  assert.equal((await notReady.json()).checks.assets.ready, false);
 });
 
 test('file hosted state store rejects corrupt or insecurely edited state content', async t => {

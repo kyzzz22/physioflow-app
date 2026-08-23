@@ -34,4 +34,17 @@ export class FileHostedStateStore {
       throw error;
     }
   }
+
+  async checkReadiness() {
+    const state = await this.load();
+    const directory = dirname(this.filePath);
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    const probe = `${this.filePath}.${process.pid}.${globalThis.crypto.randomUUID()}.ready`;
+    try {
+      await writeFile(probe, '', { mode: 0o600, flag: 'wx' });
+    } finally {
+      await rm(probe, { force: true }).catch(() => {});
+    }
+    return { readable: true, writable: true, initialized: Boolean(state) };
+  }
 }

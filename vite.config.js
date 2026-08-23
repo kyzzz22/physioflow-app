@@ -9,5 +9,14 @@ export default defineConfig({
     assetsDir: '',
     emptyOutDir: true,
     cssCodeSplit: false,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            { name: 'react-vendor', test: /node_modules[\\/](?:react|react-dom|scheduler)[\\/]/, priority: 10 },
+          ],
+        },
+      },
+    },
   },
 });
