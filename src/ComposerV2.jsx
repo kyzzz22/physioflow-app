@@ -633,8 +633,8 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
         <button className="node-editor-close" onClick={() => setPreviewNodeId(null)}>✕ Done</button>
       </div>
       {previewEdit && previewNode.config?.ui
-        ? <ParticipantUiBuilder schema={previewNode.config.ui} defaultTemplate={UI_TEMPLATE_KIND[previewNode.component.type] || 'instruction'} onChange={updatePreviewUi} />
-        : <div className="node-editor-preview"><ParticipantRenderer schema={schemaForNode(previewNode, previewDefinition, null)} preview /></div>}
+        ? <ParticipantUiBuilder schema={schemaForNode(previewNode, previewDefinition, localResourceManifest(protocol.assets || []))} defaultTemplate={UI_TEMPLATE_KIND[previewNode.component.type] || 'instruction'} onChange={updatePreviewUi} />
+        : <div className="node-editor-preview"><ParticipantRenderer schema={schemaForNode(previewNode, previewDefinition, localResourceManifest(protocol.assets || []))} preview /></div>}
     </div>}
   </main>;
 }
@@ -766,7 +766,7 @@ function NodeInspector({ node, definition, variables, groups, mode, onUpdate, on
     </details>}
     {mode !== 'quick' && !['core.start', 'core.end'].includes(node.component.type) && <label>{t('Node group')}<select aria-label={t('Node group')} value={currentGroup?.id || ''} onChange={event => onAssignGroup(event.target.value || null)}><option value="">{t('No group')}</option>{groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>}
     {mode !== 'quick' && !currentGroup && !['core.start', 'core.end'].includes(node.component.type) && <button onClick={onCreateGroup}>{t('Create group from node')}</button>}
-    {mode !== 'quick' && node.component.type !== 'input.questionnaire' && node.config?.ui && <ParticipantUiBuilder schema={node.config.ui} defaultTemplate={UI_TEMPLATE_KIND[node.component.type] || 'instruction'} onChange={ui => onUpdate({ config: { ...node.config, ui } })} />}
+    {mode !== 'quick' && node.component.type !== 'input.questionnaire' && node.config?.ui && <ParticipantUiBuilder schema={schemaForNode(node, definition, localResourceManifest(assets || []))} defaultTemplate={UI_TEMPLATE_KIND[node.component.type] || 'instruction'} onChange={ui => onUpdate({ config: { ...node.config, ui } })} />}
     {definition?.events?.length > 0 && <details className="node-data-note"><summary>Records</summary>
       <small>Events: {definition.events.join(', ')}</small>
       {definition.dataFields?.length > 0 && <small>Data columns: {definition.dataFields.join(', ')}</small>}

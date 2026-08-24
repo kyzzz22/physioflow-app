@@ -128,11 +128,32 @@ export default function ParticipantUiBuilder({ schema, onChange, defaultTemplate
     } catch { /* invalid drop ignored */ }
   };
 
+  const containerInTree = (root, id) => {
+    if (root?.id === id) return root;
+    for (const child of root?.children || []) {
+      const found = containerInTree(child, id);
+      if (found) return found;
+    }
+    return null;
+  };
+
   const moveElement = (elementId, targetElementId, x, y) => {
     // Free-layout drag: reposition in place instead of reordering the flex tree.
     if (x != null && y != null) {
       try {
-        onChange(mapUiElement(normalized, elementId, element => ({ ...element, props: { ...element.props, x, y } })));
+        // Position the dragged element, then make sure its container is a free-layout
+        // container (auto-enables free editing when the designer drags without
+        // toggling first) and staggers the remaining children so nothing overlaps.
+        let tree = mapUiElement(normalized, elementId, element => ({ ...element, props: { ...element.props, x, y } }));
+        const container = containerInTree(tree.root, targetElementId);
+        if (container && !container.props?.free) {
+          const children = (container.children || []).map((child, index) => {
+            if (child.props?.x != null && child.props?.y != null) return child; // the dragged element keeps its position
+            return { ...child, props: { ...child.props, x: 32 + (index % 2) * 140, y: 36 + index * 72 } };
+          });
+          tree = mapUiElement(tree, targetElementId, element => ({ ...element, props: { ...element.props, free: true }, children }));
+        }
+        onChange(tree);
         setSelectedId(elementId);
       } catch { /* invalid position ignored */ }
       return;

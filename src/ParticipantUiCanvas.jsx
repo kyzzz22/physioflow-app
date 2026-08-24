@@ -56,11 +56,12 @@ export default function ParticipantUiCanvas({ schema, selectedId, onSelect, onDr
     setLivePos(null);
   };
 
-  // Free-layout repositioning via pointer events.
+  // Free repositioning via pointer events. Works on any element: dragging turns
+  // its container into a free-layout canvas automatically (no toggle required).
   const beginPointerDrag = (event, element) => {
     if (element.type === 'Screen') return;
     const parent = parentElementOf(normalized.root, element.id);
-    if (!parent?.props?.free) return;
+    if (!parent) return;
     event.preventDefault();
     event.stopPropagation();
     onSelect(element.id);
