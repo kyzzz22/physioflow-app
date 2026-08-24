@@ -82,6 +82,7 @@ export function participantUiTemplate(kind = 'instruction', options = {}) {
   ] });
   if (kind === 'html') return createParticipantScreen({ idFactory, children: [
     createUiElement('Html', { idFactory, props: { html: '<div style="text-align:center"><h1>Custom HTML</h1></div>' } }),
+    createUiElement('Button', { idFactory, props: { label: 'Continue', variant: 'primary' }, actions: [{ event: 'click', action: 'submit' }] }),
   ] });
   if (kind === 'calibration') return createParticipantScreen({ idFactory, children: [
     createUiElement('Text', { idFactory, props: { text: 'Screen calibration', variant: 'heading' } }),
