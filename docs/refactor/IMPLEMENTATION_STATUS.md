@@ -80,4 +80,6 @@ The deployment asset pipeline replaces manual provisioning with authenticated, m
 
 The final hardening pass makes frozen protocols immutable: editing always creates a new draft protocol version with a distinct ID. Formal validation now checks participant UI completion paths, media sources, durations, rating ranges, migration review, and every required condition/loop control exit before preview or freeze.
 
+A component acceptance suite (`tests/component-acceptance.test.js`) exercises all 22 core components: registry contract matrix, completion-strategy/button defaults, `schemaForNode` participant-UI validity, a linear graph of every participant component running end-to-end, full-graph formal validation, and control-flow execution. Participant media renders direct URLs, protocol assets (via a local resource manifest) and YouTube embeds; the participant-interface editor supports free-layout absolute positioning with pointer-drag repositioning. See `COMPONENT_ACCEPTANCE.md`. Current baseline: 222 automated tests, zero-warning lint, clean build, and three browser E2E flows.
+
 The legacy editor and runner remain available during transition. New blank protocols use Protocol Graph and Composer V2. Real-time collaboration and cloud execution remain intentionally outside this MVP and belong to the continuous Stage 7 roadmap.
