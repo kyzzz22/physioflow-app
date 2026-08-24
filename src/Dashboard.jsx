@@ -162,7 +162,7 @@ export default function Dashboard({ protocols, sessions, onOpen, onNew, onTempla
     <section className="dashboard-hero">
       <div className="dashboard-copy">
         <span className="eyebrow">EXPERIMENT WORKSPACE</span>
-        <h1>PhysioFlow workspace</h1>
+        <h1>PhysioFlow <i>workspace</i></h1>
         <p>Design, run, and review behavioral &amp; physiological experiments — one local-first workspace.</p>
         <div className="dashboard-stats" aria-label="Workspace summary">
           <span><b>{projects.length}</b> projects</span>
@@ -171,6 +171,10 @@ export default function Dashboard({ protocols, sessions, onOpen, onNew, onTempla
         </div>
       </div>
       <div className="dashboard-actions">
+        <div className="dashboard-actions-head">
+          <b>Start building</b>
+          <span>Create a protocol from scratch or a curated template.</span>
+        </div>
         <button className="primary big" onClick={onNew}>＋ New protocol</button>
         <div className="dashboard-template-row">
           <button onClick={onTemplate}>Emotion</button>

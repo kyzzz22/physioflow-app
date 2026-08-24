@@ -4,23 +4,24 @@
 .language-toggle {
   display: flex;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   overflow: hidden;
   background: var(--paper);
+  box-shadow: var(--shadow-sm);
 }
 .language-toggle button {
   border: 0; border-radius: 0;
-  padding: .55rem .75rem;
+  padding: .55rem .8rem;
   font-size: .78rem;
   background: transparent;
   transition: background .15s, color .15s;
 }
-.language-toggle button:hover:not(.active) { background: #e8ece6; }
-.language-toggle button.active { background: var(--green); color: #fff; }
-.dark-mode .language-toggle { border-color: var(--line); background: #252528; }
-.dark-mode .language-toggle button { color: #c8c8cc; }
-.dark-mode .language-toggle button:hover:not(.active) { background: #2e2e33; }
-.dark-mode .language-toggle button.active { background: var(--green); color: #121214; }
+.language-toggle button:hover:not(.active) { background: var(--paper-soft); }
+.language-toggle button.active { background: linear-gradient(180deg, var(--green), var(--green-600)); color: #fff; }
+.dark-mode .language-toggle { border-color: var(--line); background: var(--paper); box-shadow: none; }
+.dark-mode .language-toggle button { color: var(--muted); }
+.dark-mode .language-toggle button:hover:not(.active) { background: var(--paper-soft); }
+.dark-mode .language-toggle button.active { background: linear-gradient(180deg, #73d9ad, #46b585); color: #0d1712; font-weight: 800; }
 
 .localized-content {
   margin-top: .6rem;

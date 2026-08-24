@@ -14,13 +14,15 @@
 .analytics-head {
   height: 64px;
   margin: 0;
-  padding: 0 16px;
+  padding: 0 18px;
   display: flex;
   align-items: center;
   gap: 14px;
   border-bottom: 1px solid var(--line);
-  background: var(--paper);
-  backdrop-filter: none;
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter: blur(12px) saturate(1.3);
+  position: relative;
+  z-index: 3;
 }
 
 .analytics-head > div {
@@ -86,21 +88,23 @@
   display: grid;
   gap: 3px;
   margin-bottom: 5px;
-  padding: 10px 11px;
+  padding: 10px 12px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--r-lg);
   cursor: pointer;
-  transition: background .15s, border-color .15s;
+  transition: background .15s, border-color .15s, box-shadow .15s, transform .15s;
 }
 
 .analytics-session-row:hover {
   background: var(--paper-soft);
   border-color: var(--line);
+  transform: translateX(2px);
 }
 
 .analytics-session-row.selected {
-  background: var(--mint);
-  border-color: #b9d4c5;
+  background: var(--green-50);
+  border-color: var(--green-200);
+  box-shadow: 0 1px 3px #1e8a5f10 inset;
 }
 
 .analytics-session-row > div {
@@ -141,9 +145,9 @@
 .analytics-card,
 .analytics-panel {
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-lg);
   background: var(--paper);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-card);
 }
 
 .analytics-session-card {
@@ -192,13 +196,15 @@
 }
 
 .analytics-metric {
-  min-width: 82px;
-  padding: 8px 10px;
+  min-width: 86px;
+  padding: 9px 11px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--paper-soft);
   text-align: center;
+  transition: border-color var(--transition-fast), transform var(--transition-fast);
 }
+.analytics-metric:hover { border-color: var(--green-300); transform: translateY(-1px); }
 
 .analytics-metric b,
 .analytics-metric span {
@@ -244,32 +250,38 @@
 .analytics-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 12px;
-  border-bottom: 1px solid var(--line);
+  gap: 4px;
+  margin-bottom: 14px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--paper-soft);
+  width: fit-content;
 }
 
 .analytics-tabs button {
-  margin-bottom: -1px;
-  padding: 9px 12px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
+  padding: 8px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
   background: transparent;
   box-shadow: none;
   color: var(--muted);
   font-size: 13px;
+  transition: all var(--transition-fast);
 }
 
-.analytics-tabs button:hover,
-.analytics-tabs button.active {
-  color: var(--green-strong);
-  border-bottom-color: var(--green);
-  box-shadow: none;
+.analytics-tabs button:hover {
+  color: var(--green-600);
+  background: var(--paper);
+  box-shadow: var(--shadow-sm);
 }
 
 .analytics-tabs button.active {
+  color: var(--green-600);
   font-weight: 800;
+  background: var(--paper);
+  border-color: var(--green-200);
+  box-shadow: var(--shadow-sm);
 }
 
 .analytics-panel {

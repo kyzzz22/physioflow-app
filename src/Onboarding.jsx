@@ -72,19 +72,19 @@ export default function Onboarding({ onClose }) {
   }, [next, onClose, step]);
 
   return <>
-    <div style={{ position:'fixed',inset:0,background:'#00000050',zIndex:9999 }} onClick={onClose} />
+    <div style={{ position:'fixed',inset:0,background:'#00000055',zIndex:9999,backdropFilter:'blur(3px)' }} onClick={onClose} />
     <div style={{
-      position:'fixed',zIndex:10000,background:'var(--paper)',border:'1px solid var(--line)',borderRadius:10,
-      boxShadow:'0 16px 48px #00000030',padding:'1.2rem 1.5rem',minWidth:300,maxWidth:380,
+      position:'fixed',zIndex:10000,background:'var(--paper)',border:'1px solid var(--line)',borderRadius:16,
+      boxShadow:'0 24px 64px #00000038, 0 2px 8px #00000022',padding:'1.35rem 1.6rem',minWidth:300,maxWidth:380,
       ...(pos.isSide ? { top: pos.top, transform: 'translateY(-50%)' } : { left: pos.left, transform: 'translateX(-50%)' }),
       ...(pos.isSide ? { left: pos.left } : { top: pos.top }),
-      fontFamily:'system-ui,sans-serif'
+      fontFamily:'var(--font-sans)',animation:'guide-in .22s cubic-bezier(.4,0,.2,1)'
     }}>
-      <div style={{ display:'flex',alignItems:'center',gap:'.5rem',marginBottom:'.5rem' }}>
-        <span style={{ display:'grid',placeItems:'center',width:28,height:28,borderRadius:8,background:'var(--lime)',color:'#263a12',fontWeight:800,fontSize:'.8rem' }}>{step + 1}/{STEPS.length}</span>
-        <b style={{ fontSize:'.95rem' }}>{current.title}</b>
+      <div style={{ display:'flex',alignItems:'center',gap:'.55rem',marginBottom:'.6rem' }}>
+        <span style={{ display:'grid',placeItems:'center',width:30,height:30,borderRadius:9,background:'linear-gradient(135deg, var(--lime), var(--green-300))',color:'var(--green-900)',fontWeight:800,fontSize:'.8rem',boxShadow:'0 3px 8px #6c8e2733' }}>{step + 1}/{STEPS.length}</span>
+        <b style={{ fontSize:'.98rem',letterSpacing:'-0.01em' }}>{current.title}</b>
       </div>
-      <p style={{ color:'var(--muted)',fontSize:'.82rem',lineHeight:1.55,margin:'0 0 1rem' }}>{current.body}</p>
+      <p style={{ color:'var(--muted)',fontSize:'.84rem',lineHeight:1.6,margin:'0 0 1.1rem' }}>{current.body}</p>
       <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center' }}>
         <button onClick={onClose} style={{ fontSize:'.75rem',border:'0',background:'transparent',color:'var(--muted)',cursor:'pointer' }}>Skip tour</button>
         <div style={{ display:'flex',gap:'.4rem',alignItems:'center' }}>
