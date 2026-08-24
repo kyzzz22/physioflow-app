@@ -3,8 +3,8 @@
 .participant-ui-layout { display: flex; width: 100%; }
 .participant-ui-layout.column { flex-direction: column; }
 .participant-ui-layout.row { flex-direction: row; }
-.participant-ui-screen h1 { margin: 0 0 18px; font-size: clamp(1.8rem, 4vw, 3.5rem); }
-.participant-ui-screen p { font-size: 1.05rem; line-height: 1.7; white-space: pre-wrap; }
+.participant-ui-screen h1 { margin: 0 0 18px; font-size: clamp(1.8rem, 4vw, 3.5rem); max-width: 100%; overflow-wrap: break-word; word-break: break-word; }
+.participant-ui-screen p { font-size: 1.05rem; line-height: 1.7; white-space: pre-wrap; max-width: 100%; overflow-wrap: break-word; word-break: break-word; }
 .participant-ui-media { display: block; max-width: 100%; max-height: 56vh; margin: 18px auto; border-radius: 10px; }
 .participant-ui-media.missing { padding: 50px 20px; border: 1px dashed var(--amber); color: var(--warning); background: var(--paper-soft); }
 .participant-ui-media.embed { width: 100%; }

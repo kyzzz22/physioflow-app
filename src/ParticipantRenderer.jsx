@@ -50,8 +50,8 @@ export default function ParticipantRenderer({ schema, context = {}, onSubmit, on
     // Free-layout positioning: elements carrying x/y coordinates are absolutely
     // positioned inside a container that opted into free layout.
     const positioned = (props.x != null && props.y != null) ? { position: 'absolute', left: props.x, top: props.y } : {};
-    if (element.type === 'Screen') return <div key={element.id} className="participant-ui-screen" style={{ ...style, ...(props.free ? { position: 'relative' } : {}) }}>{element.children.map(render)}</div>;
-    if (element.type === 'Layout') return <div key={element.id} className={`participant-ui-layout ${props.direction || 'column'}`} style={{ ...style, gap: style.gap ?? 16, ...(props.free ? { position: 'relative' } : {}) }}>{element.children.map(render)}</div>;
+    if (element.type === 'Screen') return <div key={element.id} className="participant-ui-screen" style={{ ...style, ...(props.free ? { position: 'relative', minHeight: 'min(78vh, 620px)' } : {}) }}>{element.children.map(render)}</div>;
+    if (element.type === 'Layout') return <div key={element.id} className={`participant-ui-layout ${props.direction || 'column'}`} style={{ ...style, gap: style.gap ?? 16, ...(props.free ? { position: 'relative', minHeight: 'min(78vh, 620px)' } : {}) }}>{element.children.map(render)}</div>;
     if (element.type === 'Text') {
       const text = boundProp(element, 'text', context) ?? '';
       const className = props.pulse ? 'participant-pulse' : undefined;

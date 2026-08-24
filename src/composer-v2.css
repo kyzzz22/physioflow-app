@@ -345,7 +345,8 @@
 .ui-inspector-actions { display: flex; gap: 4px; }
 .ui-inspector-actions button { width: 22px; height: 22px; border: 1px solid var(--border, #dfe3e8); border-radius: 4px; background: var(--surface, #fff); font-size: .7rem; cursor: pointer; line-height: 1; }
 .ui-inspector-actions .danger { color: var(--danger, #a32e25); }
-.ui-slot { cursor: pointer; outline: 1px dashed transparent; }
+.ui-slot { cursor: pointer; outline: 1px dashed transparent; max-width: 100%; }
+.ui-slot h1, .ui-slot p { max-width: 100%; overflow-wrap: break-word; word-break: break-word; }
 .ui-slot:hover { outline-color: #94a0ad; }
 .ui-slot.selected { outline: 2px solid var(--green, #197453); }
 .ui-free { outline: 1px dashed #356fae; outline-offset: -1px; background: repeating-linear-gradient(45deg, rgba(53,111,174,.04) 0 8px, transparent 8px 16px); }
