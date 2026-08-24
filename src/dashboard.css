@@ -1,5 +1,81 @@
 /* dashboard.css — Dashboard and project cards */
 
+/* Single compact status strip (storage + workspace readiness) */
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 18px;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  box-shadow: var(--shadow-sm);
+}
+.status-bar .status-dot {
+  width: 9px; height: 9px; border-radius: 50%; background: #8c9891; flex-shrink: 0;
+}
+.status-bar.ready .status-dot { background: #47a361; }
+.status-bar.attention .status-dot { background: #d9a23d; }
+.status-bar.blocked .status-dot { background: #d95d53; }
+.status-text { display: grid; gap: 1px; min-width: 0; flex: 1; }
+.status-text b { color: var(--ink); font-size: 13px; }
+.status-text span { color: var(--muted); font-size: 12px; line-height: 1.4; }
+.status-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.status-actions button { padding: 6px 10px; font-size: 12px; }
+
+/* Compact hero actions */
+.dashboard-template-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.dashboard-template-row button {
+  flex: 1;
+  min-height: 34px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+.dashboard-actions > .primary.big {
+  min-height: 46px;
+  font-size: 15px;
+}
+
+/* Project card overflow menu */
+.card-menu-wrap { position: relative; margin-left: auto; }
+.card-menu {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--muted-strong);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 15px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.card-menu-pop {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 20;
+  min-width: 180px;
+  margin-top: 4px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  box-shadow: var(--shadow-md);
+  display: grid;
+  gap: 2px;
+}
+.card-menu-pop button {
+  text-align: left;
+  padding: 7px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+.card-menu-pop button:hover { background: var(--paper-soft); }
+
 .dashboard-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);

@@ -7,6 +7,9 @@
 .participant-ui-screen p { font-size: 1.05rem; line-height: 1.7; white-space: pre-wrap; }
 .participant-ui-media { display: block; max-width: 100%; max-height: 56vh; margin: 18px auto; border-radius: 10px; }
 .participant-ui-media.missing { padding: 50px 20px; border: 1px dashed var(--amber); color: var(--warning); background: var(--paper-soft); }
+.participant-ui-media.embed { width: 100%; }
+.participant-ui-media.embed iframe { width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 8px; }
+.ui-media-wrap { display: inline-block; max-width: 100%; }
 .participant-ui-input { display: flex; flex-direction: column; gap: 9px; margin: 20px 0; text-align: left; }
 .participant-ui-input > span { font-weight: 650; }
 .participant-ui-input input, .participant-ui-input textarea { padding: 12px; border: 1px solid var(--line); border-radius: 8px; font: inherit; }

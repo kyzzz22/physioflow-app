@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { normalizeParticipantUi, resolveTheme, resolveUiBinding, resolveUiStyle, validateParticipantUi } from './core/index.js';
+import ParticipantMedia from './ParticipantMedia.jsx';
 
 // PPT-style WYSIWYG canvas for the participant-interface editor.
 // Renders the real participant UI and lets the designer click to select an element,
@@ -70,10 +71,7 @@ export default function ParticipantUiCanvas({ schema, selectedId, onSelect, onDr
     }
     if (element.type === 'Media') {
       const source = boundProp(element, 'sourceUrl', context) || '';
-      if (!source) return <div key={element.id} data-ui-id={element.id} className={`participant-ui-media missing ui-slot${selectedClass(element)}`} style={positioned} {...clickProps(element)} {...dragProps(element)}>Media source not configured</div>;
-      if (props.mediaType === 'video') return <video key={element.id} data-ui-id={element.id} className={`participant-ui-media ui-slot${selectedClass(element)}`} style={positioned} src={source} controls={props.controls !== false} {...clickProps(element)} {...dragProps(element)} />;
-      if (props.mediaType === 'audio') return <audio key={element.id} data-ui-id={element.id} className={`participant-ui-media ui-slot${selectedClass(element)}`} style={positioned} src={source} controls {...clickProps(element)} {...dragProps(element)} />;
-      return <img key={element.id} data-ui-id={element.id} className={`participant-ui-media ui-slot${selectedClass(element)}`} src={source} alt={props.alt || ''} style={{ objectFit: props.fit || 'contain', ...positioned }} {...clickProps(element)} {...dragProps(element)} />;
+      return <span key={element.id} data-ui-id={element.id} className={`ui-media-wrap ui-slot${selectedClass(element)}`} style={positioned} {...clickProps(element)} {...dragProps(element)}><ParticipantMedia source={source} mediaType={props.mediaType || 'image'} controls={props.controls !== false} alt={props.alt || ''} fit={props.fit || 'contain'} /></span>;
     }
     if (element.type === 'Progress') {
       const value = Number(boundProp(element, 'value', context) ?? 0), max = Number(boundProp(element, 'max', context) ?? 100);

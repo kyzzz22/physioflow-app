@@ -49,5 +49,6 @@ export {
 export { createEmotionGraphTemplate, createGonogoGraphTemplate, createStroopGraphTemplate, generateGonogoTrials, generateStroopTrials } from './taskTemplates.js';
 
 export { COMPARISON_OPS, createQuestionnaire, LANGS, newQuestion, parseQuestionnaireCsv, PRESETS, QUESTION_TYPES, questionnaireScore, removeQuestionnaireFromLibrary, saveQuestionnaireToLibrary, seededShuffle, validateQuestionnaire } from './questionnaireModel.js';
+export { isYoutubeSource, youtubeEmbedUrl } from './mediaUrl.js';
 
 export { loadFlowSnapshots, MAX_FLOW_SNAPSHOTS, mergeFlowSnapshot, removeFlowSnapshot, saveFlowSnapshot, withoutFlowSnapshot } from './flowSnapshots.js';

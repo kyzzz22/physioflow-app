@@ -28,6 +28,8 @@ import {
   validateProtocolGraphConfiguration,
   validateComponentDefinition,
   validateParticipantUi,
+  youtubeEmbedUrl,
+  isYoutubeSource,
 } from '../src/core/index.js';
 import { localResourceManifest, schemaForNode } from '../src/runtime/nodeSchema.js';
 
@@ -377,4 +379,15 @@ test('participant UI elements support free-layout x/y positioning', () => {
   assert.equal(validateParticipantUi(schema).valid, true);
   assert.equal(schema.root.children[0].props.x, 40);
   assert.equal(schema.root.children[0].props.y, 80);
+});
+
+test('youtube embed URL handles watch, youtu.be, shorts and embed links', () => {
+  assert.equal(youtubeEmbedUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ'), 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0&playsinline=1&enablejsapi=1');
+  assert.equal(youtubeEmbedUrl('https://youtu.be/dQw4w9WgXcQ'), 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0&playsinline=1&enablejsapi=1');
+  assert.equal(youtubeEmbedUrl('https://www.youtube.com/shorts/dQw4w9WgXcQ'), 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0&playsinline=1&enablejsapi=1');
+  assert.equal(youtubeEmbedUrl('https://www.youtube.com/embed/dQw4w9WgXcQ'), 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0&playsinline=1&enablejsapi=1');
+  assert.equal(youtubeEmbedUrl('https://example.com/clip.mp4'), '');
+  assert.equal(youtubeEmbedUrl(''), '');
+  assert.ok(isYoutubeSource('https://youtu.be/abc'));
+  assert.equal(isYoutubeSource('https://example.com/clip.mp4'), false);
 });

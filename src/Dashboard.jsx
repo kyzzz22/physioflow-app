@@ -12,7 +12,6 @@ import {
   isGraphProtocol,
   projectIdOf,
   protocolArchivedAtOf,
-  protocolConfigHashOf,
   protocolIdOf,
   protocolNameOf,
   protocolStatusOf,
@@ -53,7 +52,9 @@ function formatDuration(ms) {
 export default function Dashboard({ protocols, sessions, onOpen, onNew, onTemplate, onImport, onRun, onNextVersion, onDuplicate, onArchive, onRenameProject, onMigrate, onAnalytics, storageInfo, onChooseDataDirectory, onOpenDataFolder, onGuide, onStroopTemplate, onGonogoTemplate }) {
   const input = useRef(null);
   const projects = groupProjects(protocols);
+  const frozenCount = protocols.filter(item => protocolStatusOf(item) === 'frozen').length;
   const workspaceReadiness = useMemo(() => summarizeWorkspaceReadiness(protocols, sessions, storageInfo), [protocols, sessions, storageInfo]);
+  const statusTone = workspaceReadiness.blocked ? 'blocked' : workspaceReadiness.attention ? 'attention' : 'ready';
   const [sessionFilter, setSessionFilter] = useState('');
   const [debouncedFilter, setDebouncedFilter] = useState('');
   const debounceRef = useRef(null);
@@ -133,89 +134,79 @@ export default function Dashboard({ protocols, sessions, onOpen, onNew, onTempla
     }
   };
 
-  return <main>
+  return <main className="dashboard">
     <header>
       <div className="brand"><span>PF</span> PhysioFlow</div>
-      <div className="header-tools"><div className="local">● Local-first workspace</div><button className="hint" onClick={() => onGuide?.('workflow')}>Help</button><button className="hint" onClick={onChooseDataDirectory}>Data folder</button><DarkModeToggle /><LanguageToggle /></div>
+      <div className="header-tools">
+        <div className="local">● Local-first</div>
+        <button className="hint" onClick={() => onGuide?.('workflow')}>Help</button>
+        {onAnalytics && <button className="hint" onClick={onAnalytics}>Analytics</button>}
+        <button className="hint" onClick={onChooseDataDirectory}>Data folder</button>
+        <DarkModeToggle /><LanguageToggle />
+      </div>
     </header>
+
+    <section className={`status-bar ${statusTone}`}>
+      <span className="status-dot" />
+      <div className="status-text">
+        <b>{storageInfo?.selected ? storageInfo.name : storageInfo?.supported ? 'Choose a local data folder' : 'Formal storage needs Chrome, Edge, or the desktop app'}</b>
+        <span>{workspaceReadiness.blocked ? `${workspaceReadiness.blocked} blocked · fix before formal collection` : storageInfo?.selected ? `${workspaceReadiness.ready} ready · ${sessions.length} sessions recorded` : 'Data files stay in a folder you can back up and move.'}</span>
+      </div>
+      <div className="status-actions">
+        {storageInfo?.selected && storageInfo?.data_dir && <button className="hint" onClick={onOpenDataFolder}>Open folder</button>}
+        {storageInfo?.supported && <button className="hint" onClick={onChooseDataDirectory}>{storageInfo?.selected ? 'Change folder' : 'Select folder'}</button>}
+        {!storageInfo?.supported && <button className="hint" onClick={() => onGuide?.('storage')}>Storage guide</button>}
+      </div>
+    </section>
+
     <section className="dashboard-hero">
       <div className="dashboard-copy">
         <span className="eyebrow">EXPERIMENT WORKSPACE</span>
         <h1>PhysioFlow workspace</h1>
-        <p>Design protocols, run sessions, review integrity, and export analysis-ready data from one local-first workspace.</p>
+        <p>Design, run, and review behavioral &amp; physiological experiments — one local-first workspace.</p>
         <div className="dashboard-stats" aria-label="Workspace summary">
-          <span><b>{projects.length}</b> active projects</span>
-          <span><b>{protocols.filter(item => protocolStatusOf(item) === 'frozen').length}</b> frozen versions</span>
+          <span><b>{projects.length}</b> projects</span>
+          <span><b>{frozenCount}</b> frozen</span>
           <span><b>{sessions.length}</b> sessions</span>
-          <span><b>{workspaceReadiness.ready}</b> ready</span>
         </div>
       </div>
       <div className="dashboard-actions">
-        <div className="dashboard-actions-head">
-          <b>Start here</b>
-          <span>{storageInfo?.selected ? 'Local data folder active' : 'Select a folder before formal collection'}</span>
-        </div>
-        <button className="primary" onClick={onNew}>＋ New protocol</button>
-        <button onClick={onTemplate}>Emotion template</button>
-        {onStroopTemplate && <TemplateButton label="Stroop task" onCreate={onStroopTemplate} templateKey="stroop" />}
-        {onGonogoTemplate && <TemplateButton label="Go/No-Go task" onCreate={onGonogoTemplate} templateKey="gonogo" />}
-        <button onClick={() => input.current.click()}>Import protocol</button>
-        <div className="dashboard-secondary-actions">
-          <button onClick={() => onGuide?.('workflow')}>Tutorial</button>
-          <button onClick={() => onGuide?.('storage')}>Storage</button>
-          {onAnalytics && <button onClick={onAnalytics}>Analytics</button>}
+        <button className="primary big" onClick={onNew}>＋ New protocol</button>
+        <div className="dashboard-template-row">
+          <button onClick={onTemplate}>Emotion</button>
+          {onStroopTemplate && <TemplateButton label="Stroop" onCreate={onStroopTemplate} templateKey="stroop" />}
+          {onGonogoTemplate && <TemplateButton label="Go/No-Go" onCreate={onGonogoTemplate} templateKey="gonogo" />}
+          <button onClick={() => input.current.click()}>Import JSON</button>
         </div>
         <input ref={input} hidden type="file" accept="application/json" onChange={ev => { const file = ev.target.files?.[0]; if (file) importFile(file); ev.target.value = ''; }} />
       </div>
     </section>
-    <section className="dashboard-workflow" aria-label="Recommended workflow">
-      <article><b>1. Build</b><span>Blocks, trials, nodes, media, and questionnaire content.</span></article>
-      <article><b>2. Validate</b><span>Readiness checks, protocol freeze, pilot run, and local storage.</span></article>
-      <article><b>3. Run</b><span>Participant setup, sync metadata, recovery, and event logging.</span></article>
-      <article><b>4. Review</b><span>Session integrity, responses, analysis windows, and export package.</span></article>
-    </section>
-    {workspaceReadiness.total > 0 && <section className={`readiness-banner ${workspaceReadiness.blocked ? 'blocked' : workspaceReadiness.attention ? 'attention' : 'ready'}`}>
-      <div>
-        <b>Lab readiness</b>
-        <span>{workspaceReadiness.ready} ready · {workspaceReadiness.attention} need review · {workspaceReadiness.blocked} blocked · average {workspaceReadiness.averageScore}%</span>
-      </div>
-      <small>{workspaceReadiness.blocked ? 'Fix blocking protocol, media, content, or storage issues before formal collection.' : workspaceReadiness.attention ? 'Review warnings, freeze versions, and run pilot sessions before handoff.' : 'Workspace is ready for collection and export.'}</small>
-    </section>}
-    <section className={`storage-banner ${storageInfo?.selected ? 'ready' : storageInfo?.supported ? 'setup' : 'blocked'}`}>
-      <div>
-        <b>{storageInfo?.selected ? `Local folder: ${storageInfo.name}` : storageInfo?.supported ? 'Choose a local data folder' : 'Local folder storage needs Chrome or Edge'}</b>
-        <span>{storageInfo?.selected ? 'Protocols, sessions, recovery snapshots, and uploaded media are written to this folder.' : storageInfo?.supported ? 'Required for formal collection: data files stay in a folder you can back up and move.' : 'This browser can only use fallback storage for drafts and previews. Use Chrome, Edge, or the desktop app for formal collection.'}</span>
-      </div>
-      <div className="storage-actions">
-        <button onClick={() => onGuide?.('storage')}>Storage guide</button>
-        {storageInfo?.selected && storageInfo?.data_dir && <button onClick={onOpenDataFolder}>Open folder</button>}
-        {storageInfo?.supported && <button onClick={onChooseDataDirectory}>{storageInfo?.selected ? 'Change folder' : 'Select folder'}</button>}
-      </div>
-    </section>
+
     <section>
       <div className="section-title">
         <h2>Projects</h2>
-        <span>{projects.length} active · {protocols.filter(item => protocolStatusOf(item) === 'frozen').length} frozen versions</span>
+        <span>{projects.length} active · {frozenCount} frozen versions</span>
       </div>
       <div className="protocol-grid">
         {projects.map(versions => <ProjectCard key={projectIdOf(versions[0])} versions={versions} sessions={sessions} storageInfo={storageInfo} onOpen={onOpen} onRun={onRun} onNextVersion={onNextVersion} onDuplicate={onDuplicate} onArchive={onArchive} onRenameProject={onRenameProject} onMigrate={onMigrate} />)}
         {!projects.length && <div className="empty">
           <div className="empty-icon">🧪</div>
           <h3 className="empty-title">No projects yet</h3>
-          <p>Create a blank workflow or start from the emotion experiment template.</p>
+          <p>Create a blank workflow or start from a template.</p>
           <div className="empty-actions">
             <button className="primary" onClick={onNew}>＋ New protocol</button>
-            <button onClick={onTemplate}>Emotion template</button>
-            {onStroopTemplate && <button onClick={onStroopTemplate}>Stroop task</button>}
-            {onGonogoTemplate && <button onClick={onGonogoTemplate}>Go/No-Go task</button>}
+            <button onClick={onTemplate}>Emotion</button>
+            {onStroopTemplate && <button onClick={onStroopTemplate}>Stroop</button>}
+            {onGonogoTemplate && <button onClick={onGonogoTemplate}>Go/No-Go</button>}
           </div>
         </div>}
       </div>
     </section>
+
     <section>
       <div className="section-title">
         <h2>Sessions</h2>
-        <span>{sessions.length} total · showing {filteredSessions.length}</span>
+        <span>{sessions.length} total</span>
       </div>
       <div style={{ position: 'relative' }}>
         <input className="session-search" placeholder="Search sessions..." value={sessionFilter} onChange={e => handleFilterChange(e.target.value)} />
@@ -241,6 +232,7 @@ export default function Dashboard({ protocols, sessions, onOpen, onNew, onTempla
 }
 
 function ProjectCard({ versions, sessions, storageInfo, onOpen, onRun, onNextVersion, onDuplicate, onArchive, onRenameProject, onMigrate }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const latest = versions[0], draft = versions.find(item => protocolStatusOf(item) === 'draft');
   const activeProtocol = draft || latest;
   const readiness = assessProtocolReadiness(activeProtocol, { sessions, storageInfo });
@@ -258,6 +250,15 @@ function ProjectCard({ versions, sessions, storageInfo, onOpen, onRun, onNextVer
     <div className="protocol-card-top">
       <span className={`badge ${status}`}>{status}</span>
       <span className={`readiness-pill ${readiness.status}`}>{readiness.score}% · {readiness.status}</span>
+      <div className="card-menu-wrap">
+        <button className="card-menu" onClick={() => setMenuOpen(value => !value)} aria-label="Project actions">⋯</button>
+        {menuOpen && <div className="card-menu-pop">
+          <button onClick={() => onRenameProject(latest)}>Rename</button>
+          {!graphProtocol && onMigrate && <button onClick={() => onMigrate(latest)}>Migrate to Composer V2</button>}
+          <button onClick={() => onDuplicate(latest)}>Duplicate project</button>
+          <button onClick={() => onArchive(latest)}>Archive project</button>
+        </div>}
+      </div>
     </div>
     <button className="card-main" onClick={() => onOpen(activeProtocol)}>
       <h3>{protocolNameOf(latest)}</h3>
@@ -269,34 +270,12 @@ function ProjectCard({ versions, sessions, storageInfo, onOpen, onRun, onNextVer
         {missingMedia && <span style={{ background: '#ffe9e6', color: '#922b24' }}>⚠ missing media</span>}
         {stepTypes.size > 5 && <span>+{stepTypes.size - 5} more</span>}
       </div>
-      <small>{graphProtocol && <span className="composer-v2-tag">Composer V2 · </span>}Latest v{protocolVersionOf(latest)} · {protocolVersionLabelOf(latest)}</small>
+      <small>{graphProtocol && <span className="composer-v2-tag">Composer V2 · </span>}v{protocolVersionOf(latest)} · {protocolVersionLabelOf(latest)} · {versions.length} version{versions.length > 1 ? 's' : ''}</small>
     </button>
-    <details className="readiness-details">
-      <summary>Lab readiness checklist</summary>
-      <div className="readiness-list">
-        {readiness.items.map(item => (
-          <div key={item.id} className={item.passed ? 'pass' : item.severity}>
-            <b>{item.passed ? '✓' : item.severity === 'error' ? '!' : '△'} {item.label}</b>
-            <span>{item.detail}</span>
-            {!item.passed && <small>{item.action}</small>}
-          </div>
-        ))}
-      </div>
-    </details>
     <div className="card-actions">
-      {draft ? <button className="primary" onClick={() => onOpen(draft)}>Edit draft</button> : <button onClick={() => onNextVersion(latest)}>New version</button>}
-      {status === 'frozen' && <button className="primary" onClick={() => onRun(latest)}>Run latest</button>}
-      <button onClick={() => onRenameProject(latest)}>Rename</button>
-      {!graphProtocol && onMigrate && <button className="primary" onClick={() => onMigrate(latest)}>Migrate to Composer V2</button>}
-      <button onClick={() => onDuplicate(latest)}>Duplicate project</button>
-      <button onClick={() => onArchive(latest)}>Archive project</button>
+      {draft ? <button className="primary" onClick={() => onOpen(draft)}>Edit draft</button>
+        : <button className="primary" onClick={() => (status === 'frozen' ? onRun(latest) : onOpen(latest))}>{status === 'frozen' ? 'Run latest' : 'Open'}</button>}
+      {!draft && <button onClick={() => onNextVersion(latest)}>New version</button>}
     </div>
-    <details className="version-history">
-      <summary>Version history</summary>
-      {versions.map(item => {
-        const itemStatus = protocolStatusOf(item), hash = protocolConfigHashOf(item);
-        return <div key={protocolIdOf(item)}><span className={`badge ${itemStatus}`}>{itemStatus}</span><b>v{protocolVersionOf(item)}</b><span>{protocolVersionLabelOf(item)}</span>{hash && <code>{hash.slice(0, 10)}…</code>}<button onClick={() => onOpen(item)}>{itemStatus === 'frozen' ? 'View' : 'Edit'}</button>{itemStatus === 'frozen' && <button onClick={() => onRun(item)}>Run</button>}</div>;
-      })}
-    </details>
   </article>;
 }

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { normalizeParticipantUi, resolveTheme, resolveUiBinding, resolveUiStyle, validateParticipantUi } from './core/index.js';
+import ParticipantMedia from './ParticipantMedia.jsx';
 
 function boundProp(element, name, context) {
   const binding = element.bindings?.[name];
@@ -58,10 +59,7 @@ export default function ParticipantRenderer({ schema, context = {}, onSubmit, on
     }
     if (element.type === 'Media') {
       const source = boundProp(element, 'sourceUrl', context) || '';
-      if (!source) return <div key={element.id} className="participant-ui-media missing" style={positioned}>Media source not configured</div>;
-      if (props.mediaType === 'video') return <video key={element.id} className="participant-ui-media" style={positioned} src={source} controls={props.controls !== false} autoPlay={props.autoPlay} onPlay={() => onMediaEvent?.('media_started', { elementId: element.id, mediaType: 'video' })} onEnded={() => onMediaEvent?.('media_ended', { elementId: element.id, mediaType: 'video' })} onError={() => onMediaEvent?.('media_error', { elementId: element.id, mediaType: 'video' })} />;
-      if (props.mediaType === 'audio') return <audio key={element.id} className="participant-ui-media" style={positioned} src={source} controls autoPlay={props.autoPlay} onPlay={() => onMediaEvent?.('media_started', { elementId: element.id, mediaType: 'audio' })} onEnded={() => onMediaEvent?.('media_ended', { elementId: element.id, mediaType: 'audio' })} onError={() => onMediaEvent?.('media_error', { elementId: element.id, mediaType: 'audio' })} />;
-      return <img key={element.id} className="participant-ui-media" src={source} alt={props.alt || ''} style={{ objectFit: props.fit || 'contain', ...positioned }} onLoad={() => onMediaEvent?.('media_loaded', { elementId: element.id, mediaType: 'image' })} onError={() => onMediaEvent?.('media_error', { elementId: element.id, mediaType: 'image' })} />;
+      return <ParticipantMedia key={element.id} source={source} mediaType={props.mediaType || 'image'} controls={props.controls !== false} autoPlay={props.autoPlay} alt={props.alt || ''} fit={props.fit || 'contain'} style={positioned} onMediaEvent={(eventType, payload) => onMediaEvent?.(eventType, { elementId: element.id, ...payload })} />;
     }
     if (element.type === 'Progress') {
       const value = Number(boundProp(element, 'value', context) ?? 0), max = Number(boundProp(element, 'max', context) ?? 100);
