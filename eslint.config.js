@@ -42,6 +42,8 @@ export default defineConfig([
         NodeFilter: 'readonly',
         TextEncoder: 'readonly',
         TextDecoder: 'readonly',
+        AbortController: 'readonly',
+        Response: 'readonly',
         DataView: 'readonly',
         Uint8Array: 'readonly',
         URLSearchParams: 'readonly',

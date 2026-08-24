@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { applyThemeToDOM, resetThemeToDOM } from './theme.js';
-import { block, createNextProtocolVersion, duplicateProtocolAsProject, emotionTemplate, freezeProtocol, gonogoTemplate, stroopTemplate, unfreezeProtocol, STEP_TYPES, step, trial, validateProtocol, moveItem, stepContentIssues } from './domain';
+import { block, createNextProtocolVersion, duplicateProtocolAsProject, freezeProtocol, unfreezeProtocol, STEP_TYPES, step, trial, validateProtocol, moveItem, stepContentIssues } from './domain';
 import { clearCurrentRun, getStorageInfo, loadCurrentRunAsync, loadProtocols, loadSessions, openDataDirectory, saveProtocols, selectDataDirectory } from './storage';
 import { saveAsset } from './fsStorage.js';
 import { LanguageToggle, DarkModeToggle, useLanguage } from './i18n';
@@ -13,7 +13,10 @@ import Onboarding from './Onboarding.jsx';
 import {
   archiveProtocol,
   createNextGraphProtocolVersion,
+  createEmotionGraphTemplate,
+  createGonogoGraphTemplate,
   createProtocolGraph,
+  createStroopGraphTemplate,
   createId,
   duplicateGraphProtocolAsProject,
   freezeProtocolGraph,
@@ -584,9 +587,9 @@ export default function App() {
       sessions={sessions}
       onOpen={open}
       onNew={() => addAndOpen(createProtocolGraph())}
-      onTemplate={() => addAndOpen(emotionTemplate())}
-      onStroopTemplate={(cfg) => addAndOpen(stroopTemplate(cfg))}
-      onGonogoTemplate={(cfg) => addAndOpen(gonogoTemplate(cfg))}
+      onTemplate={() => addAndOpen(createEmotionGraphTemplate())}
+      onStroopTemplate={(cfg) => addAndOpen(createStroopGraphTemplate(cfg || {}))}
+      onGonogoTemplate={(cfg) => addAndOpen(createGonogoGraphTemplate(cfg || {}))}
       onImport={addAndOpen}
       onRun={value => { setPreRunCheck(value); }}
       onNextVersion={value => addAndOpen(isGraphProtocol(value) ? createNextGraphProtocolVersion(value) : createNextProtocolVersion(value))}

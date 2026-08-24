@@ -1,4 +1,5 @@
 import { participantUiTemplate } from './participantUi.js';
+import { createQuestionnaire } from './questionnaireModel.js';
 
 const PORT_KINDS = new Set(['control', 'data']);
 const PORT_DIRECTIONS = new Set(['input', 'output']);
@@ -107,9 +108,9 @@ export function createCoreComponentRegistry() {
     runtime: { kind: 'participant', uiAdapter: 'screen', completion: 'config' },
     defaultConfig: { content: '', ui: participantUiTemplate('instruction'), completion: { mode: 'manual' } },
     editorFields: [
-      { path: 'content', label: 'Screen content', type: 'textarea' },
-      { path: 'completion.mode', label: 'Completion', type: 'select', options: ['manual', 'fixed'] },
-      { path: 'completion.durationMs', label: 'Duration (ms)', type: 'number', min: 0, showWhen: { path: 'completion.mode', equals: 'fixed' } },
+      { path: 'content', label: 'Screen content', type: 'textarea', group: 'Content', help: 'Shown as the participant-facing heading.' },
+      { path: 'completion.mode', label: 'Completion', type: 'select', options: ['manual', 'fixed'], group: 'Timing' },
+      { path: 'completion.durationMs', label: 'Duration (ms)', type: 'number', min: 0, group: 'Timing', showWhen: { path: 'completion.mode', equals: 'fixed' } },
     ],
     events: ['component_entered', 'component_completed'],
   });
@@ -119,10 +120,8 @@ export function createCoreComponentRegistry() {
     runtime: { kind: 'participant', uiAdapter: 'media', completion: 'config' },
     defaultConfig: { mediaType: 'image', assetId: null, ui: participantUiTemplate('media'), completion: { mode: 'fixed', durationMs: 3000 } },
     editorFields: [
-      { path: 'mediaType', label: 'Media type', type: 'select', options: ['image', 'audio', 'video'] },
-      { path: 'sourceUrl', label: 'Source URL', type: 'text' },
-      { path: 'assetId', label: 'Asset ID', type: 'text' },
-      { path: 'completion.durationMs', label: 'Duration (ms)', type: 'number', min: 0 },
+      { path: 'completion.mode', label: 'Completion', type: 'select', options: ['manual', 'fixed', 'media-ended'], group: 'Timing', help: 'How this stimulus advances: a click, a fixed duration, or when playback ends.' },
+      { path: 'completion.durationMs', label: 'Duration (ms)', type: 'number', min: 0, group: 'Timing', showWhen: { path: 'completion.mode', equals: 'fixed' } },
     ],
     events: ['component_entered', 'media_loaded', 'media_started', 'media_ended', 'media_error', 'component_completed'],
     dataFields: ['asset_id', 'media_type', 'actual_duration_ms'],
@@ -135,12 +134,8 @@ export function createCoreComponentRegistry() {
       controlOutput,
       { id: 'value', kind: 'data', direction: 'output', dataType: 'number', required: true },
     ],
-    defaultConfig: { min: 1, max: 7, required: true, ui: participantUiTemplate('form') },
-    editorFields: [
-      { path: 'min', label: 'Minimum', type: 'number' },
-      { path: 'max', label: 'Maximum', type: 'number' },
-      { path: 'required', label: 'Required', type: 'boolean' },
-    ],
+    defaultConfig: { min: 1, max: 7, required: true, ui: participantUiTemplate('rating') },
+    editorFields: [],
     events: ['component_entered', 'value_changed', 'response_submitted', 'component_completed'],
     dataFields: ['value', 'reaction_time_ms'],
   });
@@ -152,12 +147,8 @@ export function createCoreComponentRegistry() {
       controlOutput,
       { id: 'value', kind: 'data', direction: 'output', dataType: 'string' },
     ],
-    defaultConfig: { required: false, multiline: false, ui: participantUiTemplate('form') },
-    editorFields: [
-      { path: 'placeholder', label: 'Placeholder', type: 'text' },
-      { path: 'required', label: 'Required', type: 'boolean' },
-      { path: 'multiline', label: 'Multiline', type: 'boolean' },
-    ],
+    defaultConfig: { required: false, multiline: false, ui: participantUiTemplate('text') },
+    editorFields: [],
     events: ['component_entered', 'value_changed', 'response_submitted', 'component_completed'],
     dataFields: ['value', 'reaction_time_ms'],
   });
@@ -165,18 +156,106 @@ export function createCoreComponentRegistry() {
     type: 'input.questionnaire', version: '1.0.0', label: 'Questionnaire', category: 'interaction',
     runtime: { kind: 'participant', uiAdapter: 'schema', completion: 'submit' },
     ports: [controlInput, controlOutput],
-    defaultConfig: { questionnaire: null, ui: participantUiTemplate('form') },
+    defaultConfig: { questionnaire: createQuestionnaire(), ui: participantUiTemplate('form') },
     events: ['component_entered', 'value_changed', 'response_submitted', 'component_completed'],
-    dataFields: ['question_id', 'value', 'reaction_time_ms'],
+    dataFields: ['question_id', 'value', 'reaction_time_ms', 'questionnaire_score_correct', 'questionnaire_score_total', 'questionnaire_score_pct', 'questionnaire_timed_out_question_ids'],
   });
   registry.register({
     type: 'timing.wait', version: '1.0.0', label: 'Wait', category: 'timing',
     runtime: { kind: 'participant', uiAdapter: 'wait', completion: 'durationMs' },
     ports: [controlInput, controlOutput],
     defaultConfig: { durationMs: 1000, ui: waitParticipantUi() },
-    editorFields: [{ path: 'durationMs', label: 'Duration (ms)', type: 'number', min: 0 }],
+    editorFields: [{ path: 'durationMs', label: 'Duration (ms)', type: 'number', min: 0, group: 'Timing', help: 'How long the participant waits before continuing.' }],
     events: ['component_entered', 'component_completed'],
     dataFields: ['planned_duration_ms', 'actual_duration_ms'],
+  });
+  registry.register({
+    type: 'stimulus.fixation', version: '1.0.0', label: 'Fixation', category: 'presentation',
+    ports: [controlInput, controlOutput],
+    runtime: { kind: 'participant', uiAdapter: 'schema', completion: 'config' },
+    defaultConfig: { shape: 'cross', sizePx: 48, color: '#17231d', pulse: false, ui: participantUiTemplate('fixation'), completion: { mode: 'fixed', durationMs: 1000 } },
+    editorFields: [
+      { path: 'shape', label: 'Shape', type: 'select', options: ['cross', 'dot', 'diamond'], group: 'Appearance' },
+      { path: 'sizePx', label: 'Size (px)', type: 'number', min: 8, group: 'Appearance' },
+      { path: 'color', label: 'Color', type: 'color', group: 'Appearance' },
+      { path: 'pulse', label: 'Pulse animation', type: 'boolean', group: 'Appearance' },
+      { path: 'completion.durationMs', label: 'Duration (ms)', type: 'number', min: 0, group: 'Timing' },
+    ],
+    events: ['component_entered', 'component_completed'],
+  });
+  registry.register({
+    type: 'stimulus.attention-check', version: '1.0.0', label: 'Attention check', category: 'interaction',
+    ports: [controlInput, controlOutput],
+    runtime: { kind: 'participant', uiAdapter: 'schema', completion: 'submit' },
+    defaultConfig: { prompt: 'Press the key when you see the target', expectedKey: 'space', timeoutMs: 3000, ui: participantUiTemplate('attention'), completion: { mode: 'manual' } },
+    editorFields: [
+      { path: 'prompt', label: 'Prompt', type: 'text' },
+      { path: 'expectedKey', label: 'Expected key', type: 'text' },
+      { path: 'timeoutMs', label: 'Timeout (ms)', type: 'number', min: 0 },
+    ],
+    events: ['component_entered', 'attention_result', 'component_completed'],
+    dataFields: ['attention_passed', 'reaction_time_ms'],
+  });
+  registry.register({
+    type: 'setup.device-check', version: '1.0.0', label: 'Device check', category: 'setup',
+    ports: [controlInput, controlOutput],
+    runtime: { kind: 'participant', uiAdapter: 'schema', completion: 'submit' },
+    defaultConfig: { checklist: '', ui: participantUiTemplate('device'), completion: { mode: 'manual' } },
+    editorFields: [
+      { path: 'checklist', label: 'Checklist (one per line)', type: 'textarea' },
+    ],
+    events: ['component_entered', 'component_completed'],
+  });
+  registry.register({
+    type: 'operator.manual-event', version: '1.0.0', label: 'Manual event', category: 'setup',
+    ports: [controlInput, controlOutput],
+    runtime: { kind: 'participant', uiAdapter: 'schema', completion: 'submit' },
+    defaultConfig: { confirmLabel: 'Confirm', requireNote: false, ui: participantUiTemplate('manual'), completion: { mode: 'manual' } },
+    editorFields: [
+      { path: 'confirmLabel', label: 'Confirm label', type: 'text' },
+      { path: 'requireNote', label: 'Require operator note', type: 'boolean' },
+    ],
+    events: ['component_entered', 'component_completed'],
+  });
+  registry.register({
+    type: 'stimulus.screen-calibration', version: '1.0.0', label: 'Screen calibration', category: 'setup',
+    ports: [controlInput, controlOutput],
+    runtime: { kind: 'participant', uiAdapter: 'schema', completion: 'submit' },
+    defaultConfig: { viewingDistanceCm: 60, screenWidthCm: 60, screenHeightCm: 34, ui: participantUiTemplate('calibration'), completion: { mode: 'manual' } },
+    editorFields: [
+      { path: 'viewingDistanceCm', label: 'Viewing distance (cm)', type: 'number', min: 10 },
+      { path: 'screenWidthCm', label: 'Screen width (cm)', type: 'number', min: 1 },
+      { path: 'screenHeightCm', label: 'Screen height (cm)', type: 'number', min: 1 },
+    ],
+    events: ['component_entered', 'component_completed'],
+  });
+  registry.register({
+    type: 'stimulus.custom-html', version: '1.0.0', label: 'Custom HTML', category: 'presentation',
+    ports: [controlInput, controlOutput],
+    runtime: { kind: 'participant', uiAdapter: 'schema', completion: 'config' },
+    defaultConfig: { html: '<div style="text-align:center"><h1>Custom HTML</h1></div>', ui: participantUiTemplate('html'), completion: { mode: 'manual' } },
+    editorFields: [
+      { path: 'html', label: 'HTML fragment (whitelisted, no scripts)', type: 'textarea' },
+      { path: 'completion.mode', label: 'Completion', type: 'select', options: ['manual', 'fixed'] },
+      { path: 'completion.durationMs', label: 'Duration (ms)', type: 'number', min: 0, showWhen: { path: 'completion.mode', equals: 'fixed' } },
+    ],
+    events: ['component_entered', 'component_completed'],
+  });
+  registry.register({
+    type: 'utility.note', version: '1.0.0', label: 'Note', category: 'utility',
+    ports: [controlInput, controlOutput],
+    runtime: { kind: 'participant', uiAdapter: 'schema', completion: 'config' },
+    defaultConfig: { note: 'Sticky note (not shown to participant)', ui: participantUiTemplate('instruction'), completion: { mode: 'fixed', durationMs: 0 } },
+    editorFields: [{ path: 'note', label: 'Note text', type: 'textarea' }],
+    events: ['component_entered', 'component_completed'],
+  });
+  registry.register({
+    type: 'utility.junction', version: '1.0.0', label: 'Junction', category: 'utility',
+    ports: [controlInput, controlOutput],
+    runtime: { kind: 'participant', uiAdapter: 'schema', completion: 'config' },
+    defaultConfig: { ui: participantUiTemplate('instruction'), completion: { mode: 'fixed', durationMs: 0 } },
+    editorFields: [],
+    events: ['component_entered', 'component_completed'],
   });
   registry.register({
     type: 'logic.condition', version: '1.0.0', label: 'Condition', category: 'control',
@@ -184,13 +263,14 @@ export function createCoreComponentRegistry() {
     ports: [
       controlInput,
       { id: 'value', kind: 'data', direction: 'input', dataType: 'unknown', required: true },
+      { id: 'compare', kind: 'data', direction: 'input', dataType: 'unknown', required: false },
       { id: 'true', kind: 'control', direction: 'output', required: true },
       { id: 'false', kind: 'control', direction: 'output', required: true },
     ],
     defaultConfig: { operator: 'equals', expected: true },
     editorFields: [
-      { path: 'operator', label: 'Operator', type: 'select', options: ['equals', 'not_equals', 'contains', 'greater_than', 'greater_than_or_equal', 'less_than', 'less_than_or_equal', 'is_truthy', 'is_falsy'] },
-      { path: 'expected', label: 'Expected value', type: 'text' },
+      { path: 'operator', label: 'Operator', type: 'select', options: ['equals', 'not_equals', 'contains', 'greater_than', 'greater_than_or_equal', 'less_than', 'less_than_or_equal', 'is_truthy', 'is_falsy'], group: 'Logic', help: 'How the input value is compared.' },
+      { path: 'expected', label: 'Expected value', type: 'text', group: 'Logic', help: 'Compared against the input. Ignored when a compare variable or port is bound.' },
     ],
     events: ['condition_evaluated'],
   });
@@ -201,11 +281,16 @@ export function createCoreComponentRegistry() {
       controlInput,
       { id: 'a', label: 'A', kind: 'control', direction: 'output', required: true },
       { id: 'b', label: 'B', kind: 'control', direction: 'output', required: true },
+      { id: 'c', label: 'C', kind: 'control', direction: 'output', required: false },
+      { id: 'd', label: 'D', kind: 'control', direction: 'output', required: false },
     ],
-    defaultConfig: { probabilityA: 0.5, seedSalt: '' },
+    defaultConfig: { probabilityA: 0.5, probabilityB: null, probabilityC: null, probabilityD: null, seedSalt: '' },
     editorFields: [
-      { path: 'probabilityA', label: 'Probability of A (0–1)', type: 'number', min: 0, max: 1 },
-      { path: 'seedSalt', label: 'Seed salt', type: 'text' },
+      { path: 'probabilityA', label: 'Probability of A', type: 'number', min: 0, max: 1, step: 0.05, group: 'Logic', help: 'Relative weight for branch A. Probabilities are normalized across the branches actually connected.' },
+      { path: 'probabilityB', label: 'Probability of B', type: 'number', min: 0, max: 1, step: 0.05, group: 'Logic', help: 'Defaults to 1 − A when connected and left empty.' },
+      { path: 'probabilityC', label: 'Probability of C', type: 'number', min: 0, max: 1, step: 0.05, group: 'Logic', help: 'Only used when branch C is connected.' },
+      { path: 'probabilityD', label: 'Probability of D', type: 'number', min: 0, max: 1, step: 0.05, group: 'Logic', help: 'Only used when branch D is connected.' },
+      { path: 'seedSalt', label: 'Seed salt', type: 'text', group: 'Advanced', help: 'Vary this to change the deterministic draw sequence.' },
     ],
     events: ['randomization_evaluated'],
     dataFields: ['seed', 'draw_index', 'random_value', 'selected_port'],
@@ -229,18 +314,40 @@ export function createCoreComponentRegistry() {
     runtime: { kind: 'loop' },
     ports: [
       { ...controlInput, multiple: true },
+      { id: 'until', kind: 'data', direction: 'input', dataType: 'unknown', required: false },
       { id: 'body', kind: 'control', direction: 'output', required: true },
       { id: 'exit', kind: 'control', direction: 'output', required: true },
     ],
-    defaultConfig: { maxIterations: 1 },
-    editorFields: [{ path: 'maxIterations', label: 'Maximum iterations', type: 'number', min: 1 }],
+    defaultConfig: { maxIterations: 1, untilRule: null },
+    editorFields: [
+      { path: 'maxIterations', label: 'Maximum iterations', type: 'number', min: 1 },
+      { path: 'untilRule.operator', label: 'Until rule operator', type: 'select', options: ['equals', 'not_equals', 'greater_than', 'greater_than_or_equal', 'less_than', 'less_than_or_equal', 'contains', 'is_truthy', 'is_falsy'], group: 'Until rule', help: 'Loop body repeats while this rule holds for the bound until variable; the loop exits when it fails. Ignored without an until variable.' },
+      { path: 'untilRule.expected', label: 'Until rule value', type: 'text', group: 'Until rule' },
+    ],
     events: ['loop_evaluated'],
+  });
+  registry.register({
+    type: 'experiment.cognitive-task', version: '1.0.0', label: 'Cognitive task', category: 'interaction',
+    runtime: { kind: 'participant', uiAdapter: 'none', completion: 'submit' },
+    ports: [controlInput, controlOutput],
+    defaultConfig: { taskKind: 'stroop', practice: false, seed: 1, goRatio: 70, jitterMs: 0, trials: [] },
+    editorFields: [
+      { path: 'taskKind', label: 'Paradigm', type: 'select', options: ['stroop', 'gonogo'], group: 'Task' },
+      { path: 'seed', label: 'Randomization seed', type: 'number', group: 'Task' },
+      { path: 'goRatio', label: 'Go ratio (%)', type: 'number', min: 1, max: 99, group: 'Task', showWhen: { path: 'taskKind', equals: 'gonogo' } },
+    ],
+    events: ['component_entered', 'trial_started', 'trial_response', 'response_submitted', 'component_completed'],
+    dataFields: ['task_kind', 'trial_results', 'accuracy_pct', 'mean_rt_ms', 'omissions', 'commissions'],
   });
   registry.register({
     type: 'legacy.step', version: '1.0.0', label: 'Legacy Step', category: 'legacy',
     ports: [controlInput, controlOutput],
     runtime: { kind: 'participant', uiAdapter: 'schema', completion: 'submit' },
     defaultConfig: { legacyStep: null, ui: participantUiTemplate('instruction') },
+    editorFields: [
+      { path: 'legacyStep.name', label: 'Step name', type: 'text', group: 'Content' },
+      { path: 'legacyStep.content', label: 'Step content', type: 'textarea', group: 'Content', help: 'Plain-text content from the migrated legacy step.' },
+    ],
     events: ['component_entered', 'component_completed'],
   });
   return registry;

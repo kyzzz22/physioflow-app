@@ -106,6 +106,16 @@ function resolveNodeInput(protocol, node, portId, state) {
   return state.outputs[edge.source.nodeId]?.[edge.source.portId];
 }
 
+// Optional data input: distinguishes "port never wired" (fall back to config) from
+// "port wired but the value happens to be undefined" (compare against undefined).
+function optionalNodeInput(protocol, node, portId, state) {
+  const hasBinding = Object.prototype.hasOwnProperty.call(node.bindings || {}, portId);
+  const hasSubflow = Boolean(subflowParameterVariable(protocol, node.id, 'input', portId));
+  const hasEdge = Boolean(incomingDataEdge(protocol, node.id, portId));
+  if (!hasBinding && !hasSubflow && !hasEdge) return { present: false, value: undefined };
+  return { present: true, value: resolveNodeInput(protocol, node, portId, state) };
+}
+
 function failRuntime(state, protocol, services, error, node, events) {
   const failed = { ...state, status: 'failed', error: error instanceof Error ? error.message : String(error), currentNodeId: node?.id || state.currentNodeId };
   const emitted = appendEvent(failed, protocol, 'runtime_failed', services, { node, payload: { message: failed.error } });
@@ -151,10 +161,18 @@ function advanceAutomatic(initialState, protocol, registry, services, startNodeI
       }
       if (runtimeKind === 'condition') {
         const actual = resolveNodeInput(protocol, node, 'value', state);
-        const passed = evaluateExpression(node.config, actual);
+        const compare = optionalNodeInput(protocol, node, 'compare', state);
+        const passed = evaluateExpression(node.config, actual, compare.present ? compare.value : undefined);
+        const conditionPayload = {
+          actual,
+          operator: node.config?.operator || 'equals',
+          expected: compare.present ? compare.value : node.config?.expected,
+          result: passed,
+        };
+        if (compare.present) conditionPayload.compare = compare.value;
         const emitted = appendEvent(state, protocol, 'condition_evaluated', services, {
           node,
-          payload: { actual, operator: node.config?.operator || 'equals', expected: node.config?.expected, result: passed },
+          payload: conditionPayload,
         });
         state = emitted.state;
         events.push(emitted.event);
@@ -164,14 +182,22 @@ function advanceAutomatic(initialState, protocol, registry, services, startNodeI
       if (runtimeKind === 'loop') {
         const count = state.loopCounts[node.id] || 0;
         const maximum = Math.max(0, Number(node.config?.maxIterations ?? 1));
-        const enterBody = count < maximum;
+        const until = optionalNodeInput(protocol, node, 'until', state);
+        const hasRule = until.present && node.config?.untilRule?.operator;
+        const ruleHolds = hasRule ? evaluateExpression(node.config.untilRule, until.value) : true;
+        const enterBody = count < maximum && ruleHolds;
         state = {
           ...state,
           loopCounts: enterBody ? { ...state.loopCounts, [node.id]: count + 1 } : state.loopCounts,
         };
         const emitted = appendEvent(state, protocol, 'loop_evaluated', services, {
           node,
-          payload: { completedIterations: count, maxIterations: maximum, enterBody },
+          payload: {
+            completedIterations: count,
+            maxIterations: maximum,
+            enterBody,
+            ...(hasRule ? { untilValue: until.value, ruleHolds } : {}),
+          },
         });
         state = emitted.state;
         events.push(emitted.event);
@@ -182,10 +208,33 @@ function advanceAutomatic(initialState, protocol, registry, services, startNodeI
         const probabilityA = Number(node.config?.probabilityA ?? 0.5);
         const draw = drawRandom(state, node.config?.seedSalt || '');
         state = draw.state;
-        const selectedPort = draw.value < probabilityA ? 'a' : 'b';
+        const weightOf = portId => {
+          const key = `probability${portId.toUpperCase()}`;
+          if (node.config?.[key] != null) return Math.max(0, Number(node.config[key]));
+          if (portId === 'b') return Math.max(0, 1 - probabilityA);
+          return 0.5;
+        };
+        const candidates = ['a', 'b', 'c', 'd'].filter(portId => outgoingControlEdges(protocol, node.id).some(edge => edge.source.portId === portId));
+        if (!candidates.length) throw new Error(`Node ${node.id} needs at least one connected random branch`);
+        const weighted = candidates.map(portId => ({ portId, weight: weightOf(portId) }));
+        const totalWeight = weighted.reduce((sum, item) => sum + item.weight, 0);
+        if (!(totalWeight > 0)) throw new Error(`Node ${node.id} random branches need a positive total weight`);
+        let selectedPort = candidates[candidates.length - 1];
+        let cumulative = 0;
+        for (const item of weighted) {
+          cumulative += item.weight / totalWeight;
+          if (draw.value < cumulative) { selectedPort = item.portId; break; }
+        }
         const emitted = appendEvent(state, protocol, 'randomization_evaluated', services, {
           node,
-          payload: { seed: state.randomSeed, drawIndex: state.randomDrawCount, randomValue: draw.value, probabilityA, selectedPort },
+          payload: {
+            seed: state.randomSeed,
+            drawIndex: state.randomDrawCount,
+            randomValue: draw.value,
+            probabilityA,
+            branchWeights: Object.fromEntries(weighted.map(item => [item.portId, Math.round(item.weight / totalWeight * 1000) / 1000])),
+            selectedPort,
+          },
         });
         state = emitted.state;
         events.push(emitted.event);

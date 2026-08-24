@@ -1,36 +1,8 @@
 import { useState, useCallback, useMemo } from 'react';
-import { uid } from './domain';
+import { createId } from './core/ids.js';
+import { COMPARISON_OPS, LANGS, newQuestion, PRESETS, QUESTION_TYPES, createQuestionnaire } from './core/questionnaireModel.js';
 
-export const QUESTION_TYPES = ['likert','single_choice','multiple_choice','vas_slider','sam_valence','sam_arousal','number','short_text','long_text'];
-export const COMPARISON_OPS = ['equals','not_equals','contains','greater_than','less_than'];
-export const LANGS = [['zh','中文'],['ja','日本語'],['en','English']];
-
-export const newQuestion = () => ({
-  question_id: uid('question'), type: 'likert', required: true,
-  prompt_i18n: { zh: '', ja: '', en: '' },
-  options_i18n: { zh: ['选项 1','选项 2'], ja: ['選択肢 1','選択肢 2'], en: ['Option 1','Option 2'] },
-  scale_min: 1, scale_max: 5,
-  min_label_i18n: { zh: '非常不同意', ja: '全く同意しない', en: 'Strongly disagree' },
-  max_label_i18n: { zh: '非常同意', ja: '強く同意する', en: 'Strongly agree' },
-  correct_answer: '', show_if: null, shuffle: false, time_limit_sec: null,
-});
-
-export function createQuestionnaire() { return { questionnaire_id: uid('questionnaire'), name: 'Questionnaire', questions: [newQuestion()], shuffle_questions: false, show_progress: true }; }
-
-// ── Presets ──
-export const PRESETS = {
-  sam_valence: () => ({ question_id: uid('question'), type:'sam_valence', required: true, prompt_i18n:{zh:'此刻您的愉悦程度如何？',ja:'現在の快・不快の程度を教えてください。',en:'How pleasant do you feel right now?'}, scale_min:1, scale_max:9 }),
-  sam_arousal: () => ({ question_id: uid('question'), type:'sam_arousal', required: true, prompt_i18n:{zh:'此刻您的唤醒程度如何？',ja:'現在の覚醒度を教えてください。',en:'How aroused do you feel right now?'}, scale_min:1, scale_max:9 }),
-  likert5: () => ({ question_id: uid('question'), type:'likert', required: true, prompt_i18n:{zh:'请评价',ja:'評価してください',en:'Please rate'}, scale_min:1, scale_max:5, min_label_i18n:{zh:'非常不同意',ja:'全く同意しない',en:'Strongly disagree'}, max_label_i18n:{zh:'非常同意',ja:'強く同意する',en:'Strongly agree'} }),
-  likert7: () => ({ question_id: uid('question'), type:'likert', required: true, prompt_i18n:{zh:'请评价',ja:'評価してください',en:'Please rate'}, scale_min:1, scale_max:7 }),
-  nps: () => ({ question_id: uid('question'), type:'likert', required: true, prompt_i18n:{zh:'您向朋友推荐的可能性有多大？',ja:'友人に勧める可能性はどのくらいですか？',en:'How likely are you to recommend to a friend?'}, scale_min:0, scale_max:10, min_label_i18n:{zh:'完全不可能',ja:'全く勧めない',en:'Not at all likely'}, max_label_i18n:{zh:'非常可能',ja:'非常に勧める',en:'Extremely likely'} }),
-  vas: () => ({ question_id: uid('question'), type:'vas_slider', required: true, prompt_i18n:{zh:'请拖动滑块',ja:'スライダーを動かしてください',en:'Drag the slider'}, scale_min:0, scale_max:100, min_label_i18n:{zh:'最低',ja:'最低',en:'Lowest'}, max_label_i18n:{zh:'最高',ja:'最高',en:'Highest'} }),
-  single: () => ({ question_id: uid('question'), type:'single_choice', required: true, prompt_i18n:{zh:'请选择',ja:'選択してください',en:'Choose one'}, options_i18n:{zh:['选项1','选项2','选项3'],ja:['選択肢1','選択肢2','選択肢3'],en:['Option 1','Option 2','Option 3']} }),
-  multiple: () => ({ question_id: uid('question'), type:'multiple_choice', required: true, prompt_i18n:{zh:'请选择（可多选）',ja:'選択してください（複数可）',en:'Choose (multiple allowed)'}, options_i18n:{zh:['选项1','选项2'],ja:['選択肢1','選択肢2'],en:['Option 1','Option 2']} }),
-  short: () => ({ question_id: uid('question'), type:'short_text', required: false, prompt_i18n:{zh:'请输入',ja:'入力してください',en:'Please enter'} }),
-  long: () => ({ question_id: uid('question'), type:'long_text', required: false, prompt_i18n:{zh:'请详细描述',ja:'詳しく記述してください',en:'Please describe in detail'} }),
-  number: () => ({ question_id: uid('question'), type:'number', required: true, prompt_i18n:{zh:'请输入数字',ja:'数値を入力してください',en:'Enter a number'}, scale_min:0, scale_max:100 }),
-};
+export { COMPARISON_OPS, LANGS, newQuestion, PRESETS, QUESTION_TYPES, createQuestionnaire } from './core/questionnaireModel.js';
 
 export default function QuestionnaireDesigner({ value, onChange, disabled }) {
   const questionnaire = useMemo(() => value || createQuestionnaire(), [value]);
@@ -73,7 +45,7 @@ export default function QuestionnaireDesigner({ value, onChange, disabled }) {
     <details className="q-import"><summary>+ 批量导入 (CSV)</summary>
       <BatchImport disabled={disabled} onImport={rows => {
         const imported = rows.map(row => ({
-          question_id: uid('question'),
+          question_id: createId('question'),
           type: row.type || 'likert',
           required: row.required !== 'false',
           prompt_i18n: { zh: row.zh || row.en || '', ja: row.ja || row.en || '', en: row.en || '' },

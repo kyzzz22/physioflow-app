@@ -11,16 +11,24 @@ export { freezeProtocolGraph, hashProtocolGraph, validateProtocolGraphConfigurat
 export {
   appendUiElement,
   createParticipantScreen,
+  createParticipantUiTheme,
   createUiElement,
+  isUiTokenRef,
+  insertUiElement,
   mapUiElement,
+  moveUiElement,
   normalizeParticipantUi,
   PARTICIPANT_UI_SCHEMA_VERSION,
+  PARTICIPANT_UI_THEME_DEFAULTS,
   PARTICIPANT_UI_TYPES,
   participantUiTemplate,
   removeUiElement,
   resolveUiBinding,
+  UI_STYLE_KEYS,
   validateParticipantUi,
 } from './participantUi.js';
+export { resolveStyleValue, resolveTheme, resolveUiStyle } from './uiStyle.js';
+export { createBlockOrder, createJitteredDuration } from './experimentStructure.js';
 export {
   archiveProtocol,
   createNextGraphProtocolVersion,
@@ -37,3 +45,9 @@ export {
   protocolVersionOf,
   renameProtocol,
 } from './protocolSelectors.js';
+
+export { createEmotionGraphTemplate, createGonogoGraphTemplate, createStroopGraphTemplate, generateGonogoTrials, generateStroopTrials } from './taskTemplates.js';
+
+export { COMPARISON_OPS, createQuestionnaire, LANGS, newQuestion, parseQuestionnaireCsv, PRESETS, QUESTION_TYPES, questionnaireScore, removeQuestionnaireFromLibrary, saveQuestionnaireToLibrary, seededShuffle, validateQuestionnaire } from './questionnaireModel.js';
+
+export { loadFlowSnapshots, MAX_FLOW_SNAPSHOTS, mergeFlowSnapshot, removeFlowSnapshot, saveFlowSnapshot, withoutFlowSnapshot } from './flowSnapshots.js';

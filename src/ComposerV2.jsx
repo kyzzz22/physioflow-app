@@ -4,29 +4,57 @@ import {
   addNode,
   assignNodeToGroup,
   connect,
+  createId,
   createNodeGroup,
   createSubflowTemplate,
   disconnect,
   duplicateNode,
   insertNodeOnControlEdge,
   instantiateSubflowTemplate,
+  loadFlowSnapshots,
+  mapUiElement,
   moveNodes,
   protocolNameOf,
+  removeFlowSnapshot,
   removeVariable,
   removeNodeGroup,
   removeSubflowTemplate,
   removeNode,
+  saveFlowSnapshot,
   updateVariable,
   updateNodeGroup,
+  serializeProtocolGraph,
   updateNode,
   validateProtocolGraphConfiguration,
 } from './core/index.js';
+import { calibrationReport } from './visualAngle.js';
+import { generateGonogoTrials, generateStroopTrials } from './core/index.js';
 import ParticipantUiBuilder from './ParticipantUiBuilder.jsx';
+import ParticipantRenderer from './ParticipantRenderer.jsx';
+import QuestionnaireEditor from './QuestionnaireEditorV2.jsx';
+import { findUiElement, localResourceManifest, schemaForNode } from './runtime/index.js';
+import { translate, useLanguage } from './i18n.jsx';
 import { createProjectComponentRegistry, exampleReactionButtonPackage, installComponentPackage, uninstallComponentPackage } from './sdk/index.js';
 import { exampleSimulatedConnector, installDeviceConnector, uninstallDeviceConnector } from './devices/index.js';
 import { createProtocolChangeSet, mergeProtocolChangeSet } from './collaboration/index.js';
 import { createDeploymentBundle, validateDeploymentBundle } from './deployment/index.js';
 import { HostedExecutionClient, LocalHostedExecutionService, validateParticipantBootstrap } from './hosted/index.js';
+
+const UI_TEMPLATE_KIND = {
+  'display.screen': 'instruction',
+  'display.media': 'media',
+  'input.rating': 'rating',
+  'input.text': 'text',
+  'timing.wait': 'instruction',
+  'stimulus.fixation': 'fixation',
+  'stimulus.attention-check': 'attention',
+  'setup.device-check': 'device',
+  'operator.manual-event': 'manual',
+  'stimulus.screen-calibration': 'calibration',
+  'stimulus.custom-html': 'html',
+  'utility.note': 'instruction',
+  'utility.junction': 'instruction',
+};
 
 const NODE_WIDTH = 188;
 const NODE_HEIGHT = 112;
@@ -78,11 +106,29 @@ function groupBounds(group, nodes) {
 }
 
 export default function ComposerV2({ protocol, onChange, onSave, onBack, onExport, onPreview, onFreeze, onCreateDraft, onHostedRun, onUndo, onRedo, canUndo, canRedo, hasUnsaved, saveAnim }) {
+  const { language } = useLanguage();
+  const t = key => translate(key, language);
   const [selectedNodeId, setSelectedNodeId] = useState(protocol.graph.entryNodeId);
   const [selectedEdgeId, setSelectedEdgeId] = useState(null);
   const [pendingPort, setPendingPort] = useState(null);
   const [message, setMessage] = useState('');
   const [editorMode, setEditorMode] = useState('quick');
+  const [codeView, setCodeView] = useState(false);
+  const [codeText, setCodeText] = useState('');
+  const [codeError, setCodeError] = useState('');
+  const [previewNodeId, setPreviewNodeId] = useState(null);
+  const [previewEdit, setPreviewEdit] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [marquee, setMarquee] = useState(null);
+  const [snapEnabled, setSnapEnabled] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [snapshotsOpen, setSnapshotsOpen] = useState(false);
+  const [snapshotName, setSnapshotName] = useState('');
+  const [snapshots, setSnapshots] = useState(() => loadFlowSnapshots(protocol.protocolId));
+  const [deletePending, setDeletePending] = useState(null);
+  const clipboardRef = useRef([]);
   const [collaborationBaseline, setCollaborationBaseline] = useState(() => structuredClone(protocol));
   const collaborationProtocolRef = useRef(protocol);
   collaborationProtocolRef.current = protocol;
@@ -95,6 +141,9 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
   const validation = useMemo(() => validateProtocolGraphConfiguration(protocol, registry), [protocol, registry]);
   const selectedNode = protocol.graph.nodes.find(node => node.id === selectedNodeId) || null;
   const selectedEdge = protocol.graph.edges.find(edge => edge.id === selectedEdgeId) || null;
+  const previewNode = previewNodeId ? protocol.graph.nodes.find(node => node.id === previewNodeId) : null;
+  const previewDefinition = previewNode ? registry.get(previewNode.component.type, previewNode.component.version) : null;
+  const updatePreviewUi = ui => { if (previewNode) commit(updateNode(protocol, previewNode.id, { config: { ...previewNode.config, ui } })); };
 
   useEffect(() => {
     setCollaborationBaseline(structuredClone(collaborationProtocolRef.current));
@@ -103,6 +152,17 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
   const locked = protocol.version?.status === 'frozen';
   const migrationReviewRequired = protocol.legacy?.migrationReport?.formalRunAllowed === false;
   const commit = next => { if (!locked) onChange(next, true); };
+  const openCodeView = () => { setCodeText(serializeProtocolGraph(protocol, 2)); setCodeError(''); setCodeView(true); };
+  const applyCode = () => {
+    try {
+      const parsed = JSON.parse(codeText);
+      const check = validateProtocolGraphConfiguration(parsed, registry);
+      if (!check.valid) { setCodeError(check.errors.map(error => error.message).join(' · ')); return; }
+      commit(parsed);
+      setCodeView(false);
+      setCodeError('');
+    } catch (error) { setCodeError(error.message); }
+  };
   const addComponent = definition => {
     const controlIn = definition.ports.find(port => port.kind === 'control' && port.direction === 'input');
     const controlOut = definition.ports.find(port => port.kind === 'control' && port.direction === 'output');
@@ -136,6 +196,18 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
     } catch (error) { setMessage(error.message); }
   };
 
+  const addNodeAt = (type, x, y) => {
+    const definition = registry.get(type);
+    if (!definition) return;
+    try {
+      const result = addNode(protocol, type, { config: definition.defaultConfig, label: definition.label, layout: { x: Math.max(12, Math.round(x - NODE_WIDTH / 2)), y: Math.max(12, Math.round(y - NODE_HEIGHT / 2)) } });
+      commit(result.protocol);
+      setSelectedIds(new Set([result.node.id]));
+      setSelectedNodeId(result.node.id);
+      setMessage(`Added ${definition.label}`);
+    } catch (error) { setMessage(error.message); }
+  };
+
   const selectPort = (node, port) => {
     if (port.direction === 'output') {
       setPendingPort({ nodeId: node.id, portId: port.id, kind: port.kind, dataType: port.dataType });
@@ -153,18 +225,55 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
     } catch (error) { setMessage(error.message); }
   };
 
+  const selectedSet = () => (selectedIds.size ? selectedIds : new Set(selectedNodeId ? [selectedNodeId] : []));
+  const selectNode = (node, event) => {
+    event.stopPropagation();
+    setSelectedEdgeId(null);
+    if (event.shiftKey) {
+      setSelectedIds(current => {
+        const next = new Set(current);
+        if (next.has(node.id)) {
+          next.delete(node.id);
+          if (selectedNodeId === node.id) setSelectedNodeId(next.values().next().value || null);
+        } else {
+          next.add(node.id);
+          setSelectedNodeId(node.id);
+        }
+        return next;
+      });
+    } else {
+      setSelectedIds(new Set([node.id]));
+      setSelectedNodeId(node.id);
+    }
+  };
+
   const startDrag = (event, node) => {
     if (event.button !== 0 || event.target.closest('.composer-port')) return;
-    dragRef.current = { nodeId: node.id, startX: event.clientX, startY: event.clientY, x: node.layout.x, y: node.layout.y };
+    const set = selectedSet();
+    const ids = set.has(node.id) && set.size > 1 ? [...set] : [node.id];
+    dragRef.current = {
+      ids,
+      startX: event.clientX,
+      startY: event.clientY,
+      origins: Object.fromEntries(ids.map(id => {
+        const target = protocol.graph.nodes.find(item => item.id === id);
+        return [id, { x: target.layout.x, y: target.layout.y }];
+      })),
+    };
     onChange(protocol, true);
     event.currentTarget.setPointerCapture(event.pointerId);
   };
   const dragNode = event => {
     const drag = dragRef.current;
     if (!drag) return;
-    const x = Math.max(12, drag.x + event.clientX - drag.startX);
-    const y = Math.max(12, drag.y + event.clientY - drag.startY);
-    onChange(moveNodes(protocol, { [drag.nodeId]: { x, y } }), false);
+    const dx = (event.clientX - drag.startX) / zoom;
+    const dy = (event.clientY - drag.startY) / zoom;
+    const snap = value => (snapEnabled ? Math.round(value / 24) * 24 : value);
+    const positions = Object.fromEntries(drag.ids.map(id => {
+      const origin = drag.origins[id];
+      return [id, { x: snap(Math.max(12, origin.x + dx)), y: snap(Math.max(12, origin.y + dy)) }];
+    }));
+    onChange(moveNodes(protocol, positions), false);
   };
   const endDrag = () => {
     if (!dragRef.current) return;
@@ -172,61 +281,224 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
   };
 
   const updateSelected = patch => commit(updateNode(protocol, selectedNode.id, patch));
-  const deleteSelection = () => {
+  const performDelete = targets => {
     try {
-      if (selectedEdge) {
-        commit(disconnect(protocol, selectedEdge.id));
-        setSelectedEdgeId(null);
-      } else if (selectedNode) {
-        commit(removeNode(protocol, selectedNode.id));
-        setSelectedNodeId(null);
+      let next = protocol;
+      for (const id of targets) next = removeNode(next, id).protocol;
+      commit(next);
+      setSelectedIds(new Set());
+      setSelectedNodeId(null);
+      setMessage(`Deleted ${targets.length} node(s)`);
+    } catch (error) { setMessage(error.message); }
+  };
+  const deleteSelection = () => {
+    if (selectedEdge) {
+      commit(disconnect(protocol, selectedEdge.id));
+      setSelectedEdgeId(null);
+      return;
+    }
+    const targets = [...selectedSet()];
+    if (!targets.length) return;
+    setDeletePending({ ids: targets });
+  };
+  const confirmDelete = () => {
+    if (deletePending) performDelete(deletePending.ids);
+    setDeletePending(null);
+  };
+  const cancelDelete = () => setDeletePending(null);
+  const copySelection = () => {
+    const targets = [...selectedSet()];
+    clipboardRef.current = targets.map(id => {
+      const node = protocol.graph.nodes.find(item => item.id === id);
+      if (!node) return null;
+      return { component: node.component, label: node.label, config: structuredClone(node.config), bindings: structuredClone(node.bindings), layout: { x: node.layout.x, y: node.layout.y } };
+    }).filter(Boolean);
+    if (clipboardRef.current.length) setMessage(`Copied ${clipboardRef.current.length} node(s)`);
+  };
+  const pasteClipboard = () => {
+    if (!clipboardRef.current.length) return;
+    try {
+      let next = protocol;
+      const ids = [];
+      for (const item of clipboardRef.current) {
+        const result = addNode(next, item.component.type, { label: item.label, config: structuredClone(item.config), bindings: structuredClone(item.bindings), layout: { x: item.layout.x + 40, y: item.layout.y + 40 } });
+        next = result.protocol;
+        ids.push(result.node.id);
       }
+      commit(next);
+      setSelectedIds(new Set(ids));
+      setSelectedNodeId(ids[ids.length - 1]);
+      setMessage(`Pasted ${ids.length} node(s)`);
     } catch (error) { setMessage(error.message); }
   };
 
-  const duplicateSelection = () => {
-    if (!selectedNode) return;
-    const definition = registry.get(selectedNode.component.type, selectedNode.component.version);
-    const inputPort = definition?.ports.find(port => port.kind === 'control' && port.direction === 'input');
-    const nextPort = definition?.ports.find(port => port.kind === 'control' && port.direction === 'output' && port.id === 'next');
-    try {
-      const result = duplicateNode(protocol, selectedNode.id, {
-        insertAfter: Boolean(inputPort && nextPort),
-        inputPortId: inputPort?.id,
-        outputPortId: nextPort?.id,
+  const viewportPoint = event => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    return { x: (event.clientX - rect.left - pan.x) / zoom, y: (event.clientY - rect.top - pan.y) / zoom };
+  };
+  const onCanvasPointerDown = event => {
+    if (event.button !== 0 || event.target.closest('.composer-node, .composer-port, .composer-wires')) return;
+    const point = viewportPoint(event);
+    setMarquee({ x0: point.x, y0: point.y, x1: point.x, y1: point.y });
+    const move = moveEvent => {
+      const next = viewportPoint(moveEvent);
+      setMarquee(current => (current ? { ...current, x1: next.x, y1: next.y } : current));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      setMarquee(current => {
+        if (current) {
+          const left = Math.min(current.x0, current.x1), right = Math.max(current.x0, current.x1);
+          const top = Math.min(current.y0, current.y1), bottom = Math.max(current.y0, current.y1);
+          const inside = protocol.graph.nodes.filter(node => node.layout.x >= left && node.layout.x <= right && node.layout.y >= top && node.layout.y <= bottom).map(node => node.id);
+          setSelectedIds(new Set(inside));
+          setSelectedNodeId(inside.length ? inside[0] : null);
+        }
+        return null;
       });
-      commit(result.protocol);
-      setSelectedNodeId(result.node.id);
-      setMessage(inputPort && nextPort ? 'Node duplicated in the flow' : 'Node duplicated; connect its ports to use it');
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  const onCanvasWheel = event => {
+    event.preventDefault();
+    if (event.ctrlKey || event.metaKey) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const mx = event.clientX - rect.left;
+      const my = event.clientY - rect.top;
+      const factor = event.deltaY > 0 ? 0.9 : 1.1;
+      const nextZoom = Math.min(2.5, Math.max(0.4, zoom * factor));
+      const ratio = nextZoom / zoom;
+      setPan(previous => ({ x: mx - (mx - previous.x) * ratio, y: my - (my - previous.y) * ratio }));
+      setZoom(nextZoom);
+    } else {
+      setPan(previous => ({ x: previous.x - event.deltaX, y: previous.y - event.deltaY }));
+    }
+  };
+
+  const autoLayout = () => {
+    const adjacency = new Map();
+    protocol.graph.edges.filter(edge => edge.kind === 'control').forEach(edge => {
+      if (!adjacency.has(edge.source.nodeId)) adjacency.set(edge.source.nodeId, []);
+      adjacency.get(edge.source.nodeId).push(edge.target.nodeId);
+    });
+    const levels = new Map([[protocol.graph.entryNodeId, 0]]);
+    const positions = {};
+    const levelCounts = new Map();
+    const queue = [protocol.graph.entryNodeId];
+    const visited = new Set(queue);
+    let head = 0;
+    while (head < queue.length) {
+      const id = queue[head++];
+      const level = levels.get(id) || 0;
+      const count = levelCounts.get(level) || 0;
+      levelCounts.set(level, count + 1);
+      positions[id] = { x: 80 + level * 220, y: 100 + count * 140 };
+      for (const next of adjacency.get(id) || []) {
+        if (!visited.has(next)) { visited.add(next); levels.set(next, level + 1); queue.push(next); }
+      }
+    }
+    protocol.graph.nodes.forEach(node => { if (!positions[node.id]) positions[node.id] = { ...node.layout }; });
+    commit(moveNodes(protocol, positions));
+    setMessage('Auto layout applied');
+  };
+
+  const searchResults = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return [];
+    return protocol.graph.nodes.filter(node => node.label.toLowerCase().includes(query) || node.component.type.toLowerCase().includes(query));
+  }, [searchQuery, protocol]);
+  const focusNode = id => {
+    const node = protocol.graph.nodes.find(item => item.id === id);
+    if (!node) return;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    const cx = rect ? rect.width / 2 : 420;
+    const cy = rect ? rect.height / 2 : 300;
+    setPan({ x: cx - (node.layout.x + 94) * zoom, y: cy - (node.layout.y + 56) * zoom });
+    setSelectedIds(new Set([id]));
+    setSelectedNodeId(id);
+    setSearchQuery('');
+  };
+
+  const persistSnapshot = () => {
+    const snapshot = { id: `snap_${Date.now()}`, name: snapshotName.trim() || `Snapshot ${snapshots.length + 1}`, savedAt: new Date().toISOString(), nodes: protocol.graph.nodes.map(node => ({ id: node.id, layout: node.layout })) };
+    setSnapshots(saveFlowSnapshot(protocol.protocolId, snapshot));
+    setSnapshotName('');
+    setMessage('Flow snapshot saved');
+  };
+  const restoreSnapshot = snapshot => {
+    const positions = Object.fromEntries(snapshot.nodes.map(node => [node.id, node.layout]));
+    commit(moveNodes(protocol, positions));
+    setMessage(`Restored ${snapshot.name}`);
+  };
+  const deleteSnapshot = id => setSnapshots(removeFlowSnapshot(protocol.protocolId, id));
+
+  const duplicateSelection = () => {
+    const targets = [...selectedSet()].filter(id => id !== protocol.graph.entryNodeId);
+    if (!targets.length) return;
+    try {
+      let next = protocol;
+      for (const id of targets) {
+        const result = duplicateNode(next, id, { insertAfter: false });
+        next = result.protocol;
+      }
+      commit(next);
+      setMessage(`Duplicated ${targets.length} node(s)`);
     } catch (error) { setMessage(error.message); }
   };
+
+  useEffect(() => {
+    const onKey = event => {
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (event.metaKey || event.ctrlKey) {
+        const key = event.key.toLowerCase();
+        if (key === 'c') { copySelection(); }
+        else if (key === 'v') { event.preventDefault(); pasteClipboard(); }
+        else if (key === 'd') { event.preventDefault(); duplicateSelection(); }
+      } else if ((event.key === 'Delete' || event.key === 'Backspace') && (selectedSet().size || selectedEdge)) {
+        event.preventDefault();
+        deleteSelection();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   return <main className={`composer-v2 ${locked ? 'locked' : ''}`}>
     <header className="composer-header">
       <div className="brand"><span>PF</span> Composer V2 {hasUnsaved && <small className="unsaved-dot">●</small>}</div>
       <input disabled={locked} className="composer-title" aria-label="Protocol name" value={protocolNameOf(protocol)} onChange={event => onChange({ ...protocol, metadata: { ...protocol.metadata, name: event.target.value }, audit: { ...protocol.audit, updatedAt: new Date().toISOString() } }, true)} />
-      <div className="composer-mode-switch" aria-label="Editor mode">
-        {['quick', 'design', 'advanced'].map(mode => <button key={mode} aria-pressed={editorMode === mode} className={editorMode === mode ? 'active' : ''} onClick={() => setEditorMode(mode)}>{mode[0].toUpperCase() + mode.slice(1)}</button>)}
+      <div className="composer-mode-switch" aria-label={t('Editor mode')}>
+        {['quick', 'design', 'advanced'].map(mode => <button key={mode} aria-pressed={editorMode === mode && !codeView} className={editorMode === mode && !codeView ? 'active' : ''} onClick={() => { setEditorMode(mode); setCodeView(false); }}>{mode[0].toUpperCase() + mode.slice(1)}</button>)}
+        <button aria-pressed={codeView} className={codeView ? 'active' : ''} onClick={() => codeView ? setCodeView(false) : openCodeView()}>{'{ } ' + t('Code')}</button>
       </div>
       <div className="header-tools">
-        <button disabled={!canUndo} onClick={onUndo}>↩ Undo</button>
-        <button disabled={!canRedo} onClick={onRedo}>↪ Redo</button>
-        <button disabled={!validation.valid} onClick={onPreview}>Preview run</button>
+        <button disabled={!canUndo} onClick={onUndo}>↩ {t('Undo')}</button>
+        <button disabled={!canRedo} onClick={onRedo}>↪ {t('Redo')}</button>
+        <button disabled={!validation.valid} onClick={onPreview}>{t('Preview run')}</button>
         {migrationReviewRequired && !locked && <button onClick={() => commit({ ...protocol, legacy: { ...protocol.legacy, migrationReport: { ...protocol.legacy.migrationReport, formalRunAllowed: true, reviewedAt: new Date().toISOString() } } })}>Mark migration reviewed</button>}
-        {locked ? <button onClick={onCreateDraft}>Create editable version</button> : <button disabled={!validation.valid || migrationReviewRequired} onClick={onFreeze}>Freeze version</button>}
-        <button onClick={onExport}>Export</button>
-        <button className={saveAnim ? 'saved' : ''} onClick={() => onSave(protocol)}>{saveAnim ? '✓ Saved' : 'Save'}</button>
-        <button onClick={onBack}>← Projects</button>
+        {locked ? <button onClick={onCreateDraft}>Create editable version</button> : <button disabled={!validation.valid || migrationReviewRequired} onClick={onFreeze}>{t('Freeze version')}</button>}
+        <button onClick={onExport}>{t('Export')}</button>
+        <button className={saveAnim ? 'saved' : ''} onClick={() => onSave(protocol)}>{saveAnim ? '✓ ' + t('Saved') : t('Save')}</button>
+        <button onClick={onBack}>← {t('Projects')}</button>
       </div>
     </header>
-    <div className="composer-layout">
+    {deletePending && <div className="composer-delete-confirm">Delete {deletePending.ids.length} node(s)? This cannot be undone.
+      <button className="danger" onClick={confirmDelete}>Delete</button>
+      <button onClick={cancelDelete}>Cancel</button>
+    </div>}
+    {codeView ? <CodeView text={codeText} error={codeError} locked={locked} onChange={setCodeText} onApply={applyCode} /> : <div className="composer-layout">
       <aside className="composer-palette">
-        <h2>Components</h2>
-        <p>Click to insert into the selected flow.</p>
+        <h2>{t('Components')}</h2>
+        <p>{t('Click to insert into the selected flow.')}</p>
         {paletteGroups.map(([category, definitions]) => <section key={category}>
           <h3>{category}</h3>
-          {definitions.map(definition => <button key={definition.type} onClick={() => addComponent(definition)}><b>{definition.label}</b><small>{definition.type}</small></button>)}
+          {definitions.map(definition => <button key={definition.type} draggable={!locked} title="Drag onto the canvas" onClick={() => addComponent(definition)} onDragStart={event => { event.dataTransfer.setData('application/x-physioflow-node', definition.type); event.dataTransfer.effectAllowed = 'copy'; }}><b>{definition.label}</b><small>{definition.type}</small></button>)}
         </section>)}
+        {editorMode !== 'quick' && <AssetLibrary assets={protocol.assets || []} locked={locked} onUpdate={assets => commit({ ...protocol, assets })} />}
+        {editorMode !== 'quick' && <VisualAngleCalculator />}
         {editorMode !== 'quick' && <VariableCatalog mode={editorMode} variables={protocol.variables || []} locked={locked} onError={error => setMessage(error.message || String(error))} onAdd={variable => commit(addVariable(protocol, variable))} onUpdate={(name, changes) => commit(updateVariable(protocol, name, changes))} onRemove={name => {
           try { commit(removeVariable(protocol, name)); }
           catch (error) { setMessage(error.message); }
@@ -268,41 +540,76 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
       <section className="composer-canvas-wrap">
         <div className="composer-canvas-toolbar">
           <span>{protocol.graph.nodes.length} nodes · {protocol.graph.edges.length} connections</span>
-          {pendingPort && <button onClick={() => { setPendingPort(null); setMessage(''); }}>Cancel connection</button>}
+          <span className="composer-search">
+            <input aria-label="Search nodes" placeholder="Search nodes…" value={searchQuery} onChange={event => setSearchQuery(event.target.value)} />
+            {searchResults.length > 0 && <div className="composer-search-results">{searchResults.slice(0, 8).map(node => <button key={node.id} onClick={() => focusNode(node.id)}><b>{node.label}</b><small>{node.component.type}</small></button>)}</div>}
+          </span>
+          <button title="Toggle snap to grid" className={snapEnabled ? 'active' : ''} onClick={() => setSnapEnabled(v => !v)}>Snap</button>
+          <button title="Auto layout" onClick={autoLayout}>Auto layout</button>
+          <button title="Flow snapshots" className={snapshotsOpen ? 'active' : ''} onClick={() => setSnapshotsOpen(v => !v)}>Snapshots ({snapshots.length})</button>
+          {pendingPort && <button onClick={() => { setPendingPort(null); setMessage(''); }}>{t('Cancel connection')}</button>}
+          <span className="composer-zoom">
+            <button title="Zoom out" onClick={() => setZoom(z => Math.max(0.4, +(z * 0.8).toFixed(2)))}>−</button>
+            <span>{Math.round(zoom * 100)}%</span>
+            <button title="Zoom in" onClick={() => setZoom(z => Math.min(2.5, +(z * 1.25).toFixed(2)))}>＋</button>
+            <button title="Reset view" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}>1:1</button>
+          </span>
           {message && <small>{message}</small>}
         </div>
-        <div ref={canvasRef} className="composer-canvas" onClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); }}>
-          {(protocol.graph.groups || []).map(group => {
-            const bounds = groupBounds(group, protocol.graph.nodes);
-            return bounds && <section key={group.id} className="composer-group" style={bounds}><b>{group.name}</b><small>{group.nodeIds.length} node(s)</small></section>;
-          })}
-          <svg className="composer-wires" aria-label="Graph connections">
-            {protocol.graph.edges.map(edge => {
-              const sourceNode = protocol.graph.nodes.find(node => node.id === edge.source.nodeId);
-              const targetNode = protocol.graph.nodes.find(node => node.id === edge.target.nodeId);
-              const sourceDef = sourceNode && registry.get(sourceNode.component.type, sourceNode.component.version);
-              const targetDef = targetNode && registry.get(targetNode.component.type, targetNode.component.version);
-              const sourcePort = sourceDef?.ports.find(port => port.id === edge.source.portId);
-              const targetPort = targetDef?.ports.find(port => port.id === edge.target.portId);
-              if (!sourcePort || !targetPort) return null;
-              return <path key={edge.id} className={`${edge.kind} ${selectedEdgeId === edge.id ? 'selected' : ''}`} d={edgePath(portPosition(sourceNode, sourcePort, sourceDef), portPosition(targetNode, targetPort, targetDef))} onClick={event => { event.stopPropagation(); setSelectedEdgeId(edge.id); setSelectedNodeId(null); }} />;
+        {snapshotsOpen && <div className="composer-snapshots-panel">
+          <div className="composer-snapshots-row"><input aria-label="Snapshot name" placeholder="Snapshot name" value={snapshotName} onChange={event => setSnapshotName(event.target.value)} /><button onClick={persistSnapshot}>Save</button></div>
+          {snapshots.length === 0 && <small>No snapshots yet. Save one to preserve the current layout.</small>}
+          {snapshots.map(snapshot => <div key={snapshot.id} className="composer-snapshots-row"><span>{snapshot.name}</span><small>{snapshot.savedAt}</small><button onClick={() => restoreSnapshot(snapshot)}>Restore</button><button className="danger" onClick={() => deleteSnapshot(snapshot.id)}>×</button></div>)}
+        </div>}
+        <div ref={canvasRef} className="composer-canvas" onWheel={onCanvasWheel} onPointerDown={onCanvasPointerDown} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }} onDrop={event => { event.preventDefault(); const type = event.dataTransfer.getData("application/x-physioflow-node"); if (!type) return; const point = viewportPoint(event); addNodeAt(type, point.x, point.y); }} onClick={() => { if (!marquee) { setSelectedIds(new Set()); setSelectedNodeId(null); setSelectedEdgeId(null); } }}>
+          <div className="composer-viewport" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: '0 0' }}>
+            {(protocol.graph.groups || []).map(group => {
+              const bounds = groupBounds(group, protocol.graph.nodes);
+              return bounds && <section key={group.id} className="composer-group" style={bounds}><b>{group.name}</b><small>{group.nodeIds.length} node(s)</small></section>;
             })}
-          </svg>
-          {protocol.graph.nodes.map(node => {
-            const definition = registry.get(node.component.type, node.component.version);
-            return <article key={node.id} className={`composer-node ${selectedNodeId === node.id ? 'selected' : ''}`} style={{ left: node.layout.x, top: node.layout.y }} onClick={event => { event.stopPropagation(); setSelectedNodeId(node.id); setSelectedEdgeId(null); }} onPointerDown={event => startDrag(event, node)} onPointerMove={dragNode} onPointerUp={endDrag}>
-              <span className="node-category">{definition?.category}</span>
-              <b>{node.label}</b>
-              <small>{node.component.type}</small>
-              {(definition?.ports || []).map(port => <button key={port.id} title={`${port.label} · ${port.kind} ${port.direction}`} className={`composer-port ${port.direction} ${port.kind} ${pendingPort?.nodeId === node.id && pendingPort?.portId === port.id ? 'pending' : ''}`} style={{ top: portPosition({ layout: { x: 0, y: 0 } }, port, definition).y }} onClick={event => { event.stopPropagation(); selectPort(node, port); }}><span>{port.label}</span></button>)}
-            </article>;
-          })}
+            <svg className="composer-wires" aria-label="Graph connections">
+              {protocol.graph.edges.map(edge => {
+                const sourceNode = protocol.graph.nodes.find(node => node.id === edge.source.nodeId);
+                const targetNode = protocol.graph.nodes.find(node => node.id === edge.target.nodeId);
+                const sourceDef = sourceNode && registry.get(sourceNode.component.type, sourceNode.component.version);
+                const targetDef = targetNode && registry.get(targetNode.component.type, targetNode.component.version);
+                const sourcePort = sourceDef?.ports.find(port => port.id === edge.source.portId);
+                const targetPort = targetDef?.ports.find(port => port.id === edge.target.portId);
+                if (!sourcePort || !targetPort) return null;
+                return <path key={edge.id} className={`${edge.kind} ${selectedEdgeId === edge.id ? 'selected' : ''}`} d={edgePath(portPosition(sourceNode, sourcePort, sourceDef), portPosition(targetNode, targetPort, targetDef))} onClick={event => { event.stopPropagation(); setSelectedEdgeId(edge.id); setSelectedNodeId(null); }} />;
+              })}
+            </svg>
+            {protocol.graph.nodes.map(node => {
+              const definition = registry.get(node.component.type, node.component.version);
+              return <article key={node.id} className={`composer-node ${selectedIds.has(node.id) ? 'selected' : ''}`} style={{ left: node.layout.x, top: node.layout.y }} onClick={event => selectNode(node, event)} onDoubleClick={() => { setPreviewNodeId(node.id); setPreviewEdit(true); }} onPointerDown={event => startDrag(event, node)} onPointerMove={dragNode} onPointerUp={endDrag}>
+                <span className="node-category">{definition?.category}</span>
+                <b>{node.label}</b>
+                <small>{node.component.type}</small>
+                {(definition?.ports || []).map(port => <button key={port.id} title={`${port.label} · ${port.kind} ${port.direction}`} className={`composer-port ${port.direction} ${port.kind} ${pendingPort?.nodeId === node.id && pendingPort?.portId === port.id ? 'pending' : ''}`} style={{ top: portPosition({ layout: { x: 0, y: 0 } }, port, definition).y }} onClick={event => { event.stopPropagation(); selectPort(node, port); }}><span>{port.label}</span></button>)}
+              </article>;
+            })}
+            {marquee && <div className="composer-marquee" style={{ left: Math.min(marquee.x0, marquee.x1), top: Math.min(marquee.y0, marquee.y1), width: Math.abs(marquee.x1 - marquee.x0), height: Math.abs(marquee.y1 - marquee.y0) }} />}
+          </div>
+          <div className="composer-minimap" onClick={event => {
+            const rect = event.currentTarget.getBoundingClientRect();
+            const mx = ((event.clientX - rect.left) / rect.width) * 1800;
+            const my = ((event.clientY - rect.top) / rect.height) * 1100;
+            const canvasRect = canvasRef.current?.getBoundingClientRect();
+            const cx = canvasRect ? canvasRect.width / 2 : 420;
+            const cy = canvasRect ? canvasRect.height / 2 : 300;
+            setPan({ x: cx - mx * zoom, y: cy - my * zoom });
+          }}>
+            <svg viewBox="0 0 1800 1100" preserveAspectRatio="xMidYMid meet">
+              {protocol.graph.nodes.map(node => <rect key={node.id} x={node.layout.x} y={node.layout.y} width={188} height={112} rx={4} className={`mm-node${selectedIds.has(node.id) ? ' selected' : ''}`} />)}
+              <rect className="mm-viewport" x={-pan.x / zoom} y={-pan.y / zoom} width={1800 / zoom} height={1100 / zoom} />
+            </svg>
+          </div>
         </div>
       </section>
       <aside className="composer-inspector">
-        <h2>Inspector</h2>
+        <h2>{t('Inspector')}</h2>
         {migrationReviewRequired && <div className="migration-review-warning"><b>Migration review required</b><span>{protocol.legacy.migrationReport.issues.length} item(s) must be checked before this draft can be frozen.</span></div>}
-        {selectedNode && <NodeInspector node={selectedNode} definition={registry.get(selectedNode.component.type, selectedNode.component.version)} variables={protocol.variables || []} groups={protocol.graph.groups || []} mode={editorMode} onUpdate={updateSelected} onAssignGroup={groupId => commit(assignNodeToGroup(protocol, selectedNode.id, groupId))} onCreateGroup={() => {
+        {selectedNode && <NodeInspector node={selectedNode} definition={registry.get(selectedNode.component.type, selectedNode.component.version)} variables={protocol.variables || []} groups={protocol.graph.groups || []} mode={editorMode} onUpdate={updateSelected} onAssignGroup={groupId => commit(assignNodeToGroup(protocol, selectedNode.id, groupId))} questionnaireLibrary={protocol.questionnaireLibrary || []} onLibraryChange={library => commit({ ...protocol, questionnaireLibrary: library })} assets={protocol.assets || []} onCreateGroup={() => {
           try {
             const result = createNodeGroup(protocol, [selectedNode.id], { name: `${selectedNode.label} group` });
             commit(result.protocol);
@@ -310,49 +617,174 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
           } catch (error) { setMessage(error.message); }
         }} />}
         {selectedEdge && <div className="inspector-card"><b>{selectedEdge.kind} connection</b><code>{selectedEdge.source.portId} → {selectedEdge.target.portId}</code><button className="danger" onClick={deleteSelection}>Delete connection</button></div>}
-        {!selectedNode && !selectedEdge && <p>Select a node or connection to configure it.</p>}
+        {!selectedNode && !selectedEdge && <p>{t('Select a node or connection to configure it.')}</p>}
         {!locked && selectedNode && !['core.start', 'core.end'].includes(selectedNode.component.type) && <button onClick={duplicateSelection}>Duplicate node</button>}
         {!locked && selectedNode && selectedNode.component.type !== 'core.start' && <button className="danger" onClick={deleteSelection}>Delete node</button>}
         <section className={`composer-validation ${validation.valid ? 'valid' : 'invalid'}`}>
-          <h3>{validation.valid ? '✓ Graph valid' : `${validation.errors.length} blocking issues`}</h3>
+          <h3>{validation.valid ? `✓ ${t('Graph valid')}` : `${validation.errors.length} ${t('blocking issues')}`}</h3>
           {[...validation.errors, ...validation.warnings].slice(0, 8).map((issue, index) => <button key={`${issue.code}-${index}`} onClick={() => issue.nodeId && setSelectedNodeId(issue.nodeId)}><b>{issue.code}</b><span>{issue.message}</span></button>)}
         </section>
       </aside>
-    </div>
+    </div>}
+    {previewNode && <div className="node-editor-fullscreen">
+      <div className="node-editor-header">
+        <b>{previewNode.label}</b><small>{previewNode.component.type}@{previewNode.component.version}</small>
+        <button disabled={locked} onClick={() => setPreviewEdit(value => !value)}>{previewEdit ? 'View' : '✎ Edit'}</button>
+        <button className="node-editor-close" onClick={() => setPreviewNodeId(null)}>✕ Done</button>
+      </div>
+      {previewEdit && previewNode.config?.ui
+        ? <ParticipantUiBuilder schema={previewNode.config.ui} defaultTemplate={UI_TEMPLATE_KIND[previewNode.component.type] || 'instruction'} onChange={updatePreviewUi} />
+        : <div className="node-editor-preview"><ParticipantRenderer schema={schemaForNode(previewNode, previewDefinition, null)} preview /></div>}
+    </div>}
   </main>;
 }
 
-function NodeInspector({ node, definition, variables, groups, mode, onUpdate, onAssignGroup, onCreateGroup }) {
+function CodeView({ text, error, locked, onChange, onApply }) {
+  return <div className="composer-code-view">
+    <div className="composer-code-toolbar">
+      <b>Protocol JSON</b>
+      <span>Edit the full protocol graph as JSON. Changes apply only when validation passes.</span>
+      <button disabled={locked} onClick={onApply}>Apply changes</button>
+    </div>
+    {error && <div className="composer-code-error">{error}</div>}
+    <textarea disabled={locked} value={text} onChange={event => onChange(event.target.value)} spellCheck={false} aria-label="Protocol JSON" />
+  </div>;
+}
+
+function NodeInspector({ node, definition, variables, groups, mode, onUpdate, onAssignGroup, onCreateGroup, questionnaireLibrary, onLibraryChange, assets }) {
+  const { language } = useLanguage();
+  const t = key => translate(key, language);
   const currentGroup = groups.find(group => group.nodeIds.includes(node.id));
+
+  const contentSpec = {
+    'display.media': { elementType: 'Media', fields: [{ key: 'mediaType', label: 'Media type', type: 'select', options: ['image', 'audio', 'video'] }, { key: 'sourceUrl', label: 'Source URL', type: 'text' }, { key: 'assetId', label: 'Asset', type: 'asset' }] },
+    'input.rating': { elementType: 'Input', fields: [{ key: 'min', label: 'Minimum', type: 'number' }, { key: 'max', label: 'Maximum', type: 'number' }, { key: 'required', label: 'Required', type: 'boolean' }] },
+    'input.text': { elementType: 'Input', fields: [{ key: 'placeholder', label: 'Placeholder', type: 'text' }, { key: 'required', label: 'Required', type: 'boolean' }, { key: 'multiline', label: 'Multiline', type: 'boolean' }] },
+  }[node.component.type] || null;
+  const contentKeys = contentSpec ? new Set(contentSpec.fields.map(field => field.key)) : null;
+
+  const updateContentField = (key, value) => {
+    if (!node.config?.ui || !contentSpec) return;
+    const element = findUiElement(node.config.ui.root, contentSpec.elementType);
+    if (!element) return;
+    const ui = mapUiElement(node.config.ui, element.id, el => ({ ...el, props: { ...el.props, [key]: value } }));
+    // Picking an asset also bakes its source URL into the node so local runs and the
+    // inline preview render without a hosted resource resolver.
+    const extra = {};
+    if (key === 'assetId' && value) {
+      const asset = (assets || []).find(item => (item.id || item.assetId) === value);
+      if (asset?.sourceUrl) extra.sourceUrl = asset.sourceUrl;
+    }
+    onUpdate({ config: { ...node.config, ui, [key]: value, ...extra } });
+  };
+
+  const fieldGroups = [];
+  const groupIndex = new Map();
+  for (const field of definition?.editorFields || []) {
+    if (contentKeys?.has(field.path)) continue;
+    const group = field.group || 'General';
+    if (!groupIndex.has(group)) { groupIndex.set(group, fieldGroups.length); fieldGroups.push([group, []]); }
+    fieldGroups[groupIndex.get(group)][1].push(field);
+  }
+
+  const renderField = field => {
+    if (field.showWhen && getPath(node.config, field.showWhen.path) !== field.showWhen.equals) return null;
+    // Type-aware Expected value for conditions: follow the bound input variable's type.
+    if (node.component.type === 'logic.condition' && field.path === 'expected' && node.bindings?.value?.kind === 'variable') {
+      const boundVariable = variables.find(variable => variable.name === node.bindings.value.variable);
+      const expected = node.config?.expected;
+      if (boundVariable?.type === 'number') {
+        return <label key={field.path}>{field.label}<input type="number" value={typeof expected === 'number' ? expected : Number.isFinite(Number(expected)) ? Number(expected) : ''} onChange={event => onUpdate({ config: setPath(node.config, 'expected', event.target.value === '' ? '' : Number(event.target.value)) })} />{field.help && <small className="field-help">{field.help}</small>}</label>;
+      }
+      if (boundVariable?.type === 'boolean') {
+        const boolValue = String(expected) === 'true' ? 'true' : String(expected) === 'false' ? 'false' : '';
+        return <label key={field.path}>{field.label}<select value={boolValue} onChange={event => onUpdate({ config: setPath(node.config, 'expected', event.target.value === '' ? null : event.target.value === 'true') })}><option value="">choose…</option><option value="true">true</option><option value="false">false</option></select>{field.help && <small className="field-help">{field.help}</small>}</label>;
+      }
+    }
+    const value = getPath(node.config, field.path);
+    const change = raw => {
+      const nextValue = field.type === 'number' ? Number(raw) : field.type === 'boolean' ? Boolean(raw) : raw;
+      const patch = setPath(node.config, field.path, nextValue);
+      if (field.type === 'asset' && raw && field.path === 'assetId') {
+        const asset = (assets || []).find(item => (item.id || item.assetId) === raw);
+        if (asset?.sourceUrl) patch.sourceUrl = asset.sourceUrl;
+      }
+      onUpdate({ config: patch });
+    };
+    let control;
+    if (field.type === 'textarea') control = <textarea value={value ?? ''} onChange={event => change(event.target.value)} />;
+    else if (field.type === 'select') control = <select value={value ?? ''} onChange={event => change(event.target.value)}>{field.options.map(option => <option key={option} value={option}>{option}</option>)}</select>;
+    else if (field.type === 'color') control = <span className="color-field"><input type="color" value={toHexColor(value)} onChange={event => change(event.target.value)} /><input value={value ?? ''} onChange={event => change(event.target.value)} /></span>;
+    else if (field.type === 'asset') control = <select value={value ?? ''} onChange={event => change(event.target.value || null)}><option value="">— none —</option>{(assets || []).map(asset => <option key={asset.id || asset.assetId} value={asset.id || asset.assetId}>{asset.name || asset.id}</option>)}</select>;
+    else if (field.type === 'variable') control = <select value={value ?? ''} onChange={event => change(event.target.value)}><option value="">— choose —</option>{variables.map(variable => <option key={variable.name} value={variable.name}>{variable.name} · {variable.type}</option>)}</select>;
+    else if (field.type === 'boolean') control = <input type="checkbox" checked={Boolean(value)} onChange={event => change(event.target.checked)} />;
+    else control = <input type={field.type || 'text'} min={field.min} max={field.max} step={field.step} value={value ?? ''} onChange={event => change(event.target.value)} />;
+    return <label key={field.path}>{field.label}{control}{field.help && <small className="field-help">{field.help}</small>}</label>;
+  };
+
+  const emptyHint = node.component.type === 'display.media' && !node.config?.sourceUrl && !node.config?.assetId
+    ? 'Add a source URL or pick an asset below to show media.'
+    : node.component.type === 'input.questionnaire' && !node.config?.questionnaire?.questions?.length
+      ? 'Open the Questionnaire editor to add questions.'
+      : node.component.type === 'stimulus.custom-html' && !node.config?.html
+        ? 'Paste an HTML fragment below.'
+        : null;
+
   return <div className="inspector-card">
-    <label>Label<input value={node.label} onChange={event => onUpdate({ label: event.target.value })} /></label>
+    <label>{t('Label')}<input value={node.label} onChange={event => onUpdate({ label: event.target.value })} /></label>
     <small>{node.component.type}@{node.component.version}</small>
-    {(definition?.editorFields || []).map(field => {
-      if (field.showWhen && getPath(node.config, field.showWhen.path) !== field.showWhen.equals) return null;
-      const value = getPath(node.config, field.path);
-      const change = raw => {
-        const nextValue = field.type === 'number' ? Number(raw) : field.type === 'boolean' ? Boolean(raw) : raw;
-        onUpdate({ config: setPath(node.config, field.path, nextValue) });
-      };
-      return <label key={field.path}>{field.label}
-        {field.type === 'textarea' ? <textarea value={value ?? ''} onChange={event => change(event.target.value)} />
-          : field.type === 'select' ? <select value={value ?? ''} onChange={event => change(event.target.value)}>{field.options.map(option => <option key={option} value={option}>{option}</option>)}</select>
-            : field.type === 'boolean' ? <input type="checkbox" checked={Boolean(value)} onChange={event => change(event.target.checked)} />
-              : <input type={field.type} min={field.min} max={field.max} value={value ?? ''} onChange={event => change(event.target.value)} />}
-      </label>;
-    })}
+    {emptyHint && <div className="node-empty-hint">▶ {emptyHint}</div>}
+    {node.config?.ui && !['core.start', 'core.end'].includes(node.component.type) && <div className="node-inline-preview"><ParticipantRenderer key={node.id} schema={schemaForNode(node, definition, localResourceManifest(assets || []))} preview /></div>}
+    {contentSpec && <div className="content-fields"><b>Content</b>{contentSpec.fields.map(field => <ContentField key={field.key} field={field} value={node.config?.[field.key]} assets={assets} onChange={value => updateContentField(field.key, value)} />)}</div>}
+    {fieldGroups.map(([group, fields]) => <details key={group} className="field-group" open={group === 'General' || fieldGroups.length === 1}><summary>{group}</summary>{fields.map(renderField)}</details>)}
     {node.component.type === 'logic.condition' && <label>Input variable<select aria-label="Condition input variable" value={node.bindings?.value?.kind === 'variable' ? node.bindings.value.variable : ''} onChange={event => onUpdate({ bindings: event.target.value ? { ...node.bindings, value: { kind: 'variable', variable: event.target.value } } : Object.fromEntries(Object.entries(node.bindings || {}).filter(([key]) => key !== 'value')) })}>
       <option value="">Choose a variable…</option>
       {variables.map(variable => <option key={variable.name} value={variable.name}>{variable.name} · {variable.type} / {variable.scope}</option>)}
     </select></label>}
-    {mode !== 'quick' && !['core.start', 'core.end'].includes(node.component.type) && <label>Node group<select aria-label="Node group" value={currentGroup?.id || ''} onChange={event => onAssignGroup(event.target.value || null)}><option value="">No group</option>{groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>}
-    {mode !== 'quick' && !currentGroup && !['core.start', 'core.end'].includes(node.component.type) && <button onClick={onCreateGroup}>Create group from node</button>}
-    {mode !== 'quick' && node.config?.ui && <ParticipantUiBuilder schema={node.config.ui} onChange={ui => onUpdate({ config: { ...node.config, ui } })} />}
-    {mode === 'advanced' && <><details className="component-events"><summary>Recorded events ({definition?.events?.length || 0})</summary>{(definition?.events || []).map(eventType => <code key={eventType}>{eventType}</code>)}</details>
-      <details><summary>Node ID</summary><code>{node.id}</code></details><details><summary>Node JSON</summary><pre>{JSON.stringify(node, null, 2)}</pre></details></>}
+    {node.component.type === 'logic.condition' && <label>Compare with variable<select aria-label="Condition compare variable" value={node.bindings?.compare?.kind === 'variable' ? node.bindings.compare.variable : ''} onChange={event => onUpdate({ bindings: event.target.value ? { ...node.bindings, compare: { kind: 'variable', variable: event.target.value } } : Object.fromEntries(Object.entries(node.bindings || {}).filter(([key]) => key !== 'compare')) })}>
+      <option value="">— none (use Expected value) —</option>
+      {variables.map(variable => <option key={variable.name} value={variable.name}>{variable.name} · {variable.type} / {variable.scope}</option>)}
+    </select></label>}
+    {node.component.type === 'logic.loop' && <label>Until variable<select aria-label="Loop until variable" value={node.bindings?.until?.kind === 'variable' ? node.bindings.until.variable : ''} onChange={event => onUpdate({ bindings: event.target.value ? { ...node.bindings, until: { kind: 'variable', variable: event.target.value } } : Object.fromEntries(Object.entries(node.bindings || {}).filter(([key]) => key !== 'until')) })}>
+      <option value="">— none (iterate by maxIterations) —</option>
+      {variables.map(variable => <option key={variable.name} value={variable.name}>{variable.name} · {variable.type} / {variable.scope}</option>)}
+    </select></label>}
+    {node.component.type === 'input.questionnaire' && <QuestionnaireEditor value={node.config.questionnaire} onChange={questionnaire => onUpdate({ config: { ...node.config, questionnaire } })} library={questionnaireLibrary} onLibraryChange={onLibraryChange} />}
+    {node.component.type === 'experiment.cognitive-task' && <div className="cognitive-generate">
+      <button type="button" onClick={() => {
+        const kind = node.config?.taskKind === 'gonogo' ? 'gonogo' : 'stroop';
+        const generator = kind === 'gonogo' ? generateGonogoTrials : generateStroopTrials;
+        const trials = generator({ trials: kind === 'gonogo' ? 40 : 16, goRatio: Number(node.config?.goRatio ?? 70), seed: Number(node.config?.seed ?? 1), jitter: Number(node.config?.jitterMs ?? 0) });
+        onUpdate({ config: { ...node.config, trials } });
+      }}>Generate trials</button>
+      <small>{node.config?.trials?.length || 0} trial(s) · {node.config?.taskKind || 'stroop'}</small>
+    </div>}
+    {mode !== 'quick' && node.config && <details className="advanced-fields"><summary>Analysis & recovery</summary>
+      <label>Analysis role<select aria-label="Analysis role" value={node.config.analysisRole || ''} onChange={event => onUpdate({ config: { ...node.config, analysisRole: event.target.value } })}><option value="">none</option>{['baseline', 'stimulus', 'recovery', 'task', 'exclude', 'custom'].map(role => <option key={role} value={role}>{role}</option>)}</select></label>
+      <label>Analysis label<input aria-label="Analysis label" value={node.config.analysisLabel || ''} onChange={event => onUpdate({ config: { ...node.config, analysisLabel: event.target.value } })} /></label>
+      <label>Recovery after interruption<select aria-label="Recovery behavior" value={node.config.recoveryBehavior || ''} onChange={event => onUpdate({ config: { ...node.config, recoveryBehavior: event.target.value } })}><option value="">default</option>{['resume', 'restart', 'wait-operator'].map(behavior => <option key={behavior} value={behavior}>{behavior}</option>)}</select></label>
+    </details>}
+    {mode !== 'quick' && !['core.start', 'core.end'].includes(node.component.type) && <label>{t('Node group')}<select aria-label={t('Node group')} value={currentGroup?.id || ''} onChange={event => onAssignGroup(event.target.value || null)}><option value="">{t('No group')}</option>{groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>}
+    {mode !== 'quick' && !currentGroup && !['core.start', 'core.end'].includes(node.component.type) && <button onClick={onCreateGroup}>{t('Create group from node')}</button>}
+    {mode !== 'quick' && node.component.type !== 'input.questionnaire' && node.config?.ui && <ParticipantUiBuilder schema={node.config.ui} defaultTemplate={UI_TEMPLATE_KIND[node.component.type] || 'instruction'} onChange={ui => onUpdate({ config: { ...node.config, ui } })} />}
+    {definition?.events?.length > 0 && <details className="node-data-note"><summary>Records</summary>
+      <small>Events: {definition.events.join(', ')}</small>
+      {definition.dataFields?.length > 0 && <small>Data columns: {definition.dataFields.join(', ')}</small>}
+    </details>}
+    {mode === 'advanced' && <><details><summary>Node ID</summary><code>{node.id}</code></details><details><summary>Node JSON</summary><pre>{JSON.stringify(node, null, 2)}</pre></details></>}
   </div>;
 }
 
+function ContentField({ field, value, assets, onChange }) {
+  if (field.type === 'select') return <label>{field.label}<select value={value ?? ''} onChange={event => onChange(event.target.value)}>{field.options.map(option => <option key={option} value={option}>{option}</option>)}</select></label>;
+  if (field.type === 'asset') return <label>{field.label}<select value={value ?? ''} onChange={event => onChange(event.target.value || null)}><option value="">— none / direct URL —</option>{(assets || []).map(asset => <option key={asset.id || asset.assetId} value={asset.id || asset.assetId}>{asset.name || asset.id}</option>)}</select></label>;
+  if (field.type === 'boolean') return <label className="checkbox-row"><input type="checkbox" checked={Boolean(value)} onChange={event => onChange(event.target.checked)} /> {field.label}</label>;
+  return <label>{field.label}<input type={field.type || 'text'} value={value ?? ''} onChange={event => onChange(field.type === 'number' ? Number(event.target.value) : event.target.value)} /></label>;
+}
+
+function toHexColor(value) {
+  return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#000000';
+}
 function groupDataPorts(group, nodes, direction, componentRegistry) {
   return group.nodeIds.flatMap(nodeId => {
     const node = nodes.find(item => item.id === nodeId);
@@ -371,8 +803,11 @@ function parseEndpoint(value) {
 }
 
 function GroupCatalog({ registry: componentRegistry, groups, nodes, locked, onUpdate, onRemove, onPublish }) {
+  const { language } = useLanguage();
+  const t = key => translate(key, language);
+
   return <section className="group-catalog">
-    <h3>Groups</h3>
+    <h3>{t('Groups')}</h3>
     <p>Visual containers organize related nodes without creating a second execution model.</p>
     {!groups.length && <small>No groups yet. Select a node and create one from its Inspector.</small>}
     {groups.map(group => <article key={group.id}>
@@ -413,10 +848,13 @@ function GroupCatalog({ registry: componentRegistry, groups, nodes, locked, onUp
 }
 
 function SubflowTemplateCatalog({ templates, variables, locked, onInstantiate, onRemove }) {
+  const { language } = useLanguage();
+  const t = key => translate(key, language);
+
   const [mappings, setMappings] = useState({});
   if (!templates.length) return null;
   return <section className="subflow-template-catalog">
-    <h3>Reusable subflows</h3>
+    <h3>{t('Reusable subflows')}</h3>
     <p>Instances are expanded into the same executable graph and keep their template provenance.</p>
     {templates.map(template => {
       const compatible = parameter => variables.filter(variable => parameter.type === 'unknown' || variable.type === 'unknown' || variable.type === parameter.type);
@@ -441,6 +879,9 @@ function snapshotLabel(state) {
 }
 
 function CollaborationCatalog({ protocol, baseline, locked, onSetBaseline, onApply, onMessage }) {
+  const { language } = useLanguage();
+  const t = key => translate(key, language);
+
   const [author, setAuthor] = useState('local-author');
   const [summary, setSummary] = useState('');
   const [pending, setPending] = useState(null);
@@ -472,7 +913,7 @@ function CollaborationCatalog({ protocol, baseline, locked, onSetBaseline, onApp
   };
   const history = protocol.collaboration?.history || [];
   return <section className="collaboration-catalog">
-    <h3>Collaboration change sets</h3>
+    <h3>{t('Collaboration change sets')}</h3>
     <p>Exchange auditable protocol changes without requiring a server. Independent fields merge automatically; same-field edits require an explicit choice.</p>
     <label>Author ID<input value={author} onChange={event => setAuthor(event.target.value)} /></label>
     <label>Summary<input value={summary} onChange={event => setSummary(event.target.value)} placeholder="What changed?" /></label>
@@ -631,6 +1072,9 @@ function DeploymentCatalog({ protocol, onHostedRun, onMessage }) {
 }
 
 function ComponentPackageCatalog({ packages, locked, onInstallExample, onImport, onRemove }) {
+  const { language } = useLanguage();
+  const t = key => translate(key, language);
+
   const [pending, setPending] = useState(null);
   const [approved, setApproved] = useState([]);
   const [error, setError] = useState('');
@@ -647,7 +1091,7 @@ function ComponentPackageCatalog({ packages, locked, onInstallExample, onImport,
   };
   const permissions = pending?.permissions || [];
   return <section className="component-package-catalog">
-    <h3>Project component library</h3>
+    <h3>{t('Project component library')}</h3>
     <p>SDK packages are declarative, versioned, permission-gated, and cannot inject JavaScript into Runtime V2.</p>
     <button disabled={locked || packages.some(item => item.packageId === 'org.physioflow.examples.reaction-button')} onClick={onInstallExample}>Install Reaction Button example</button>
     <label className="component-package-import">Import SDK package<input disabled={locked} type="file" accept="application/json,.json" onChange={readPackage} /></label>
@@ -668,6 +1112,9 @@ function ComponentPackageCatalog({ packages, locked, onInstallExample, onImport,
 }
 
 function DeviceConnectorCatalog({ connectors, locked, onInstallExample, onImport, onRemove }) {
+  const { language } = useLanguage();
+  const t = key => translate(key, language);
+
   const [pending, setPending] = useState(null);
   const [approved, setApproved] = useState([]);
   const [error, setError] = useState('');
@@ -683,7 +1130,7 @@ function DeviceConnectorCatalog({ connectors, locked, onInstallExample, onImport
   };
   const permissions = pending?.permissions || [];
   return <section className="device-connector-catalog">
-    <h3>Device connectors</h3>
+    <h3>{t('Device connectors')}</h3>
     <p>Versioned adapters expose typed I/O channels with explicit connect/read/write permissions and provenance events.</p>
     <button disabled={locked || connectors.some(item => item.connectorId === 'org.physioflow.simulated-sensor')} onClick={onInstallExample}>Install simulated sensor</button>
     <label className="device-connector-import">Import connector manifest<input disabled={locked} type="file" accept="application/json,.json" onChange={readConnector} /></label>
@@ -704,6 +1151,9 @@ function DeviceConnectorCatalog({ connectors, locked, onInstallExample, onImport
 }
 
 function VariableCatalog({ variables, locked, mode, onAdd, onUpdate, onRemove, onError }) {
+  const { language } = useLanguage();
+  const t = key => translate(key, language);
+
   const [draft, setDraft] = useState({ name: '', type: 'string', scope: 'session', defaultValue: '' });
   const submit = () => {
     let defaultValue = draft.defaultValue;
@@ -715,7 +1165,7 @@ function VariableCatalog({ variables, locked, mode, onAdd, onUpdate, onRemove, o
     } catch (error) { onError(error); }
   };
   return <section className="variable-catalog">
-    <h3>Variables</h3>
+    <h3>{t('Variables')}</h3>
     <p>Typed values available to conditions and participant UI bindings.</p>
     {variables.map(variable => <article key={variable.name}>
       <input disabled={locked} aria-label={`${variable.name} variable name`} value={variable.name} onChange={event => {
@@ -737,4 +1187,46 @@ function VariableCatalog({ variables, locked, mode, onAdd, onUpdate, onRemove, o
       <button disabled={!draft.name.trim()} onClick={submit}>Add variable</button>
     </div>}
   </section>;
+}
+
+function VisualAngleCalculator() {
+  const [state, setState] = useState({ displayWidthPx: 1920, displayWidthCm: 60, viewingDistanceCm: 60 });
+  const widthPx = Number(state.displayWidthPx) || 1920;
+  const widthCm = Number(state.displayWidthCm) || 60;
+  const distanceCm = Number(state.viewingDistanceCm) || 60;
+  const report = calibrationReport({ displayWidthPx: widthPx, displayHeightPx: 1080, displayWidthCm: widthCm, displayHeightCm: Math.round(widthCm * 9 / 16), viewingDistanceCm: distanceCm });
+  return <details className="va-calculator"><summary>Visual angle calculator</summary>
+    <div className="va-row">
+      <label>Width (px)<input type="number" value={state.displayWidthPx} onChange={event => setState(s => ({ ...s, displayWidthPx: event.target.value }))} /></label>
+      <label>Width (cm)<input type="number" value={state.displayWidthCm} onChange={event => setState(s => ({ ...s, displayWidthCm: event.target.value }))} /></label>
+      <label>Distance (cm)<input type="number" value={state.viewingDistanceCm} onChange={event => setState(s => ({ ...s, viewingDistanceCm: event.target.value }))} /></label>
+    </div>
+    <div className="va-results">
+      {report.pixels_per_degree != null && <><span>1° = {report.references.one_degree_px} px</span><span>px/degree: {Math.round(report.pixels_per_degree * 100) / 100}</span><span>2° = {report.references.two_degrees_px} px</span><span>5° = {report.references.five_degrees_px} px</span></>}
+      {report.pixels_per_degree == null && <span>Enter a screen width to compute.</span>}
+    </div>
+  </details>;
+}
+
+function AssetLibrary({ assets, locked, onUpdate }) {
+  const [draft, setDraft] = useState({ name: '', mediaType: 'image', url: '' });
+  const add = () => {
+    if (!draft.name.trim() && !draft.url.trim()) return;
+    onUpdate([...(assets || []), { id: createId('asset'), name: draft.name || draft.url, mediaType: draft.mediaType, sourceUrl: draft.url, checksum: null }]);
+    setDraft({ name: '', mediaType: 'image', url: '' });
+  };
+  const remove = id => onUpdate((assets || []).filter(asset => (asset.id || asset.assetId) !== id));
+  return <details className="asset-library"><summary>Media library ({assets.length})</summary>
+    {(assets || []).map(asset => <div key={asset.id || asset.assetId} className="asset-row">
+      <span>{asset.name || asset.fileName || asset.id}</span>
+      <small>{asset.mediaType || asset.type || ''}</small>
+      <button disabled={locked} onClick={() => remove(asset.id || asset.assetId)}>×</button>
+    </div>)}
+    <div className="asset-add">
+      <input aria-label="Asset name" placeholder="Name" value={draft.name} onChange={event => setDraft(s => ({ ...s, name: event.target.value }))} />
+      <select aria-label="Asset type" value={draft.mediaType} onChange={event => setDraft(s => ({ ...s, mediaType: event.target.value }))}><option>image</option><option>audio</option><option>video</option></select>
+      <input aria-label="Asset URL" placeholder="URL" value={draft.url} onChange={event => setDraft(s => ({ ...s, url: event.target.value }))} />
+      <button disabled={locked} onClick={add}>Add</button>
+    </div>
+  </details>;
 }

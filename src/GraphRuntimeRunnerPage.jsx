@@ -1,12 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ParticipantRenderer from './ParticipantRenderer.jsx';
-import { createUiElement, participantUiTemplate, protocolNameOf, protocolStatusOf, protocolVersionOf } from './core/index.js';
+import QuestionnaireForm from './QuestionnaireFormV2.jsx';
+import CognitiveTaskRunner from './CognitiveTaskRunner.jsx';
+import AttentionCheckRunner from './AttentionCheckRunner.jsx';
+import CalibrationRunner from './CalibrationRunner.jsx';
+import { protocolNameOf, protocolStatusOf, protocolVersionOf } from './core/index.js';
 import {
   completeCurrentNode,
   createCoreControlHandlerRegistry,
+  createDeviceSampler,
   createRuntimeState,
+  maxInputSampleRateHz,
   pauseRuntime,
   recordRuntimeEvent,
+  resolveDeviceConnector,
   restoreRuntime,
   resumeRuntime,
   retryCurrentNode,
@@ -14,11 +21,13 @@ import {
   snapshotRuntime,
   startRuntime,
 } from './runtime/index.js';
+import { localResourceManifest, schemaForNode } from './runtime/nodeSchema.js';
+import { DeviceConnectorSession, createSimulatedDeviceAdapter } from './devices/index.js';
 import { clearCurrentRun, saveCurrentRun, saveSession } from './storage.js';
-import { buildGraphSessionFiles } from './data/index.js';
+import { buildGraphBidsBundle, buildGraphSessionFiles } from './data/index.js';
 import { downloadBundle } from './exporter.js';
 import { createProjectComponentRegistry } from './sdk/index.js';
-import { HostedRuntimeSync, resolveParticipantResourceUrl } from './hosted/index.js';
+import { HostedRuntimeSync } from './hosted/index.js';
 
 function runtimeServices() {
   return {
@@ -28,54 +37,12 @@ function runtimeServices() {
   };
 }
 
-function findUiElement(element, type) {
-  if (element?.type === type) return element;
-  for (const child of element?.children || []) {
-    const found = findUiElement(child, type);
-    if (found) return found;
-  }
-  return null;
-}
-
 function packagePermissions(protocol, node) {
   const componentPackage = (protocol.componentPackages || []).find(item => item.components?.some(component => component.type === node.component.type && component.version === node.component.version));
   return componentPackage ? new Set(componentPackage.approvedPermissions || []) : null;
 }
 
-function schemaForNode(node, definition, resources) {
-  const adapter = definition?.runtime?.uiAdapter || 'schema';
-  if (adapter === 'screen' || adapter === 'schema') return structuredClone(node.config?.ui || participantUiTemplate('instruction'));
-  if (adapter === 'media') {
-    const schema = structuredClone(node.config?.ui || participantUiTemplate('media'));
-    const media = findUiElement(schema.root, 'Media');
-    const sourceUrl = resolveParticipantResourceUrl(resources, {
-      assetId: node.config?.assetId || null,
-      nodeId: node.id,
-      fallbackUrl: node.config?.sourceUrl || '',
-    });
-    if (media) media.props = { ...media.props, mediaType: node.config?.mediaType || 'image', sourceUrl, assetId: node.config?.assetId || null };
-    return schema;
-  }
-  if (adapter === 'rating') {
-    const schema = structuredClone(node.config?.ui || participantUiTemplate('form'));
-    const input = findUiElement(schema.root, 'Input');
-    if (input) input.props = { ...input.props, name: 'value', label: node.label, min: node.config?.min ?? 1, max: node.config?.max ?? 7, required: node.config?.required !== false };
-    return schema;
-  }
-  if (adapter === 'text') {
-    const schema = structuredClone(node.config?.ui || participantUiTemplate('form'));
-    const input = findUiElement(schema.root, 'Input');
-    if (input) input.props = { ...input.props, name: 'value', label: node.label, inputType: node.config?.multiline ? 'textarea' : 'text', placeholder: node.config?.placeholder || '', required: Boolean(node.config?.required) };
-    return schema;
-  }
-  if (adapter !== 'wait') return structuredClone(node.config?.ui || participantUiTemplate('instruction'));
-  const schema = structuredClone(node.config?.ui || participantUiTemplate('instruction'));
-  schema.root.children = [
-    createUiElement('Text', { props: { text: node.label, variant: 'heading' } }),
-    createUiElement('Progress', { props: { value: 0, max: Math.max(1, Number(node.config?.durationMs || 1000)), label: 'Please wait…' }, bindings: { value: 'timer.elapsedMs' } }),
-  ];
-  return schema;
-}
+
 
 export default function GraphRuntimeRunnerPage({ data, onDone }) {
   const protocol = data.protocol;
@@ -87,6 +54,10 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
   const [runtime, setRuntime] = useState(initialState);
   const [events, setEvents] = useState(data.restore?.events || []);
   const [responses, setResponses] = useState(data.restore?.responses || []);
+  const deviceEventsRef = useRef(data.restore?.device_events || []);
+  const [deviceStatus, setDeviceStatus] = useState(null);
+  const deviceSessionRef = useRef(null);
+  const samplerRef = useRef(null);
   const [started, setStarted] = useState(Boolean(data.restore?.runtime?.status && data.restore.runtime.status !== 'ready'));
   const [saved, setSaved] = useState(false);
   const hostedSyncRef = useRef(null);
@@ -101,7 +72,7 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
   const currentPermissions = currentNode ? packagePermissions(protocol, currentNode) : null;
   const executableCount = protocol.graph.nodes.filter(node => registry.get(node.component.type, node.component.version)?.runtime?.kind === 'participant').length;
   const progress = { current: runtime.completedNodeIds.length, total: executableCount, percent: executableCount ? Math.round((runtime.completedNodeIds.length / executableCount) * 100) : 100 };
-  const exportFiles = runtime.status === 'completed' ? buildGraphSessionFiles({ ...data.session, status: 'completed', runtime_snapshot: runtime, events, responses }, protocol, events, responses) : null;
+  const exportFiles = runtime.status === 'completed' ? { ...buildGraphSessionFiles({ ...data.session, status: 'completed', runtime_snapshot: runtime, events, responses, device_events: deviceEventsRef.current }, protocol, events, responses), ...buildGraphBidsBundle({ ...data.session, status: 'completed' }, protocol, events, responses) } : null;
 
   const apply = result => {
     runtimeRef.current = result.state;
@@ -109,8 +80,35 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
     if (result.events?.length) setEvents(current => [...current, ...result.events]);
   };
 
-  const begin = () => {
+  const begin = async () => {
     setStarted(true);
+    try {
+      const deviceNode = protocol.graph?.nodes?.find(node => node.config?.deviceConnectorId);
+      if (deviceNode) {
+        const resolved = resolveDeviceConnector(protocol, deviceNode);
+        if (resolved?.connector && resolved.connector.transport === 'simulated') {
+          deviceSessionRef.current = new DeviceConnectorSession({
+            connector: { ...resolved.connector, approvedPermissions: resolved.connector.approvedPermissions },
+            adapter: createSimulatedDeviceAdapter(),
+            sessionId: data.session.session_id,
+            services: services.current,
+            onEvent: event => { deviceEventsRef.current.push(event); },
+          });
+          try {
+            await deviceSessionRef.current.connect({ source: 'simulated' });
+            samplerRef.current = createDeviceSampler({
+              session: deviceSessionRef.current,
+              channels: resolved.connector.channels.filter(channel => channel.direction === 'input'),
+              sampleRateHz: maxInputSampleRateHz(resolved.connector),
+            });
+            samplerRef.current.start();
+            setDeviceStatus({ connected: true });
+          } catch (error) {
+            setDeviceStatus({ connected: false, error: error.message || String(error) });
+          }
+        }
+      }
+    } catch { /* device setup must not block the experiment */ }
     apply(startRuntime(runtimeRef.current, protocol, registry, services.current));
   };
 
@@ -135,7 +133,16 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
     const submitted = rows.length
       ? recordRuntimeEvent(activeRuntime, protocol, services.current, 'response_submitted', { payload: { fields: rows.map(row => row.name), values, reactionTimeMs: rows[0].reactionTimeMs } })
       : { state: activeRuntime, events: [] };
-    const requestedVariables = result?.variables || values;
+    // Performance-variable backfill: if the designer declared these names as protocol
+    // variables, the runtime feeds live response metrics into them so Condition nodes
+    // can branch adaptively (legacy last_rt_ms / last_response semantics, new-arch style).
+    const declared = new Set((protocol.variables || []).map(variable => variable.name));
+    const performanceValues = {};
+    if (rows.length) {
+      if (declared.has('last_rt_ms')) performanceValues.last_rt_ms = rows[0].reactionTimeMs;
+      if (declared.has('last_response')) performanceValues.last_response = rows[0].value;
+    }
+    const requestedVariables = { ...(result?.variables || values), ...performanceValues };
     const completed = completeCurrentNode(submitted.state, protocol, registry, services.current, { outputs: result?.outputs || values, variables: currentPermissions && !currentPermissions.has('session.variables.write') ? {} : requestedVariables });
     apply({ state: completed.state, events: [...submitted.events, ...completed.events] });
   };
@@ -157,6 +164,21 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
   }, [currentNode?.id]);
 
   useEffect(() => {
+    if (!started || !['completed', 'failed'].includes(runtime.status)) return undefined;
+    samplerRef.current?.stop();
+    deviceSessionRef.current?.disconnect('session end').catch(() => {});
+    return undefined;
+  }, [runtime.status, started]);
+
+  useEffect(() => {
+    if (!started || runtime.status !== 'waiting') return undefined;
+    const timer = setInterval(() => {
+      setDeviceStatus(current => (current?.connected ? { ...current, sampleCount: deviceEventsRef.current.length } : current));
+    }, 500);
+    return () => clearInterval(timer);
+  }, [runtime.status, started]);
+
+  useEffect(() => {
     if (!started || !currentNode || runtime.status !== 'waiting') return undefined;
     const duration = currentDefinition?.runtime?.completion === 'durationMs'
       ? currentNode.config?.durationMs
@@ -168,7 +190,7 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
 
   useEffect(() => {
     if (!started || ['completed', 'failed'].includes(runtime.status)) return;
-    saveCurrentRun({ session: data.session, protocol, runtime: snapshotRuntime(runtime), events, responses, saved_at: new Date().toISOString(), runtime_version: 2 });
+    saveCurrentRun({ session: data.session, protocol, runtime: snapshotRuntime(runtime), events, responses, device_events: deviceEventsRef.current, saved_at: new Date().toISOString(), runtime_version: 2 });
   }, [data.session, events, protocol, responses, runtime, started]);
 
   useEffect(() => {
@@ -192,6 +214,7 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
       runtime_snapshot: runtime,
       events,
       responses,
+      device_events: deviceEventsRef.current,
       data_contract_version: '2.0.0-alpha.1',
     };
     saveSession(finished).then(() => clearCurrentRun()).then(() => setSaved(true)).catch(error => setSaved(error.message || 'Save failed'));
@@ -200,7 +223,9 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
   if (!started) return <main className="graph-runner"><div className="graph-runner-ready"><span className="eyebrow">RUNTIME V2 READY</span><h1>{protocolNameOf(protocol)}</h1><p>{data.session.participant_id} · {executableCount} participant components</p><button className="primary" onClick={begin}>Begin experiment</button></div></main>;
   if (runtime.status === 'completed') {
     const hostedReady = !hostedSyncRef.current || hostedStatus?.completed;
-    return <main className="graph-runner"><div className="graph-runner-ready"><span className="eyebrow">SESSION COMPLETE</span><h1>Thank you</h1><p>{events.length} events · {responses.length} responses · {Object.keys(exportFiles).length} export files</p><p>{saved === true ? 'Saved locally.' : typeof saved === 'string' ? saved : 'Saving…'}</p>{hostedSyncRef.current && <p>{hostedStatus?.completed ? `Hosted sync complete · revision ${hostedStatus.revision}` : hostedStatus?.error ? `Hosted sync failed: ${hostedStatus.error}` : 'Syncing hosted session…'}</p>}{hostedStatus?.error && <button onClick={() => syncHosted().catch(() => {})}>Retry hosted sync</button>}<button className="primary" onClick={() => downloadBundle(exportFiles, data.session.participant_id)}>Export complete data package</button><button disabled={saved !== true || !hostedReady} onClick={onDone}>Return to projects</button></div></main>;
+    const deviceSampleCount = deviceEventsRef.current.length;
+    return <main className="graph-runner"><div className="graph-runner-ready"><span className="eyebrow">SESSION COMPLETE</span><h1>Thank you</h1><p>{events.length} events · {responses.length} responses · {deviceSampleCount} device samples · {Object.keys(exportFiles).length} export files</p><p>{saved === true ? 'Saved locally.' : typeof saved === 'string' ? saved : 'Saving…'}</p>{deviceStatus?.connected && <p>Device connected · {deviceSampleCount} samples collected</p>}{hostedSyncRef.current && <p>{hostedStatus?.completed ? `Hosted sync complete · revision ${hostedStatus.revision}` : hostedStatus?.error ? `Hosted sync failed: ${hostedStatus.error}` : 'Syncing hosted session…'}</p>}{hostedStatus?.error && <button onClick={() => syncHosted().catch(() => {})}>Retry hosted sync</button>}
+      <button className="primary" onClick={() => downloadBundle(exportFiles, data.session.participant_id)}>Export complete data package</button><button disabled={saved !== true || !hostedReady} onClick={onDone}>Return to projects</button></div></main>;
   }
   if (runtime.status === 'failed') return <main className="graph-runner"><div className="graph-runner-ready"><span className="eyebrow">RUNTIME FAILED</span><h1>Experiment stopped</h1><p>{runtime.error}</p>{hostedSyncRef.current && <p>{hostedStatus?.completed ? `Hosted failure recorded · revision ${hostedStatus.revision}` : hostedStatus?.error ? `Hosted sync failed: ${hostedStatus.error}` : 'Recording hosted failure…'}</p>}{hostedStatus?.error && <button onClick={() => syncHosted().catch(() => {})}>Retry hosted sync</button>}<button disabled={Boolean(hostedSyncRef.current && !hostedStatus?.completed)} onClick={onDone}>Return to projects</button></div></main>;
   if (!currentNode) return null;
@@ -213,10 +238,26 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
     </div></div>
     <section className="graph-participant" aria-label="Participant view">
       {runtime.status === 'paused' && <div className="pause-overlay">Paused</div>}
-      <ParticipantRenderer key={currentNode.id} schema={schemaForNode(currentNode, currentDefinition, data.hosted?.resources)} disabled={runtime.status === 'paused'} context={{ participant: data.session, variables: currentPermissions && !currentPermissions.has('session.variables.read') ? {} : runtime.variables, outputs: runtime.outputs, progress, timer: { elapsedMs: 0 } }} onSubmit={complete} onValueChange={payload => record('value_changed', payload)} onAction={action => record('ui_action', action)} onMediaEvent={(eventType, payload) => {
-        record(eventType, payload);
-        if (eventType === 'media_ended' && currentNode.config?.completion?.mode === 'media-ended') complete({});
-      }} />
+      {currentNode.component.type === 'stimulus.attention-check'
+        ? <AttentionCheckRunner config={currentNode.config} language={data.session.participant_language || 'en'} disabled={runtime.status === 'paused'} onSubmit={complete} />
+        : currentNode.component.type === 'stimulus.screen-calibration'
+        ? <CalibrationRunner config={currentNode.config} language={data.session.participant_language || 'en'} disabled={runtime.status === 'paused'} onSubmit={complete} />
+        : currentNode.component.type === 'experiment.cognitive-task'
+        ? <CognitiveTaskRunner config={currentNode.config} disabled={runtime.status === 'paused'} onSubmit={complete} onTrialEvent={(eventType, payload) => record(eventType, payload)} />
+        : currentNode.component.type === 'input.questionnaire' && currentNode.config?.questionnaire?.questions?.length
+        ? <QuestionnaireForm questionnaire={currentNode.config.questionnaire} language={data.session.participant_language || 'en'} randomSeed={runtime.randomSeed} onSubmit={(answers, metadata) => {
+            const scoreValues = metadata?.score?.total > 0 ? {
+              questionnaire_score_correct: metadata.score.correct,
+              questionnaire_score_total: metadata.score.total,
+              questionnaire_score_pct: metadata.score.pct,
+            } : {};
+            const values = { ...answers, ...scoreValues, questionnaire_timed_out_question_ids: metadata?.timedOutQuestionIds || [] };
+            complete({ values, outputs: values, variables: scoreValues, metadata: { questionnaire: metadata } });
+          }} />
+        : <ParticipantRenderer key={currentNode.id} schema={schemaForNode(currentNode, currentDefinition, data.hosted?.resources || localResourceManifest(protocol.assets || []))} disabled={runtime.status === 'paused'} context={{ participant: data.session, variables: currentPermissions && !currentPermissions.has('session.variables.read') ? {} : runtime.variables, outputs: runtime.outputs, progress, timer: { elapsedMs: 0 } }} onSubmit={complete} onValueChange={payload => record('value_changed', payload)} onAction={action => record('ui_action', action)} onMediaEvent={(eventType, payload) => {
+          record(eventType, payload);
+          if (eventType === 'media_ended' && currentNode.config?.completion?.mode === 'media-ended') complete({});
+        }} />}
     </section>
   </main>;
 }

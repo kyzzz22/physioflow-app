@@ -284,3 +284,92 @@ test('snapshot restore rejects a different protocol version', () => {
   changed.version.number += 1;
   assert.throws(() => restoreRuntime(snapshot, changed), /does not match/);
 });
+
+test('condition compares a variable against another bound variable', () => {
+  const idFactory = createSequentialIdFactory();
+  const protocol = createProtocolGraph({ idFactory, name: 'Compare', now: '2026-08-22T00:00:00.000Z' });
+  const start = protocol.graph.nodes.find(node => node.component.type === 'core.start');
+  const end = protocol.graph.nodes.find(node => node.component.type === 'core.end');
+  protocol.graph.edges = [];
+  const condition = addNode(protocol, 'logic.condition', {
+    id: 'condition_1', config: { operator: 'greater_than' },
+    bindings: { value: { kind: 'variable', variable: 'score' }, compare: { kind: 'variable', variable: 'threshold' } },
+  });
+  const pass = addNode(condition.protocol, 'display.screen', { id: 'pass_screen', label: 'Pass' });
+  const fail = addNode(pass.protocol, 'display.screen', { id: 'fail_screen', label: 'Fail' });
+  let next = connect(fail.protocol, 'control', { nodeId: start.id, portId: 'next' }, { nodeId: 'condition_1', portId: 'in' }).protocol;
+  next = connect(next, 'control', { nodeId: 'condition_1', portId: 'true' }, { nodeId: 'pass_screen', portId: 'in' }).protocol;
+  next = connect(next, 'control', { nodeId: 'condition_1', portId: 'false' }, { nodeId: 'fail_screen', portId: 'in' }).protocol;
+  next = connect(next, 'control', { nodeId: 'pass_screen', portId: 'next' }, { nodeId: end.id, portId: 'in' }).protocol;
+  next = connect(next, 'control', { nodeId: 'fail_screen', portId: 'next' }, { nodeId: end.id, portId: 'in' }, { id: 'edge_fail_end' }).protocol;
+  const registry = createCoreComponentRegistry();
+  const passed = startRuntime(runtimeFor(next, { score: 8, threshold: 5 }), next, registry, services());
+  assert.equal(passed.state.currentNodeId, 'pass_screen');
+  const evaluated = passed.events.find(event => event.eventType === 'condition_evaluated');
+  assert.equal(evaluated.payload.expected, 5);
+  assert.equal(evaluated.payload.compare, 5);
+  assert.equal(evaluated.payload.result, true);
+  const failed = startRuntime(runtimeFor(next, { score: 8, threshold: 9 }), next, registry, services());
+  assert.equal(failed.state.currentNodeId, 'fail_screen');
+});
+
+test('random split routes across three connected branches with normalized weights', () => {
+  const idFactory = createSequentialIdFactory();
+  const protocol = createProtocolGraph({ idFactory, name: 'Random 3', now: '2026-08-22T00:00:00.000Z' });
+  const start = protocol.graph.nodes.find(node => node.component.type === 'core.start');
+  const end = protocol.graph.nodes.find(node => node.component.type === 'core.end');
+  protocol.graph.edges = [];
+  const random = addNode(protocol, 'logic.random', { id: 'random_1', config: { probabilityA: 0.5, probabilityB: 0.25, probabilityC: 0.25 } });
+  const branchA = addNode(random.protocol, 'display.screen', { id: 'branch_a', label: 'A' });
+  const branchB = addNode(branchA.protocol, 'display.screen', { id: 'branch_b', label: 'B' });
+  const branchC = addNode(branchB.protocol, 'display.screen', { id: 'branch_c', label: 'C' });
+  const end2 = addNode(branchC.protocol, 'core.end', { id: 'end_2', label: 'End 2' });
+  const end2Id = end2.node.id;
+  let next = connect(end2.protocol, 'control', { nodeId: start.id, portId: 'next' }, { nodeId: 'random_1', portId: 'in' }).protocol;
+  next = connect(next, 'control', { nodeId: 'random_1', portId: 'a' }, { nodeId: 'branch_a', portId: 'in' }).protocol;
+  next = connect(next, 'control', { nodeId: 'random_1', portId: 'b' }, { nodeId: 'branch_b', portId: 'in' }).protocol;
+  next = connect(next, 'control', { nodeId: 'random_1', portId: 'c' }, { nodeId: 'branch_c', portId: 'in' }).protocol;
+  next = connect(next, 'control', { nodeId: 'branch_a', portId: 'next' }, { nodeId: end2Id, portId: 'in' }, { id: 'edge_a_end' }).protocol;
+  next = connect(next, 'control', { nodeId: 'branch_b', portId: 'next' }, { nodeId: end2Id, portId: 'in' }, { id: 'edge_b_end' }).protocol;
+  next = connect(next, 'control', { nodeId: 'branch_c', portId: 'next' }, { nodeId: end2Id, portId: 'in' }, { id: 'edge_c_end' }).protocol;
+  const registry = createCoreComponentRegistry();
+  const options = { sessionId: 'session_r3', startedAtEpochMs: 1000, startedAtMonotonicMs: 500, randomSeed: 'seed-r3' };
+  const visited = new Set();
+  for (let index = 0; index < 40; index += 1) {
+    const run = startRuntime(createRuntimeState(next, { ...options, randomSeed: `seed-r3-${index}` }), next, registry, services());
+    assert.equal(run.state.status, 'waiting');
+    assert.ok(['branch_a', 'branch_b', 'branch_c'].includes(run.state.currentNodeId));
+    const decision = run.events.find(event => event.eventType === 'randomization_evaluated');
+    assert.ok(['a', 'b', 'c'].includes(decision.payload.selectedPort));
+    assert.deepEqual(decision.payload.branchWeights, { a: 0.5, b: 0.25, c: 0.25 });
+    visited.add(run.state.currentNodeId);
+  }
+  assert.deepEqual([...visited].sort(), ['branch_a', 'branch_b', 'branch_c']);
+});
+
+test('loop exits when the until rule stops holding', () => {
+  const idFactory = createSequentialIdFactory();
+  const protocol = createProtocolGraph({ idFactory, name: 'LoopUntil', now: '2026-08-22T00:00:00.000Z' });
+  const start = protocol.graph.nodes.find(node => node.component.type === 'core.start');
+  const end = protocol.graph.nodes.find(node => node.component.type === 'core.end');
+  protocol.graph.edges = [];
+  const loop = addNode(protocol, 'logic.loop', {
+    id: 'loop_1', config: { maxIterations: 50, untilRule: { operator: 'less_than', expected: 3 } },
+    bindings: { until: { kind: 'variable', variable: 'counter' } },
+  });
+  const body = addNode(loop.protocol, 'timing.wait', { id: 'body_1' });
+  let next = connect(body.protocol, 'control', { nodeId: start.id, portId: 'next' }, { nodeId: 'loop_1', portId: 'in' }).protocol;
+  next = connect(next, 'control', { nodeId: 'loop_1', portId: 'body' }, { nodeId: 'body_1', portId: 'in' }).protocol;
+  next = connect(next, 'control', { nodeId: 'body_1', portId: 'next' }, { nodeId: 'loop_1', portId: 'in' }).protocol;
+  next = connect(next, 'control', { nodeId: 'loop_1', portId: 'exit' }, { nodeId: end.id, portId: 'in' }).protocol;
+  const registry = createCoreComponentRegistry();
+  const svc = services();
+  const started = startRuntime(runtimeFor(next, { counter: 0 }), next, registry, svc);
+  assert.equal(started.state.currentNodeId, 'body_1');
+  let state = started.state;
+  for (let counter = 1; counter <= 3; counter += 1) {
+    state = completeCurrentNode(state, next, registry, svc, { variables: { counter } }).state;
+  }
+  assert.equal(state.status, 'completed');
+  assert.equal(state.loopCounts.loop_1, 3);
+});

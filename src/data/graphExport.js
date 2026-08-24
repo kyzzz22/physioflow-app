@@ -134,3 +134,61 @@ export function buildGraphSessionFiles(session, protocol, events = session.event
     'quality_report.json': JSON.stringify(quality, null, 2),
   };
 }
+
+export const BIDS_SCHEMA_VERSION = '1.8.0';
+
+/**
+ * Build a BIDS v1.8.0 events bundle for a graph session.
+ * Returns a flat map of BIDS file paths -> contents. Events are projected from the
+ * normalized graph events (onset/duration in seconds from the monotonic clock).
+ */
+export function buildGraphBidsBundle(session, protocol, events = [], responses = []) {
+  const normalized = normalizeGraphEvents(session, events);
+  const sorted = normalized.filter(event => event.elapsed_monotonic_ms != null).sort((a, b) => a.elapsed_monotonic_ms - b.elapsed_monotonic_ms);
+  const responseByNode = new Map();
+  for (const response of responses) responseByNode.set(response.nodeId || response.node_id, response);
+  const rows = sorted.map((event, index) => {
+    const next = sorted[index + 1];
+    const durationSec = next ? Math.max(0, (next.elapsed_monotonic_ms - event.elapsed_monotonic_ms) / 1000) : 0;
+    const payload = event.payload_json || {};
+    const response = responseByNode.get(event.node_id);
+    return {
+      onset: (event.elapsed_monotonic_ms / 1000).toFixed(3),
+      duration: durationSec.toFixed(3),
+      sample: event.elapsed_monotonic_ms,
+      trial_type: event.event_type,
+      component_type: event.component_type || '',
+      node_id: event.node_id || '',
+      stim_file: payload.assetId || payload.sourceUrl || '',
+      value: payload.value !== undefined ? JSON.stringify(payload.value) : '',
+      accuracy: response?.is_correct !== undefined ? (response.is_correct ? '1' : '0') : '',
+    };
+  });
+  const participantId = session.participant_id || 'P001';
+  const task = protocol.metadata?.name ? protocol.metadata.name.toLowerCase().replace(/[^a-z0-9]+/g, '_') : 'task';
+  const sessionLabel = String(session.session_id || '01').replace(/[^a-zA-Z0-9]/g, '');
+  const prefix = `sub-${participantId}/ses-${sessionLabel}/func/${task}_${sessionLabel}_events`;
+  const columns = ['onset', 'duration', 'sample', 'trial_type', 'component_type', 'node_id', 'stim_file', 'value', 'accuracy'];
+  const eventsJson = {
+    onset: { LongName: 'Event onset', Units: 's' },
+    duration: { LongName: 'Event duration', Units: 's' },
+    sample: { LongName: 'Event sample (runtime monotonic clock)', Units: 'ms' },
+    trial_type: { LongName: 'Runtime event type' },
+    component_type: { LongName: 'Component type' },
+    node_id: { LongName: 'Graph node identifier' },
+    stim_file: { LongName: 'Stimulus file or URL' },
+    value: { LongName: 'Response value' },
+    accuracy: { LongName: 'Accuracy (1 correct / 0 incorrect)' },
+  };
+  return {
+    [`${prefix}.tsv`]: csv(rows, columns),
+    [`${prefix}.json`]: JSON.stringify(eventsJson, null, 2),
+    'participants.tsv': `participant_id\n${participantId}\n`,
+    'participants.json': JSON.stringify({ participant_id: { LongName: 'Participant identifier' } }, null, 2),
+    'dataset_description.json': JSON.stringify({
+      Name: protocolNameOf(protocol),
+      BIDSVersion: BIDS_SCHEMA_VERSION,
+      DatasetType: 'raw',
+    }, null, 2),
+  };
+}

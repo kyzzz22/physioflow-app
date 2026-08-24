@@ -12,7 +12,7 @@ The planned MVP refactor phases 0–6 are implemented on the `demo` branch.
 | 5 — Data | Raw JSONL, normalized CSV, snapshots, manifests, data dictionary, quality report, full package download, participant/media/device lifecycle events, reaction times, device provenance, and independently tested validator |
 | 6 — Migration/Pilot | In-app and CLI migration, migration reports, native Questionnaire adapter, review gate, freeze hashes, three representative migration tests, operator guide, and release gate |
 
-Current automated gate: `npm run quality:release` passes as one authoritative local/CI command: 165 tests, a production build without bundle warnings, strict zero-warning lint, and three isolated browser flows.
+Current automated baseline: 199 tests, a production build without bundle warnings, and strict zero-warning lint pass. Release qualification remains the full `npm run quality:release` command, including its isolated browser flows.
 
 Composer V2 now includes a typed variable catalog with scope, source, default value, and export policy, plus a variable picker for condition inputs. Variable renames update node and participant-UI bindings atomically; referenced variables cannot be removed accidentally.
 

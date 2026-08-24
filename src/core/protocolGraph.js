@@ -77,6 +77,7 @@ export function createProtocolGraph(options = {}) {
     componentPackages: [],
     deviceConnectors: [],
     participantUi: { theme: {} },
+    questionnaireLibrary: [],
     dataPolicy: { level: 'standard', retainRawEvents: true },
   };
 }

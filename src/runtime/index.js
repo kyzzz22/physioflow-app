@@ -15,3 +15,6 @@ export {
   snapshotRuntime,
   startRuntime,
 } from './runtimeMachine.js';
+
+export { findUiElement, localResourceManifest, schemaForNode } from './nodeSchema.js';
+export { createDeviceSampler, maxInputSampleRateHz, resolveDeviceConnector } from './deviceRuntime.js';

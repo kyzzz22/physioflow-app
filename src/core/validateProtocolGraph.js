@@ -87,7 +87,6 @@ export function validateProtocolGraph(protocol, registry) {
     const connector = (protocol.deviceConnectors || []).find(item => item.connectorId === node.config.deviceConnectorId && (!node.config.deviceConnectorVersion || item.version === node.config.deviceConnectorVersion));
     if (!connector) errors.push(issue('device.connector_missing', `${node.label} references unavailable connector ${node.config.deviceConnectorId}`, `graph.nodes.${node.id}.config.deviceConnectorId`, { nodeId: node.id }));
   }
-
   const edgeIds = new Set();
   const incomingPortCounts = new Map();
   for (const [index, edge] of edges.entries()) {

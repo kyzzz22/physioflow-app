@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { normalizeParticipantUi, resolveUiBinding, validateParticipantUi } from './core/index.js';
+import { normalizeParticipantUi, resolveTheme, resolveUiBinding, resolveUiStyle, validateParticipantUi } from './core/index.js';
 
 function boundProp(element, name, context) {
   const binding = element.bindings?.[name];
@@ -9,6 +9,7 @@ function boundProp(element, name, context) {
 export default function ParticipantRenderer({ schema, context = {}, onSubmit, onValueChange, onAction, onMediaEvent, disabled = false, preview = false }) {
   const normalized = useMemo(() => normalizeParticipantUi(schema), [schema]);
   const validation = useMemo(() => validateParticipantUi(normalized), [normalized]);
+  const theme = useMemo(() => resolveTheme(normalized), [normalized]);
   const [values, setValues] = useState({});
   const [errors, setErrors] = useState({});
   const inputs = [];
@@ -44,40 +45,45 @@ export default function ParticipantRenderer({ schema, context = {}, onSubmit, on
 
   const render = element => {
     const props = element.props || {};
-    const style = {
-      color: boundProp(element, 'color', context),
-      background: boundProp(element, 'background', context),
-      fontSize: props.fontSize,
-      textAlign: props.align,
-    };
-    if (element.type === 'Screen') return <div key={element.id} className="participant-ui-screen" style={{ ...style, maxWidth: props.maxWidth, padding: props.padding }}>{element.children.map(render)}</div>;
-    if (element.type === 'Layout') return <div key={element.id} className={`participant-ui-layout ${props.direction || 'column'}`} style={{ ...style, gap: props.gap ?? 16, justifyContent: props.justify, alignItems: props.alignItems }}>{element.children.map(render)}</div>;
+    const style = resolveUiStyle(element, theme, context);
+    // Free-layout positioning: elements carrying x/y coordinates are absolutely
+    // positioned inside a container that opted into free layout.
+    const positioned = (props.x != null && props.y != null) ? { position: 'absolute', left: props.x, top: props.y } : {};
+    if (element.type === 'Screen') return <div key={element.id} className="participant-ui-screen" style={{ ...style, ...(props.free ? { position: 'relative' } : {}) }}>{element.children.map(render)}</div>;
+    if (element.type === 'Layout') return <div key={element.id} className={`participant-ui-layout ${props.direction || 'column'}`} style={{ ...style, gap: style.gap ?? 16, ...(props.free ? { position: 'relative' } : {}) }}>{element.children.map(render)}</div>;
     if (element.type === 'Text') {
       const text = boundProp(element, 'text', context) ?? '';
-      return props.variant === 'heading' ? <h1 key={element.id} style={style}>{text}</h1> : <p key={element.id} style={style}>{text}</p>;
+      const className = props.pulse ? 'participant-pulse' : undefined;
+      return props.variant === 'heading' ? <h1 key={element.id} className={className} style={{ ...style, ...positioned }}>{text}</h1> : <p key={element.id} className={className} style={{ ...style, ...positioned }}>{text}</p>;
     }
     if (element.type === 'Media') {
       const source = boundProp(element, 'sourceUrl', context) || '';
-      if (!source) return <div key={element.id} className="participant-ui-media missing">Media source not configured</div>;
-      if (props.mediaType === 'video') return <video key={element.id} className="participant-ui-media" src={source} controls={props.controls !== false} autoPlay={props.autoPlay} onPlay={() => onMediaEvent?.('media_started', { elementId: element.id, mediaType: 'video' })} onEnded={() => onMediaEvent?.('media_ended', { elementId: element.id, mediaType: 'video' })} onError={() => onMediaEvent?.('media_error', { elementId: element.id, mediaType: 'video' })} />;
-      if (props.mediaType === 'audio') return <audio key={element.id} className="participant-ui-media" src={source} controls autoPlay={props.autoPlay} onPlay={() => onMediaEvent?.('media_started', { elementId: element.id, mediaType: 'audio' })} onEnded={() => onMediaEvent?.('media_ended', { elementId: element.id, mediaType: 'audio' })} onError={() => onMediaEvent?.('media_error', { elementId: element.id, mediaType: 'audio' })} />;
-      return <img key={element.id} className="participant-ui-media" src={source} alt={props.alt || ''} style={{ objectFit: props.fit || 'contain' }} onLoad={() => onMediaEvent?.('media_loaded', { elementId: element.id, mediaType: 'image' })} onError={() => onMediaEvent?.('media_error', { elementId: element.id, mediaType: 'image' })} />;
+      if (!source) return <div key={element.id} className="participant-ui-media missing" style={positioned}>Media source not configured</div>;
+      if (props.mediaType === 'video') return <video key={element.id} className="participant-ui-media" style={positioned} src={source} controls={props.controls !== false} autoPlay={props.autoPlay} onPlay={() => onMediaEvent?.('media_started', { elementId: element.id, mediaType: 'video' })} onEnded={() => onMediaEvent?.('media_ended', { elementId: element.id, mediaType: 'video' })} onError={() => onMediaEvent?.('media_error', { elementId: element.id, mediaType: 'video' })} />;
+      if (props.mediaType === 'audio') return <audio key={element.id} className="participant-ui-media" style={positioned} src={source} controls autoPlay={props.autoPlay} onPlay={() => onMediaEvent?.('media_started', { elementId: element.id, mediaType: 'audio' })} onEnded={() => onMediaEvent?.('media_ended', { elementId: element.id, mediaType: 'audio' })} onError={() => onMediaEvent?.('media_error', { elementId: element.id, mediaType: 'audio' })} />;
+      return <img key={element.id} className="participant-ui-media" src={source} alt={props.alt || ''} style={{ objectFit: props.fit || 'contain', ...positioned }} onLoad={() => onMediaEvent?.('media_loaded', { elementId: element.id, mediaType: 'image' })} onError={() => onMediaEvent?.('media_error', { elementId: element.id, mediaType: 'image' })} />;
     }
     if (element.type === 'Progress') {
       const value = Number(boundProp(element, 'value', context) ?? 0), max = Number(boundProp(element, 'max', context) ?? 100);
-      return <div key={element.id} className="participant-ui-progress">{props.label && <span>{props.label}</span>}<progress value={value} max={max} /></div>;
+      return <div key={element.id} className="participant-ui-progress" style={positioned}>{props.label && <span>{props.label}</span>}<progress value={value} max={max} /></div>;
+    }
+    if (element.type === 'Html') {
+      const html = boundProp(element, 'html', context) || '';
+      if (!html) return <div key={element.id} className="participant-ui-html missing" style={positioned}>No HTML content</div>;
+      return <iframe key={element.id} className="participant-ui-html" title="Custom HTML" srcDoc={html} style={positioned} sandbox="allow-same-origin" />;
     }
     if (element.type === 'Input') {
       const name = props.name;
       const common = { disabled, value: values[name] ?? '', onChange: event => changeValue(name, props.inputType === 'rating' || props.inputType === 'number' ? Number(event.target.value) : event.target.value, element) };
-      return <label key={element.id} className="participant-ui-input"><span>{props.label || name}{props.required && ' *'}</span>
-        {props.inputType === 'rating' ? <div className="participant-rating">{Array.from({ length: Number(props.max || 7) - Number(props.min || 1) + 1 }, (_, index) => Number(props.min || 1) + index).map(value => <button type="button" className={values[name] === value ? 'selected' : ''} disabled={disabled} key={value} onClick={() => changeValue(name, value, element)}>{value}</button>)}</div>
-          : props.inputType === 'textarea' ? <textarea {...common} placeholder={props.placeholder || ''} />
-            : <input {...common} type={props.inputType || 'text'} placeholder={props.placeholder || ''} min={props.min} max={props.max} />}
+      return <label key={element.id} className="participant-ui-input" style={positioned}><span>{props.label || name}{props.required && ' *'}</span>
+        {props.inputType === 'checkbox' ? <span className="participant-checkbox"><input type="checkbox" checked={Boolean(values[name])} disabled={disabled} onChange={event => changeValue(name, event.target.checked ? 'yes' : '', element)} /></span>
+          : props.inputType === 'rating' ? <div className="participant-rating">{Array.from({ length: Number(props.max || 7) - Number(props.min || 1) + 1 }, (_, index) => Number(props.min || 1) + index).map(value => <button type="button" className={values[name] === value ? 'selected' : ''} disabled={disabled} key={value} onClick={() => changeValue(name, value, element)}>{value}</button>)}</div>
+            : props.inputType === 'textarea' ? <textarea {...common} placeholder={props.placeholder || ''} />
+              : <input {...common} type={props.inputType || 'text'} placeholder={props.placeholder || ''} min={props.min} max={props.max} />}
         {errors[name] && <small>{errors[name]}</small>}
       </label>;
     }
-    if (element.type === 'Button') return <button key={element.id} type="button" disabled={disabled || preview} className={`participant-ui-button ${props.variant || 'primary'}`} onClick={() => executeActions(element.actions)}>{props.label || 'Continue'}</button>;
+    if (element.type === 'Button') return <button key={element.id} type="button" disabled={disabled || preview} className={`participant-ui-button ${props.variant || 'primary'}`} style={positioned} onClick={() => executeActions(element.actions)}>{props.label || 'Continue'}</button>;
     return null;
   };
 
