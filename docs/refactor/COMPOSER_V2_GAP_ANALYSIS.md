@@ -1,6 +1,6 @@
 # Composer V2 与旧版编辑器功能差异分析
 
-Date: 2026-08-23
+Date: 2026-08-25
 Authority: `docs/SYSTEM_REFACTOR_PLAN.md` / 过渡期双轨（`IMPLEMENTATION_STATUS.md` 阶段 7）
 
 Composer V2（Protocol Graph 编辑器）与旧版（Block→Trial→Step 编辑器，`FlowWorkspaceOverlay` / `FlowJsonEditor` / `Builder`）在迁移期并存。本文完整盘点两者的功能差异，作为补齐工作的 roadmap。
@@ -19,7 +19,7 @@ Composer V2（Protocol Graph 编辑器）与旧版（Block→Trial→Step 编辑
 | # | 类别 | 旧版 | 新版 | 性质 |
 |---|---|---|---|---|
 | 1 | 数据模型 | Block→Trial→Step（每 trial 可选 flow 图） | 单一 Protocol Graph | 范式差异 |
-| 2 | 可视化编辑 | pan/zoom/snap/多选/复制粘贴/小地图/搜索/自动布局/流快照 | 同等核心能力已实现；缩放拖动换算、Shift 取消选择的隐藏目标已修复 | 核心持平 |
+| 2 | 可视化编辑 | pan/zoom/snap/多选/复制粘贴/小地图/搜索/自动布局/流快照 | 同等核心能力已实现；缩放拖动换算、Shift 取消选择的隐藏目标已修复；另有对齐辅助线（拖拽吸附）、键盘导航（方向键/Escape/Enter）、复制粘贴携带内部连线 | 新版略强 |
 | 3 | 节点/步骤类型 | 14 step + 7 control（含 fixation/attention_check/manual_event/device_check/screen_calibration/custom_html/response/note/junction/timer） | 13 组件（缺上述，多 random split / value switch） | **旧版强（部分）** |
 | 4 | 节点配置 | 极丰富（i18n 内容、外观覆盖、自定义 CSS、媒体、时间行为、恢复、分析窗口、规则编辑器） | editorFields 薄封装（text/select/number/boolean + showWhen） | **旧版强** |
 | 5 | 界面构建 | step-type 决定（每 step 专用 UI） | PPT 式近似画布（元素添加/移动拖拽 + 属性面板 + 全屏节点编辑）+ 真实 `ParticipantRenderer` 预览 | 范式差异（预览为运行时真实渲染） |
@@ -49,7 +49,7 @@ Composer V2（Protocol Graph 编辑器）与旧版（Block→Trial→Step 编辑
 | 2 | **i18n（zh/ja/en）** | ✅ 已接入 | ComposerV2 核心 UI 文案走 `translate()`；词条已补 zh/ja；participant 问卷内容走 `prompt_i18n` |
 | 3 | **节点类型覆盖** | 🔶 部分补齐 | 新增 `stimulus.fixation` / `stimulus.attention-check` / `setup.device-check` / `operator.manual-event`（schema 化注册 + 默认框架）；已补 screen-calibration / custom-html（Html 元素）/ note / junction |
 | 4 | **按节点类型默认框架** | ✅ 已实现 | `participantUiTemplate` 扩展 rating/fixation/attention/device/manual 5 个默认框架；新节点创建即带 |
-| 5 | **画布交互** | ✅ 已实现（核心） | pan/zoom（滚轮+ctrl、工具栏 1:1）、多选（shift-click + marquee 框选 + 拖动同移）、Ctrl+C/V/D 复制粘贴/重复、Delete 批量删除 |
+| 5 | **画布交互** | ✅ 已实现（核心） | pan/zoom（滚轮+ctrl、工具栏 1:1）、多选（shift-click + marquee 框选 + 拖动同移）、Ctrl+C/V/D 复制粘贴/重复（含内部连线携带）、Delete 批量删除、对齐辅助线（6px 容差 + 吸附）、键盘导航（方向键 24px / Shift+8px、Escape 清除选择、Enter 打开节点编辑）、迷你地图视口框按实测画布尺寸 |
 | 6 | **Inspector 丰富度** | ✅ 已实现 | editorFields + 节点双击预览/内联编辑 + 通用「Analysis & recovery」高级段（分析角色/标签/恢复行为） |
 | 7 | **任务模板** | ✅ 已实现并经语义验收 | Emotion 含条件平衡/SAM 三题/恢复段；Stroop 含颜色词、墨色、一致性与正确键；Go/No-Go 含 Go 比例、抑制窗口、漏报/误报结果 |
 | 8 | **导出格式** | ✅ 已实现 | `buildGraphBidsBundle` 产出 BIDS v1.8.0（_events.tsv/_events.json/participants.tsv/dataset_description.json），并入运行导出包 |
@@ -69,4 +69,4 @@ Composer V2（Protocol Graph 编辑器）与旧版（Block→Trial→Step 编辑
 - 节点/Inspector 扩展复用 `componentRegistry.js` 的 `editorFields`（含 group/help/color/asset/variable）/`defaultConfig.ui` 与 `participantUiTemplate`。
 - 问卷用新架构实现（`questionnaireModel.js` 纯模型 + `QuestionnaireEditorV2`/`QuestionnaireFormV2`），不依赖旧版 UI 组件。
 - i18n 复用旧版 `src/i18n.jsx` 词条表（共享基础设施，非 UI 组件）。
-- 已补：实验节点（fixation/attention/device/manual/calibration/custom-html/note/junction）+ Html 元素、全屏节点编辑、BIDS、任务模板、性能变量回填、主题预设、stimuli 媒体库、visual angle、分析窗口/恢复字段、画布交互（pan/zoom/snap/多选/复制粘贴/搜索/自动布局/流快照/小地图）。
+- 已补：实验节点（fixation/attention/device/manual/calibration/custom-html/note/junction）+ Html 元素、全屏节点编辑、BIDS、任务模板、性能变量回填、主题预设、stimuli 媒体库、visual angle、分析窗口/恢复字段、画布交互（pan/zoom/snap/多选/复制粘贴/搜索/自动布局/流快照/小地图）、对齐辅助线与吸附、键盘导航（方向键微调/Escape/Enter）、复制粘贴携带内部连线。

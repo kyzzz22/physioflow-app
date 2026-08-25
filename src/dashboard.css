@@ -445,3 +445,11 @@
   .session-table > div { grid-template-columns: 12px 1fr 1fr; }
   .session-table > div span:nth-of-type(n+3), .session-table time { display: none; }
 }
+@media (max-width: 480px) {
+  .dashboard-hero h1 { font-size: 1.8rem; }
+  .dashboard-workflow { grid-template-columns: 1fr; }
+  .dashboard-secondary-actions { grid-template-columns: 1fr; }
+  .dashboard-stats { flex-wrap: wrap; gap: 8px; }
+  .dashboard-stats span { width: 100%; }
+  .dashboard-actions-head { flex-direction: column; align-items: flex-start; gap: 10px; }
+}

@@ -63,17 +63,34 @@ export default function ParticipantRenderer({ schema, context = {}, onSubmit, on
     }
     if (element.type === 'Progress') {
       const value = Number(boundProp(element, 'value', context) ?? 0), max = Number(boundProp(element, 'max', context) ?? 100);
-      return <div key={element.id} className="participant-ui-progress" style={positioned}>{props.label && <span>{props.label}</span>}<progress value={value} max={max} /></div>;
+      return <div key={element.id} className="participant-ui-progress" style={{ ...style, ...positioned }}>{props.label && <span>{props.label}</span>}<progress value={value} max={max} /></div>;
     }
     if (element.type === 'Html') {
       const html = boundProp(element, 'html', context) || '';
       if (!html) return <div key={element.id} className="participant-ui-html missing" style={positioned}>No HTML content</div>;
       return <iframe key={element.id} className="participant-ui-html" title="Custom HTML" srcDoc={html} style={positioned} sandbox="allow-same-origin" />;
     }
+    if (element.type === 'Divider') {
+      const orientation = props.orientation || 'horizontal';
+      const thickness = Math.max(0.5, Number(props.thickness) || 1);
+      const dividerStyle = { ...style, background: style.background || theme.line, ...positioned };
+      if (orientation === 'vertical') {
+        dividerStyle.width = thickness;
+        if (dividerStyle.height == null) dividerStyle.height = 160;
+      } else {
+        dividerStyle.height = thickness;
+      }
+      return <div key={element.id} className={`participant-ui-divider ${orientation}`} style={dividerStyle} />;
+    }
+    if (element.type === 'Rectangle' || element.type === 'Ellipse') {
+      const isEllipse = element.type === 'Ellipse';
+      const shapeStyle = { ...style, background: style.background || theme.green, ...(isEllipse ? { borderRadius: '50%' } : {}), ...positioned };
+      return <div key={element.id} className={`participant-ui-shape ${isEllipse ? 'ellipse' : 'rectangle'}`} style={shapeStyle} />;
+    }
     if (element.type === 'Input') {
       const name = props.name;
       const common = { disabled, value: values[name] ?? '', onChange: event => changeValue(name, props.inputType === 'rating' || props.inputType === 'number' ? Number(event.target.value) : event.target.value, element) };
-      return <label key={element.id} className="participant-ui-input" style={positioned}><span>{props.label || name}{props.required && ' *'}</span>
+      return <label key={element.id} className="participant-ui-input" style={{ ...style, ...positioned }}><span>{props.label || name}{props.required && ' *'}</span>
         {props.inputType === 'checkbox' ? <span className="participant-checkbox"><input type="checkbox" checked={Boolean(values[name])} disabled={disabled} onChange={event => changeValue(name, event.target.checked ? 'yes' : '', element)} /></span>
           : props.inputType === 'rating' ? <div className="participant-rating">{Array.from({ length: Number(props.max || 7) - Number(props.min || 1) + 1 }, (_, index) => Number(props.min || 1) + index).map(value => <button type="button" className={values[name] === value ? 'selected' : ''} disabled={disabled} key={value} onClick={() => changeValue(name, value, element)}>{value}</button>)}</div>
             : props.inputType === 'textarea' ? <textarea {...common} placeholder={props.placeholder || ''} />
@@ -81,7 +98,7 @@ export default function ParticipantRenderer({ schema, context = {}, onSubmit, on
         {errors[name] && <small>{errors[name]}</small>}
       </label>;
     }
-    if (element.type === 'Button') return <button key={element.id} type="button" disabled={disabled || preview} className={`participant-ui-button ${props.variant || 'primary'}`} style={positioned} onClick={() => executeActions(element.actions)}>{props.label || 'Continue'}</button>;
+    if (element.type === 'Button') return <button key={element.id} type="button" disabled={disabled || preview} className={`participant-ui-button ${props.variant || 'primary'}`} style={{ ...style, ...positioned }} onClick={() => executeActions(element.actions)}>{props.label || 'Continue'}</button>;
     return null;
   };
 

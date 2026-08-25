@@ -1129,11 +1129,11 @@
 
 /* Responsive */
 @media (max-width: 1100px) {
-  .studio { grid-template-columns: 190px minmax(500px, 1fr); }
+  .studio { grid-template-columns: 190px minmax(0, 1fr); }
   .studio-inspector { position: absolute; right: 0; top: 122px; bottom: 0; width: 340px; z-index: 4; box-shadow: -6px 0 20px #0002; }
 }
 @media (max-width: 1000px) {
-  .studio { grid-template-columns: 180px minmax(500px, 1fr); }
+  .studio { grid-template-columns: 180px minmax(0, 1fr); }
   .studio-inspector { width: 270px; }
   .trial-switcher select { min-width: 150px; }
   .flow-project small { display: none; }

@@ -1,7 +1,7 @@
 import { createId } from './ids.js';
 
 export const PARTICIPANT_UI_SCHEMA_VERSION = '1.0.0';
-export const PARTICIPANT_UI_TYPES = Object.freeze(['Screen', 'Layout', 'Text', 'Media', 'Input', 'Button', 'Progress', 'Html']);
+export const PARTICIPANT_UI_TYPES = Object.freeze(['Screen', 'Layout', 'Text', 'Media', 'Input', 'Button', 'Progress', 'Html', 'Divider', 'Rectangle', 'Ellipse']);
 
 export const UI_STYLE_KEYS = Object.freeze([
   'color', 'background', 'fontSize', 'textAlign', 'fontFamily', 'fontWeight', 'lineHeight',

@@ -277,6 +277,7 @@ export default function App() {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || document.activeElement?.isContentEditable) return;
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.key === 's') { e.preventDefault(); const cur = currentRef.current; if (cur) handleSave(cur); return; }
+      if (mod && (e.key.toLowerCase() === 'z' || e.key.toLowerCase() === 'y') && document.querySelector('.participant-ui-builder')) return;
       if (mod && e.key === 'z' && !e.shiftKey && viewRef.current === 'builder') { e.preventDefault(); undo(); return; }
       if (mod && ((e.key === 'z' && e.shiftKey) || e.key === 'y') && viewRef.current === 'builder') { e.preventDefault(); redo(); return; }
       if (e.key === 'Escape' && viewRef.current === 'builder') { e.preventDefault(); handleBackFromBuilder(); return; }

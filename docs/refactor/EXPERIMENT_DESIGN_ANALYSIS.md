@@ -139,7 +139,7 @@ PhysioFlow 的定位是「行为与生理实验的可视化工作流系统」。
 | 外观主题（P3） | ✅ 已实现 | `ThemeEditor` 增加 5 个主题预设（Physio Green / Ocean Blue / Warm Amber / High Contrast / Minimal Mono），一键应用。 |
 | 导出 BIDS（P3） | ✅ 已实现 | `buildGraphBidsBundle` 产出 BIDS v1.8.0（_events.tsv/_events.json/participants.tsv/dataset_description.json），并入运行导出包 |
 | 节点级双击编辑（P3） | ✅ 已实现 | 双击节点打开**全屏节点编辑器**（PPT 式近似画布 + 属性面板 + 真实 `ParticipantRenderer` 预览切换） |
-| 画布交互（完整） | ✅ 已实现 | pan/zoom + 多选 + 复制/粘贴/重复 + 批量删除 + **snap 网格吸附** + **节点搜索/定位** + **自动布局** + **流快照**（localStorage）+ **小地图** |
+| 画布交互（完整） | ✅ 已实现 | pan/zoom + 多选 + 复制/粘贴/重复（含内部连线携带）+ 批量删除 + **snap 网格吸附** + **对齐辅助线（6px 容差 + 吸附）** + **键盘导航（方向键/Escape/Enter）** + **节点搜索/定位** + **自动布局** + **流快照**（localStorage）+ **小地图**（视口框按实测画布尺寸） |
 | 任务模板（emotion/stroop/gonogo） | ✅ 已实现并通过实验语义测试 | Emotion：条件平衡 + SAM 三题 + recovery + 唯一 ID；Stroop：颜色词/墨色/一致性/正确键/练习/jitter；Go/No-Go：Go 比例/抑制窗口/漏报与误报/练习/jitter |
 | 共享问卷库 | ✅ 已实现 | `protocol.questionnaireLibrary` + 纯函数 `saveQuestionnaireToLibrary`/`removeQuestionnaireFromLibrary`，QuestionnaireEditor 内保存/加载/删除 |
 | stimuli 媒体库 | ✅ 已实现 | `protocol.assets` 管理面板（列表/新增/删除），`display.media` 节点 Inspector 有 asset 选择器 |

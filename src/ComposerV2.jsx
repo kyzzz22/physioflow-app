@@ -95,6 +95,47 @@ function edgePath(source, target) {
   return `M ${source.x} ${source.y} C ${source.x + bend} ${source.y}, ${target.x - bend} ${target.y}, ${target.x} ${target.y}`;
 }
 
+const GUIDE_TOLERANCE = 6;
+function computeGuides(ids, positions, nodes) {
+  const xs = [], ys = [];
+  for (const id of ids) {
+    const p = positions[id];
+    if (!p) continue;
+    xs.push(p.x, p.x + NODE_WIDTH / 2, p.x + NODE_WIDTH);
+    ys.push(p.y, p.y + NODE_HEIGHT / 2, p.y + NODE_HEIGHT);
+  }
+  if (!xs.length) return { guides: [], dx: 0, dy: 0 };
+  const left = Math.min(...xs), right = Math.max(...xs);
+  const top = Math.min(...ys), bottom = Math.max(...ys);
+  const boxX = [left, (left + right) / 2, right];
+  const boxY = [top, (top + bottom) / 2, bottom];
+  const others = nodes.filter(node => !ids.includes(node.id));
+  const find = axis => {
+    let best = { value: Infinity, pos: null, a: null, b: null };
+    for (const other of others) {
+      const refs = axis === 'x'
+        ? [[other.layout.x, other.layout.y, other.layout.y + NODE_HEIGHT], [other.layout.x + NODE_WIDTH / 2, other.layout.y, other.layout.y + NODE_HEIGHT], [other.layout.x + NODE_WIDTH, other.layout.y, other.layout.y + NODE_HEIGHT]]
+        : [[other.layout.y, other.layout.x, other.layout.x + NODE_WIDTH], [other.layout.y + NODE_HEIGHT / 2, other.layout.x, other.layout.x + NODE_WIDTH], [other.layout.y + NODE_HEIGHT, other.layout.x, other.layout.x + NODE_WIDTH]];
+      const targets = axis === 'x' ? boxX : boxY;
+      for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+          const diff = refs[i][0] - targets[j];
+          if (Math.abs(diff) < GUIDE_TOLERANCE && Math.abs(diff) < Math.abs(best.value)) {
+            best = { value: diff, pos: refs[i][0], a: refs[i][1], b: refs[i][2] };
+          }
+        }
+      }
+    }
+    return best;
+  };
+  const bx = find('x'), by = find('y');
+  const guides = [];
+  let dx = 0, dy = 0;
+  if (bx.pos !== null) { dx = bx.value; guides.push({ dir: 'v', pos: bx.pos, a: Math.min(top, bx.a), b: Math.max(bottom, bx.b) }); }
+  if (by.pos !== null) { dy = by.value; guides.push({ dir: 'h', pos: by.pos, a: Math.min(left, by.a), b: Math.max(right, by.b) }); }
+  return { guides, dx, dy };
+}
+
 function groupBounds(group, nodes) {
   const members = nodes.filter(node => group.nodeIds.includes(node.id));
   if (!members.length) return null;
@@ -128,11 +169,26 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
   const [snapshotName, setSnapshotName] = useState('');
   const [snapshots, setSnapshots] = useState(() => loadFlowSnapshots(protocol.protocolId));
   const [deletePending, setDeletePending] = useState(null);
-  const clipboardRef = useRef([]);
+  const clipboardRef = useRef({ nodes: [], edges: [] });
+  const [guides, setGuides] = useState([]);
+  const pasteCountRef = useRef(0);
   const [collaborationBaseline, setCollaborationBaseline] = useState(() => structuredClone(protocol));
   const collaborationProtocolRef = useRef(protocol);
   collaborationProtocolRef.current = protocol;
   const canvasRef = useRef(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 900, height: 600 });
+  useEffect(() => {
+    const measure = () => {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (rect) setCanvasSize({ width: rect.width, height: rect.height });
+    };
+    measure();
+    if (canvasRef.current) {
+      const observer = new ResizeObserver(measure);
+      observer.observe(canvasRef.current);
+      return () => observer.disconnect();
+    }
+  }, []);
   const dragRef = useRef(null);
   const registry = useMemo(() => createProjectComponentRegistry(protocol), [protocol]);
   const paletteGroups = useMemo(() => Object.entries(registry.list()
@@ -261,7 +317,7 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
       })),
     };
     onChange(protocol, true);
-    event.currentTarget.setPointerCapture(event.pointerId);
+    try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* 指针捕获不可用时忽略 */ }
   };
   const dragNode = event => {
     const drag = dragRef.current;
@@ -269,15 +325,26 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
     const dx = (event.clientX - drag.startX) / zoom;
     const dy = (event.clientY - drag.startY) / zoom;
     const snap = value => (snapEnabled ? Math.round(value / 24) * 24 : value);
-    const positions = Object.fromEntries(drag.ids.map(id => {
+    const raw = Object.fromEntries(drag.ids.map(id => {
       const origin = drag.origins[id];
-      return [id, { x: snap(Math.max(12, origin.x + dx)), y: snap(Math.max(12, origin.y + dy)) }];
+      return [id, { x: Math.max(12, origin.x + dx), y: Math.max(12, origin.y + dy) }];
     }));
+    const { guides, dx: gdx, dy: gdy } = computeGuides(drag.ids, raw, protocol.graph.nodes);
+    const positions = Object.fromEntries(drag.ids.flatMap(id => {
+      const p = raw[id];
+      if (!p) return [];
+      let x = p.x, y = p.y;
+      if (guides.length) { x += gdx; y += gdy; }
+      else if (snapEnabled) { x = snap(x); y = snap(y); }
+      return [[id, { x: Math.max(12, Math.round(x)), y: Math.max(12, Math.round(y)) }]];
+    }));
+    setGuides(guides);
     onChange(moveNodes(protocol, positions), false);
   };
   const endDrag = () => {
     if (!dragRef.current) return;
     dragRef.current = null;
+    setGuides([]);
   };
 
   const updateSelected = patch => commit(updateNode(protocol, selectedNode.id, patch));
@@ -308,22 +375,40 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
   const cancelDelete = () => setDeletePending(null);
   const copySelection = () => {
     const targets = [...selectedSet()];
-    clipboardRef.current = targets.map(id => {
+    const ids = new Set(targets);
+    const nodes = targets.map(id => {
       const node = protocol.graph.nodes.find(item => item.id === id);
       if (!node) return null;
-      return { component: node.component, label: node.label, config: structuredClone(node.config), bindings: structuredClone(node.bindings), layout: { x: node.layout.x, y: node.layout.y } };
+      return { __srcId: id, component: node.component, label: node.label, config: structuredClone(node.config), bindings: structuredClone(node.bindings), layout: { x: node.layout.x, y: node.layout.y } };
     }).filter(Boolean);
-    if (clipboardRef.current.length) setMessage(`Copied ${clipboardRef.current.length} node(s)`);
+    const edges = protocol.graph.edges
+      .filter(edge => ids.has(edge.source.nodeId) && ids.has(edge.target.nodeId))
+      .map(edge => ({ kind: edge.kind, source: { nodeId: edge.source.nodeId, portId: edge.source.portId }, target: { nodeId: edge.target.nodeId, portId: edge.target.portId } }));
+    clipboardRef.current = { nodes, edges };
+    pasteCountRef.current = 0;
+    if (nodes.length) setMessage(`Copied ${nodes.length} node(s)`);
   };
   const pasteClipboard = () => {
-    if (!clipboardRef.current.length) return;
+    const clip = clipboardRef.current;
+    if (!clip?.nodes?.length) return;
     try {
+      pasteCountRef.current += 1;
+      const offset = 40 + (pasteCountRef.current - 1) * 24;
+      const idMap = {};
       let next = protocol;
       const ids = [];
-      for (const item of clipboardRef.current) {
-        const result = addNode(next, item.component.type, { label: item.label, config: structuredClone(item.config), bindings: structuredClone(item.bindings), layout: { x: item.layout.x + 40, y: item.layout.y + 40 } });
+      for (const item of clip.nodes) {
+        const result = addNode(next, item.component.type, { label: item.label, config: structuredClone(item.config), bindings: structuredClone(item.bindings), layout: { x: item.layout.x + offset, y: item.layout.y + offset } });
         next = result.protocol;
+        idMap[item.__srcId] = result.node.id;
         ids.push(result.node.id);
+      }
+      for (const edge of clip.edges || []) {
+        const from = idMap[edge.source.nodeId], to = idMap[edge.target.nodeId];
+        if (!from || !to) continue;
+        try {
+          next = connect(next, edge.kind, { nodeId: from, portId: edge.source.portId }, { nodeId: to, portId: edge.target.portId }).protocol;
+        } catch (error) { /* 端口不兼容时跳过该连线 */ }
       }
       commit(next);
       setSelectedIds(new Set(ids));
@@ -452,6 +537,7 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
     const onKey = event => {
       const tag = document.activeElement?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if ((previewEdit && previewNode?.config?.ui) || (editorMode !== 'quick' && selectedNode?.config?.ui)) return;
       if (event.metaKey || event.ctrlKey) {
         const key = event.key.toLowerCase();
         if (key === 'c') { copySelection(); }
@@ -460,6 +546,30 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
       } else if ((event.key === 'Delete' || event.key === 'Backspace') && (selectedSet().size || selectedEdge)) {
         event.preventDefault();
         deleteSelection();
+      } else if (event.key === 'Escape') {
+        if (deletePending) setDeletePending(null);
+        setSelectedIds(new Set());
+        setSelectedNodeId(null);
+        setSelectedEdgeId(null);
+        setGuides([]);
+      } else if (event.key === 'Enter' && !selectedEdge && selectedSet().size === 1) {
+        const only = [...selectedSet()][0];
+        const node = protocol.graph.nodes.find(item => item.id === only);
+        if (node?.config?.ui) { event.preventDefault(); setPreviewNodeId(node.id); setPreviewEdit(true); }
+      } else if (event.key.startsWith('Arrow')) {
+        const set = selectedSet();
+        if (!set.size) return;
+        event.preventDefault();
+        const step = event.shiftKey ? 8 : 24;
+        const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0;
+        const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0;
+        if (!dx && !dy) return;
+        const positions = {};
+        for (const id of set) {
+          const node = protocol.graph.nodes.find(item => item.id === id);
+          if (node) positions[id] = { x: Math.max(12, node.layout.x + dx), y: Math.max(12, node.layout.y + dy) };
+        }
+        commit(moveNodes(protocol, positions));
       }
     };
     window.addEventListener('keydown', onKey);
@@ -589,6 +699,9 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
               </article>;
             })}
             {marquee && <div className="composer-marquee" style={{ left: Math.min(marquee.x0, marquee.x1), top: Math.min(marquee.y0, marquee.y1), width: Math.abs(marquee.x1 - marquee.x0), height: Math.abs(marquee.y1 - marquee.y0) }} />}
+            {guides.map((guide, index) => guide.dir === 'v'
+              ? <div key={`gv${index}`} className="composer-guide guide-v" style={{ left: guide.pos * zoom + pan.x, top: guide.a * zoom + pan.y, height: (guide.b - guide.a) * zoom }} />
+              : <div key={`gh${index}`} className="composer-guide guide-h" style={{ top: guide.pos * zoom + pan.y, left: guide.a * zoom + pan.x, width: (guide.b - guide.a) * zoom }} />)}
           </div>
           <div className="composer-minimap" onClick={event => {
             const rect = event.currentTarget.getBoundingClientRect();
@@ -601,7 +714,7 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
           }}>
             <svg viewBox="0 0 1800 1100" preserveAspectRatio="xMidYMid meet">
               {protocol.graph.nodes.map(node => <rect key={node.id} x={node.layout.x} y={node.layout.y} width={188} height={112} rx={4} className={`mm-node${selectedIds.has(node.id) ? ' selected' : ''}`} />)}
-              <rect className="mm-viewport" x={-pan.x / zoom} y={-pan.y / zoom} width={1800 / zoom} height={1100 / zoom} />
+              <rect className="mm-viewport" x={-pan.x / zoom} y={-pan.y / zoom} width={canvasSize.width / zoom} height={canvasSize.height / zoom} />
             </svg>
           </div>
         </div>
