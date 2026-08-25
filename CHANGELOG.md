@@ -13,8 +13,15 @@ All notable changes to PhysioFlow are documented in this file.
 - **validation 展示改进**：错误/警告不再截断前 8 条——超出时显示 "Show all (N)" 展开按钮；`zh` 界面下错误消息本地化为中文（code → 中文模板 + 节点名），`en/ja` 保持原文。
 - **condition/loop 变量选择器引用上游节点输出**：新增 "Node outputs (upstream)" 分组，列出控制流上游节点的数据输出端口（`kind: 'output'` 绑定，运行时 `resolveBinding` 原生支持）；`Expected` 字段类型随输出端口 dataType 联动（number/boolean 专用输入）。
 
+#### 画布交互追平旧版（P3 闭环）
+- **节点搜索补齐**：`Ctrl+F` 任意焦点下聚焦搜索框并全选；实时匹配计数（"N matches"）；Enter 选中首个结果并居中；输入框内 Escape 仅清空搜索。
+- **自动布局对齐旧版**：跳过组内节点（保持 group 包围框完整），未连通节点按索引排布到后续列（此前保持原位不动）。
+- **流快照升级为完整 graph 状态**：保存节点/边/组/入口的完整快照，Restore 整体还原（可撤销）；支持重命名已保存快照；旧格式（仅布局）快照兼容恢复。
+
 ### Fixed
-- 验收脚本 `.playwright-cli/verify-step.cjs` 新增 `composer-p2` STEP：数据徽标、Node outputs 分组、Expected 类型跟随、无效 URL 校验与内联错误 5 项浏览器级验收全通过。
+- 验收脚本 `.playwright-cli/verify-step.cjs` 新增 `composer-p2` STEP：数据徽标、Node outputs 分组、Expected 类型跟随、无效 URL 校验与内联错误 5 项浏览器级验收全通过；新增 `composer-p3` STEP：Ctrl+F 搜索、匹配计数、Enter/Escape、自动布局、快照保存/恢复/重命名/整体还原 9 项浏览器级验收全通过。
+- **画布输入框按 Escape 退出 Builder 的真实缺陷**：`App.jsx` 全局 Escape 在 builder 视图无条件返回列表页，导致在搜索框/快照命名框按 Escape 清空时直接退出画布。修复：输入框内 Escape 停止冒泡 + App 层对 INPUT/TEXTAREA/SELECT 聚焦态防御。
+- **删除节点后返回列表页的真实缺陷**：`performDelete` 误用 `removeNode(...).protocol`（`removeNode` 返回 protocol 本身），导致 `commit(undefined)` 清空当前协议、App 渲染回首页。修复为直接使用返回值。
 - lint 清零：`ResizeObserver` 改用 `globalThis`、未用 `catch (error)` 收敛、`ParticipantUiCanvas` 的 `useRef` 上移至 hooks 区。
 
 ---

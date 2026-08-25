@@ -927,6 +927,163 @@ async function verifyComposerP2() {
   check('p2-media-url-inline-error', media.state === 'ok' && media.invalid && media.hint, `summary=${media.summary} invalid=${media.invalid} hint=${media.hint}`);
 }
 
+async function verifyComposerP3() {
+  const b = await openComposerWithP2();
+  if (!b.ok) { check('p3-composer-open', false, b.reason); return; }
+  const key = (k, mods = {}) => evalJS(`(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, ctrlKey: ${!!mods.ctrl}, shiftKey: ${!!mods.shift}, bubbles: true })); return 'key'; })()`);
+  const keyOnInput = async (selector, k) => evalJS(`(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!el) return 'missing';
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true }));
+    return 'key';
+  })()`);
+  const clickPanelButton = async text => evalJS(`(() => {
+    const el = [...document.querySelectorAll('.composer-snapshots-panel button')].find(x => (x.textContent || '').trim() === ${JSON.stringify(text)});
+    if (!el) return 'missing';
+    const r = el.getBoundingClientRect();
+    const o = { bubbles: true, cancelable: true, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 };
+    el.dispatchEvent(new MouseEvent('mousedown', o));
+    el.dispatchEvent(new MouseEvent('mouseup', o));
+    el.dispatchEvent(new MouseEvent('click', o));
+    return 'clicked';
+  })()`);
+  const clickButtonByText = async (scope, text) => evalJS(`(() => {
+    const root = ${scope === 'body' ? 'document' : `document.querySelector(${JSON.stringify(scope)})`};
+    if (!root) return 'missing-scope';
+    const el = [...root.querySelectorAll('button')].find(x => (x.textContent || '').trim() === ${JSON.stringify(text)});
+    if (!el) return 'missing';
+    const r = el.getBoundingClientRect();
+    const o = { bubbles: true, cancelable: true, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 };
+    el.dispatchEvent(new MouseEvent('mousedown', o));
+    el.dispatchEvent(new MouseEvent('mouseup', o));
+    el.dispatchEvent(new MouseEvent('click', o));
+    return 'clicked';
+  })()`);
+  const setInput = async (selector, value) => evalJS(`(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!el) return 'missing';
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(el, ${JSON.stringify(value)});
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    return 'set';
+  })()`);
+  const nodeLeft = async type => evalJS(`(() => {
+    const el = [...document.querySelectorAll('article.composer-node')].find(x => (x.textContent || '').includes(${JSON.stringify(type)}));
+    if (!el) return null;
+    return parseFloat(el.style.left);
+  })()`);
+  const clickNode = async type => {
+    const rect = await evalJS(`(() => {
+      const el = [...document.querySelectorAll('article.composer-node')].find(x => (x.textContent || '').includes(${JSON.stringify(type)}));
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    })()`);
+    if (!rect) return 'missing';
+    await clickAt(rect.x, rect.y);
+    return 'clicked';
+  };
+  const clickReal = async selector => {
+    const rect = await evalJS(`(() => {
+      const el = document.querySelector(${JSON.stringify(selector)});
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    })()`);
+    if (!rect) return 'missing';
+    await clickAt(rect.x, rect.y);
+    return 'clicked';
+  };
+
+  // 1) Ctrl+F focuses the search box.
+  await key('f', { ctrl: true });
+  await sleep(400);
+  const focused = await evalJS(`(() => document.activeElement === document.querySelector('input[aria-label="Search nodes"]'))()`);
+  check('p3-search-ctrl-f', focused === true, `focused=${focused}`);
+
+  // 2) Typing shows a match count and result row.
+  await setInput('input[aria-label="Search nodes"]', 'rating');
+  await sleep(400);
+  const match = await evalJS(`(() => ({
+    count: document.querySelector('.composer-search-count')?.textContent || null,
+    results: document.querySelectorAll('.composer-search-results button').length,
+  }))()`);
+  check('p3-search-match', match.count === '1 match' && match.results === 1, `count=${match.count} results=${match.results}`);
+
+  // 3) Enter selects the first match.
+  await keyOnInput('input[aria-label="Search nodes"]', 'Enter');
+  await sleep(400);
+  const sel = await evalJS(`(() => {
+    const el = document.querySelector('article.composer-node.selected');
+    return el ? (el.textContent || '').replace(/\\s+/g, ' ') : null;
+  })()`);
+  check('p3-search-enter-selects', !!sel && sel.includes('input.rating'), `selected=${sel}`);
+
+  // 4) Escape clears the query.
+  await setInput('input[aria-label="Search nodes"]', 'media');
+  await evalJS(`(() => { document.querySelector('input[aria-label="Search nodes"]').focus(); return 'ok'; })()`);
+  await sleep(300);
+  await keyOnInput('input[aria-label="Search nodes"]', 'Escape');
+  await sleep(300);
+  const afterEsc = await evalJS(`(() => ({ layout: !!document.querySelector('.composer-layout'), val: document.querySelector('input[aria-label="Search nodes"]')?.value || '' }))()`);
+  const cleared = afterEsc.val;
+  check('p3-search-esc-clears', cleared === '' && afterEsc.layout === true, `value=${JSON.stringify(cleared)} layout=${afterEsc.layout}`);
+
+  // 5) Save a snapshot of the original layout, then auto layout.
+  await setInput('input[aria-label="Search nodes"]', '');
+  await sleep(200);
+  await clickReal('button[title="Flow snapshots"]');
+  await sleep(400);
+  await setInput('input[aria-label="Snapshot name"]', 'Base');
+  await clickPanelButton('Save');
+  await sleep(500);
+  const saved = await evalJS(`(() => [...document.querySelectorAll('.composer-snapshots-row')].some(x => (x.textContent || '').includes('Base')))()`);
+  check('p3-snapshot-saved', saved === true, `saved=${saved}`);
+
+  const beforeX = await nodeLeft('display.media');
+  await clickReal('button[title="Auto layout"]');
+  await sleep(800);
+  const afterX = await nodeLeft('display.media');
+  const startX = await nodeLeft('core.start');
+  check('p3-autolayout', beforeX === 200 && afterX === 300 && startX === 80, `media ${beforeX}->${afterX} start=${startX}`);
+
+  // 6) Restore brings positions back to the snapshot.
+  const movedX = await nodeLeft('display.media');
+  await clickPanelButton('Restore');
+  await sleep(800);
+  const restoredX = await nodeLeft('display.media');
+  check('p3-snapshot-restore', movedX === 300 && restoredX === 200, `moved=${movedX} restored=${restoredX}`);
+
+  // 7) Rename the snapshot.
+  await clickPanelButton('Rename');
+  await sleep(300);
+  await setInput('input[aria-label="Rename snapshot"]', 'Renamed');
+  await keyOnInput('input[aria-label="Rename snapshot"]', 'Enter');
+  await sleep(400);
+  const renamed = await evalJS(`(() => {
+    const row = [...document.querySelectorAll('.composer-snapshots-row')].find(x => (x.textContent || '').includes('Renamed') && x.querySelector('button'));
+    return row ? row.textContent : null;
+  })()`);
+  check('p3-snapshot-rename', !!renamed && renamed.includes('Renamed') && !renamed.includes('Base'), `row=${renamed}`);
+
+  // 8) Full-graph snapshot restores a deleted node with its original position.
+  const count0 = await evalJS(`(() => document.querySelectorAll('article.composer-node').length)()`);
+  await clickNode('input.rating');
+  await sleep(300);
+  await evalJS(`(() => { if (document.activeElement && document.activeElement.tagName === 'INPUT') document.activeElement.blur(); return 'ok'; })()`);
+  await sleep(200);
+  await key('Delete');
+  await sleep(300);
+  await clickReal('.composer-delete-confirm .danger');
+  await sleep(700);
+  const count1 = await evalJS(`(() => document.querySelectorAll('article.composer-node').length)()`);
+  await clickPanelButton('Restore');
+  await sleep(800);
+  const count2 = await evalJS(`(() => document.querySelectorAll('article.composer-node').length)()`);
+  const ratingX = await nodeLeft('input.rating');
+  check('p3-snapshot-full-graph', count1 === count0 - 1 && count2 === count0 && ratingX === 440, `nodes ${count0}->${count1}->${count2} ratingX=${ratingX}`);
+}
+
 async function verifyAlign() {
   const b = await openBuilder();
   if (!b.ok) { check('builder-open', false, b.reason); return; }
@@ -1007,6 +1164,7 @@ async function main() {
   if (STEP === 'tree-reorder') await verifyTreeReorder();
   if (STEP === 'composer-step8') await verifyComposerStep8();
   if (STEP === 'composer-p2') await verifyComposerP2();
+  if (STEP === 'composer-p3') await verifyComposerP3();
   console.log('CONSOLE-errors:', consoleErrors.length ? JSON.stringify(consoleErrors) : 'none');
   cleanup(failures ? 1 : 0);
 }

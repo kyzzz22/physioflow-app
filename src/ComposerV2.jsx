@@ -20,6 +20,7 @@ import {
   removeNodeGroup,
   removeSubflowTemplate,
   removeNode,
+  renameFlowSnapshot,
   saveFlowSnapshot,
   updateVariable,
   updateNodeGroup,
@@ -276,6 +277,8 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
   const [searchQuery, setSearchQuery] = useState('');
   const [snapshotsOpen, setSnapshotsOpen] = useState(false);
   const [snapshotName, setSnapshotName] = useState('');
+  const [renameId, setRenameId] = useState(null);
+  const searchRef = useRef(null);
   const [snapshots, setSnapshots] = useState(() => loadFlowSnapshots(protocol.protocolId));
   const [deletePending, setDeletePending] = useState(null);
   const clipboardRef = useRef({ nodes: [], edges: [] });
@@ -493,7 +496,7 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
   const performDelete = targets => {
     try {
       let next = protocol;
-      for (const id of targets) next = removeNode(next, id).protocol;
+      for (const id of targets) next = removeNode(next, id);
       commit(next);
       setSelectedIds(new Set());
       setSelectedNodeId(null);
@@ -605,6 +608,7 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
   };
 
   const autoLayout = () => {
+    const groupedIds = new Set((protocol.graph.groups || []).flatMap(group => group.nodeIds));
     const adjacency = new Map();
     protocol.graph.edges.filter(edge => edge.kind === 'control').forEach(edge => {
       if (!adjacency.has(edge.source.nodeId)) adjacency.set(edge.source.nodeId, []);
@@ -626,7 +630,15 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
         if (!visited.has(next)) { visited.add(next); levels.set(next, level + 1); queue.push(next); }
       }
     }
-    protocol.graph.nodes.forEach(node => { if (!positions[node.id]) positions[node.id] = { ...node.layout }; });
+    // Grouped nodes keep their positions (their bounding box would break otherwise);
+    // unreachable nodes are laid out by index, matching the legacy canvas behaviour.
+    protocol.graph.nodes.forEach((node, i) => {
+      if (groupedIds.has(node.id) || positions[node.id]) return;
+      const level = i;
+      const count = levelCounts.get(level) || 0;
+      levelCounts.set(level, count + 1);
+      positions[node.id] = { x: 80 + level * 220, y: 100 + count * 140 };
+    });
     commit(moveNodes(protocol, positions));
     setMessage('Auto layout applied');
   };
@@ -649,15 +661,27 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
   };
 
   const persistSnapshot = () => {
-    const snapshot = { id: `snap_${Date.now()}`, name: snapshotName.trim() || `Snapshot ${snapshots.length + 1}`, savedAt: new Date().toISOString(), nodes: protocol.graph.nodes.map(node => ({ id: node.id, layout: node.layout })) };
+    const snapshot = { id: `snap_${Date.now()}`, name: snapshotName.trim() || `Snapshot ${snapshots.length + 1}`, savedAt: new Date().toISOString(), graph: structuredClone(protocol.graph) };
     setSnapshots(saveFlowSnapshot(protocol.protocolId, snapshot));
     setSnapshotName('');
     setMessage('Flow snapshot saved');
   };
   const restoreSnapshot = snapshot => {
-    const positions = Object.fromEntries(snapshot.nodes.map(node => [node.id, node.layout]));
-    commit(moveNodes(protocol, positions));
+    if (snapshot.graph) {
+      commit({ ...protocol, graph: structuredClone(snapshot.graph) });
+    } else {
+      // Legacy snapshots only recorded node positions.
+      const positions = Object.fromEntries(snapshot.nodes.map(node => [node.id, node.layout]));
+      commit(moveNodes(protocol, positions));
+    }
     setMessage(`Restored ${snapshot.name}`);
+  };
+  const commitRename = (id, name) => {
+    const trimmed = (name || '').trim();
+    setRenameId(null);
+    if (!trimmed || !snapshots.some(item => item.id === id)) return;
+    setSnapshots(renameFlowSnapshot(protocol.protocolId, id, trimmed));
+    setMessage('Snapshot renamed');
   };
   const deleteSnapshot = id => setSnapshots(removeFlowSnapshot(protocol.protocolId, id));
 
@@ -677,6 +701,12 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
 
   useEffect(() => {
     const onKey = event => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+        return;
+      }
       const tag = document.activeElement?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if ((previewEdit && previewNode?.config?.ui) || (editorMode !== 'quick' && selectedNode?.config?.ui)) return;
@@ -793,7 +823,11 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
         <div className="composer-canvas-toolbar">
           <span>{protocol.graph.nodes.length} nodes · {protocol.graph.edges.length} connections</span>
           <span className="composer-search">
-            <input aria-label="Search nodes" placeholder="Search nodes…" value={searchQuery} onChange={event => setSearchQuery(event.target.value)} />
+            <input ref={searchRef} aria-label="Search nodes" placeholder="Search nodes… (Ctrl+F)" value={searchQuery} onChange={event => setSearchQuery(event.target.value)} onKeyDown={event => {
+              if (event.key === 'Enter') { const first = searchResults[0]; if (first) { event.preventDefault(); focusNode(first.id); } }
+              else if (event.key === 'Escape') { setSearchQuery(''); event.currentTarget.blur(); event.stopPropagation(); }
+            }} />
+            {searchQuery.trim() !== '' && <small className="composer-search-count">{searchResults.length} match{searchResults.length === 1 ? '' : 'es'}</small>}
             {searchResults.length > 0 && <div className="composer-search-results">{searchResults.slice(0, 8).map(node => <button key={node.id} onClick={() => focusNode(node.id)}><b>{node.label}</b><small>{node.component.type}</small></button>)}</div>}
           </span>
           <button title="Toggle snap to grid" className={snapEnabled ? 'active' : ''} onClick={() => setSnapEnabled(v => !v)}>Snap</button>
@@ -809,9 +843,17 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
           {message && <small>{message}</small>}
         </div>
         {snapshotsOpen && <div className="composer-snapshots-panel">
-          <div className="composer-snapshots-row"><input aria-label="Snapshot name" placeholder="Snapshot name" value={snapshotName} onChange={event => setSnapshotName(event.target.value)} /><button onClick={persistSnapshot}>Save</button></div>
-          {snapshots.length === 0 && <small>No snapshots yet. Save one to preserve the current layout.</small>}
-          {snapshots.map(snapshot => <div key={snapshot.id} className="composer-snapshots-row"><span>{snapshot.name}</span><small>{snapshot.savedAt}</small><button onClick={() => restoreSnapshot(snapshot)}>Restore</button><button className="danger" onClick={() => deleteSnapshot(snapshot.id)}>×</button></div>)}
+          <div className="composer-snapshots-row"><input aria-label="Snapshot name" placeholder="Snapshot name" value={snapshotName} onChange={event => setSnapshotName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') persistSnapshot(); else if (event.key === 'Escape') { event.currentTarget.blur(); event.stopPropagation(); } }} /><button onClick={persistSnapshot}>Save</button></div>
+          {snapshots.length === 0 && <small>No snapshots yet. Save one to preserve the current graph state.</small>}
+          {snapshots.map(snapshot => <div key={snapshot.id} className="composer-snapshots-row">
+            {renameId === snapshot.id
+              ? <input aria-label="Rename snapshot" defaultValue={snapshot.name} autoFocus onKeyDown={event => { if (event.key === 'Enter') commitRename(snapshot.id, event.currentTarget.value); else if (event.key === 'Escape') { setRenameId(null); event.stopPropagation(); } }} onBlur={event => commitRename(snapshot.id, event.currentTarget.value)} />
+              : <span>{snapshot.name}</span>}
+            <small>{snapshot.savedAt}</small>
+            <button onClick={() => setRenameId(snapshot.id)}>Rename</button>
+            <button onClick={() => restoreSnapshot(snapshot)}>Restore</button>
+            <button className="danger" onClick={() => deleteSnapshot(snapshot.id)}>×</button>
+          </div>)}
         </div>}
         <div ref={canvasRef} className="composer-canvas" onWheel={onCanvasWheel} onPointerDown={onCanvasPointerDown} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }} onDrop={event => { event.preventDefault(); const type = event.dataTransfer.getData("application/x-physioflow-node"); if (!type) return; const point = viewportPoint(event); addNodeAt(type, point.x, point.y); }} onClick={() => { if (!marquee) { setSelectedIds(new Set()); setSelectedNodeId(null); setSelectedEdgeId(null); } }}>
           <div className="composer-viewport" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: '0 0' }}>

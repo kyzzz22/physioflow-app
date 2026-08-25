@@ -287,7 +287,8 @@
 .composer-canvas-toolbar button { padding: 4px 8px; border: 1px solid var(--border, #dfe3e8); border-radius: 5px; background: var(--surface, #fff); color: var(--muted, #667085); font-size: .68rem; cursor: pointer; }
 .composer-canvas-toolbar button.active { border-color: var(--green, #197453); color: var(--green, #197453); }
 .composer-search { position: relative; }
-.composer-search input { width: 130px; padding: 5px 8px; border: 1px solid var(--border, #dfe3e8); border-radius: 5px; font-size: .7rem; background: var(--surface, #fff); color: inherit; }
+.composer-search input { width: 150px; padding: 5px 8px; border: 1px solid var(--border, #dfe3e8); border-radius: 5px; font-size: .7rem; background: var(--surface, #fff); color: inherit; }
+.composer-search-count { margin-left: 6px; color: var(--muted, #667085); font-size: .62rem; white-space: nowrap; }
 .composer-search-results { position: absolute; top: 100%; left: 0; z-index: 30; width: 220px; max-height: 240px; overflow: auto; border: 1px solid var(--border, #dfe3e8); border-radius: 6px; background: var(--surface, #fff); box-shadow: 0 8px 20px #14213d18; }
 .composer-search-results button { display: flex; flex-direction: column; width: 100%; gap: 2px; padding: 6px 8px; border: 0; border-bottom: 1px solid var(--border, #dfe3e8); background: transparent; text-align: left; font-size: .7rem; cursor: pointer; }
 .composer-search-results button small { color: var(--muted, #667085); }

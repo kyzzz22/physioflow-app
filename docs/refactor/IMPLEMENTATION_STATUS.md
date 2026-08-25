@@ -12,7 +12,9 @@ The planned MVP refactor phases 0–6 are implemented on the `demo` branch.
 | 5 — Data | Raw JSONL, normalized CSV, snapshots, manifests, data dictionary, quality report, full package download, participant/media/device lifecycle events, reaction times, device provenance, and independently tested validator |
 | 6 — Migration/Pilot | In-app and CLI migration, migration reports, native Questionnaire adapter, review gate, freeze hashes, three representative migration tests, operator guide, and release gate |
 
-Current automated baseline: 199 tests, a production build without bundle warnings, and strict zero-warning lint pass. Release qualification remains the full `npm run quality:release` command, including its isolated browser flows.
+Current automated baseline: 226 tests, a production build without bundle warnings, and strict zero-warning lint pass. Release qualification remains the full `npm run quality:release` command, including its isolated browser flows. Two hosted-file tests fail only on Windows where `fs.stat().mode` cannot express `0o600` and symlinks require privileges; they pass on Linux/macOS.
+
+Composer V2 canvas interactions now match the legacy canvas: node search supports Ctrl+F focus, match counts, Enter-to-select and Escape-to-clear (input-scoped Escape no longer leaves the builder); auto layout skips grouped nodes so their bounding boxes stay intact and lays out unreachable nodes by index; flow snapshots capture the full graph state (nodes, edges, groups, entry) for whole-graph restore with undo, support renaming saved snapshots, and remain backward compatible with layout-only snapshots.
 
 Composer V2 now includes a typed variable catalog with scope, source, default value, and export policy, plus a variable picker for condition inputs. Variable renames update node and participant-UI bindings atomically; referenced variables cannot be removed accidentally.
 

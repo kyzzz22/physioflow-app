@@ -32,3 +32,15 @@ export function removeFlowSnapshot(protocolId, snapshotId) {
   }
   return next;
 }
+
+export function renameFlowSnapshot(protocolId, snapshotId, name) {
+  const current = loadFlowSnapshots(protocolId);
+  const target = current.find(item => item.id === snapshotId);
+  const trimmed = (name || '').trim();
+  if (!target || !trimmed) return current;
+  const next = current.map(item => item.id === snapshotId ? { ...item, name: trimmed } : item);
+  if (typeof localStorage !== 'undefined') {
+    try { localStorage.setItem(STORE_KEY(protocolId), JSON.stringify(next)); } catch { /* storage unavailable */ }
+  }
+  return next;
+}

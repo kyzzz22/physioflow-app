@@ -71,3 +71,5 @@ Composer V2（Protocol Graph 编辑器）与旧版（Block→Trial→Step 编辑
 - i18n 复用旧版 `src/i18n.jsx` 词条表（共享基础设施，非 UI 组件）。
 - 已补：实验节点（fixation/attention/device/manual/calibration/custom-html/note/junction）+ Html 元素、全屏节点编辑、BIDS、任务模板、性能变量回填、主题预设、stimuli 媒体库、visual angle、分析窗口/恢复字段、画布交互（pan/zoom/snap/多选/复制粘贴/搜索/自动布局/流快照/小地图）、对齐辅助线与吸附、键盘导航（方向键微调/Escape/Enter）、复制粘贴携带内部连线。
 - 已补（2026-08-25 P2 体验）：media URL 格式校验（`config.media_url_invalid`）与 Inspector 内联红框/提示；画布节点 dataFields 输出徽标 + 数据端口悬停显示下游目标（数据流可见性）；`stimulus.fixation` 完成模式选择器（manual 运行时自动注入 Continue 按钮）；validation 错误支持展开全部 + zh 本地化（code → 中文模板 + 节点名）；condition/loop 变量选择器新增 "Node outputs (upstream)" 分组（引用上游节点数据输出，`Expected` 类型随输出端口 dataType 联动）。
+- 已补（2026-08-25 P3 画布交互追平）：节点搜索补齐 **Ctrl+F** 快捷键聚焦、匹配计数、Enter 选中首个结果、Escape 清空（不再退出画布）；自动布局**跳过组内节点**（保持包围框）并将**未连通节点**按索引排布（对齐旧版行为）；流快照升级为**完整 graph 状态快照**（保存节点/边/组/入口，Restore 整体还原且可撤销），支持**重命名已保存快照**，旧格式（仅布局）快照兼容恢复。
+- 已修复（P3 验收暴露的真实缺陷）：① 画布输入框内按 Escape 会经 `App.jsx` 全局快捷键退出 Builder——输入框内 Escape 停止冒泡 + App 层对 INPUT/TEXTAREA/SELECT 聚焦态防御；② 删除节点后返回列表页——`performDelete` 误用 `removeNode(...).protocol`（实际返回 protocol 本身），导致 commit(undefined) 清空当前协议，已改为直接使用返回值。
