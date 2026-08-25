@@ -2,6 +2,25 @@
 
 All notable changes to PhysioFlow are documented in this file.
 
+## [0.5.2] — 2026-08-26
+
+### Added
+
+#### `input.response` 按键响应节点（旧版核心 step 补齐）
+- **按键响应采集**：显示刺激文本并收集键盘响应（或点击选项按钮），实时记录 `value`、`response_key`、`reaction_time_ms`、`correct`、`timed_out` 五个数据字段，全部进入导出列与数据端口 `value`。
+- **评分与反馈**：`correctValue` 设置后逐次标记正确/错误；`feedbackMode` 支持 none / correct_incorrect / always 三种反馈（先展示反馈再自动前进）。
+- **时序控制**：`timeoutMs` 可选超时（0 = 无限等待，超时后以 `timed_out=true` 提交）；`autoAdvance` 按键即前进；`required` 语义保留。
+- **编辑体验**：选项以 `value=label,key=1` 行格式编辑，Inspector textarea 自动在数组与行文本间转换；默认参与者 UI 模板（文本 + 输入 + Submit）随组件注册，可在 UI 编辑器中继续定制。
+- **运行时**：独立 `ResponseRunner` 真实监听 `keydown`（忽略重复键），RT 自组件进入计时，与既有专用 runner（attention-check 等）分发路径一致。
+- **迁移**：旧版 V1 `response` step 映射到 `input.response`，保留 `response_variable`、`response_options`（value/key/label 完整数组）、`response_auto_advance`、`response_required`。
+
+### Tests
+- 新增 `tests/response-node.test.js`：注册契约、options 解析/序列化往返与容错、旧版迁移映射、运行时 submit 端到端流程。
+- 组件验收清单 22 → 23，线性图/UI 校验/正式校验自动覆盖新组件。
+- 新增浏览器语义验收 STEP `composer-response`（`.playwright-cli/verify-step.cjs`）：节点渲染与 5 数据字段徽标、默认 UI 预览、options 行格式编辑往返、Preview run → 运行中显示刺激与 3 个选项按钮、真实按键 `y` 自动前进至 SESSION COMPLETE 并落库 5 行数据字段，12 项断言全部通过。
+
+---
+
 ## [0.5.1] — 2026-08-25
 
 ### Added

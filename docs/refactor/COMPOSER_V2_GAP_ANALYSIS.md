@@ -20,7 +20,7 @@ Composer V2（Protocol Graph 编辑器）与旧版（Block→Trial→Step 编辑
 |---|---|---|---|---|
 | 1 | 数据模型 | Block→Trial→Step（每 trial 可选 flow 图） | 单一 Protocol Graph | 范式差异 |
 | 2 | 可视化编辑 | pan/zoom/snap/多选/复制粘贴/小地图/搜索/自动布局/流快照 | 同等核心能力已实现；缩放拖动换算、Shift 取消选择的隐藏目标已修复；另有对齐辅助线（拖拽吸附）、键盘导航（方向键/Escape/Enter）、复制粘贴携带内部连线 | 新版略强 |
-| 3 | 节点/步骤类型 | 14 step + 7 control（含 fixation/attention_check/manual_event/device_check/screen_calibration/custom_html/response/note/junction/timer） | 13 组件（缺上述，多 random split / value switch） | **旧版强（部分）** |
+| 3 | 节点/步骤类型 | 14 step + 7 control（含 fixation/attention_check/manual_event/device_check/screen_calibration/custom_html/response/note/junction/timer） | 14 组件：旧版 step 全部覆盖（response 已于 0.5.2 补齐，含 RT/按键/正确性记录），另多 random split / value switch | ✅ 追平 |
 | 4 | 节点配置 | 极丰富（i18n 内容、外观覆盖、自定义 CSS、媒体、时间行为、恢复、分析窗口、规则编辑器） | editorFields 薄封装（text/select/number/boolean + showWhen） | **旧版强** |
 | 5 | 界面构建 | step-type 决定（每 step 专用 UI） | PPT 式近似画布（元素添加/移动拖拽 + 属性面板 + 全屏节点编辑）+ 真实 `ParticipantRenderer` 预览 | 范式差异（预览为运行时真实渲染） |
 | 6 | 问卷 | 完整设计器（9 题型、11 预设、条件跳过、拖拽排序、自动评分、VAS、CSV、多语言、共享库） | 新架构编辑器/运行器 + 冻结前 schema 校验 + 确定性随机 + 限时 + 评分输出 + 带引号 CSV | 核心持平 |

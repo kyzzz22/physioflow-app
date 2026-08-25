@@ -9,7 +9,7 @@ const EXACT_COMPONENT_MAP = {
   fixation: 'timing.wait',
   timer: 'timing.wait',
   rest: 'timing.wait',
-  response: 'input.rating',
+  response: 'input.response',
   questionnaire: 'input.questionnaire',
 };
 
@@ -110,6 +110,17 @@ function ratingUi(step, idFactory) {
   ] });
 }
 
+function responseUi(step, idFactory) {
+  const options = step.response_options || [];
+  const hint = options.map(o => o.key ? `${o.key} = ${o.label}` : o.label).join('   ');
+  return createParticipantScreen({ idFactory, children: [
+    createUiElement('Text', { idFactory, props: { text: step.prompt || step.content || step.name || 'Respond when you see the target', variant: 'heading' } }),
+    ...(hint ? [createUiElement('Text', { idFactory, props: { text: hint, variant: 'body' } })] : []),
+    createUiElement('Input', { idFactory, props: { name: 'response', inputType: 'text', label: 'Response', required: step.response_required !== false } }),
+    createUiElement('Button', { idFactory, props: { label: 'Submit', variant: 'primary' }, actions: [{ event: 'click', action: 'submit' }] }),
+  ] });
+}
+
 function waitUi(step, idFactory) {
   return createParticipantScreen({ idFactory, children: [
     createUiElement('Text', { idFactory, props: { text: step.name || 'Please wait', variant: 'heading' } }),
@@ -144,6 +155,16 @@ function migrateStep(step, context, idFactory, x, y) {
       variable: step.response_variable || 'response',
       options: structuredClone(step.response_options || []),
       ui: ratingUi(step, idFactory),
+      legacyStep: structuredClone(step),
+    };
+  } else if (componentType === 'input.response') {
+    config = {
+      variable: step.response_variable || 'response',
+      prompt: step.prompt || step.content || step.name || 'Respond when you see the target',
+      options: structuredClone(step.response_options || []),
+      autoAdvance: step.response_auto_advance !== false,
+      required: step.response_required !== false,
+      ui: responseUi(step, idFactory),
       legacyStep: structuredClone(step),
     };
   } else if (componentType === 'input.questionnaire') {

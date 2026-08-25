@@ -35,6 +35,7 @@ import ParticipantRenderer from './ParticipantRenderer.jsx';
 import QuestionnaireEditor from './QuestionnaireEditorV2.jsx';
 import { findUiElement, localResourceManifest, schemaForNode } from './runtime/index.js';
 import { translate, useLanguage } from './i18n.jsx';
+import { parseResponseOptions, serializeResponseOptions } from './core/responseOptions.js';
 import { createProjectComponentRegistry, exampleReactionButtonPackage, installComponentPackage, uninstallComponentPackage } from './sdk/index.js';
 import { exampleSimulatedConnector, installDeviceConnector, uninstallDeviceConnector } from './devices/index.js';
 import { createProtocolChangeSet, mergeProtocolChangeSet } from './collaboration/index.js';
@@ -49,6 +50,7 @@ const UI_TEMPLATE_KIND = {
   'timing.wait': 'instruction',
   'stimulus.fixation': 'fixation',
   'stimulus.attention-check': 'attention',
+  'input.response': 'response',
   'setup.device-check': 'device',
   'operator.manual-event': 'manual',
   'stimulus.screen-calibration': 'calibration',
@@ -1040,7 +1042,10 @@ function NodeInspector({ node, definition, variables, groups, mode, onUpdate, on
       onUpdate({ config: patch });
     };
     let control;
-    if (field.type === 'textarea') control = <textarea value={value ?? ''} onChange={event => change(event.target.value)} />;
+    if (field.type === 'textarea') {
+      const isArrayValue = Array.isArray(value);
+      control = <textarea value={isArrayValue ? serializeResponseOptions(value) : value ?? ''} onChange={event => change(isArrayValue ? parseResponseOptions(event.target.value) : event.target.value)} />;
+    }
     else if (field.type === 'select') control = <select value={value ?? ''} onChange={event => change(event.target.value)}>{field.options.map(option => <option key={option} value={option}>{option}</option>)}</select>;
     else if (field.type === 'color') control = <span className="color-field"><input type="color" value={toHexColor(value)} onChange={event => change(event.target.value)} /><input value={value ?? ''} onChange={event => change(event.target.value)} /></span>;
     else if (field.type === 'asset') control = <select value={value ?? ''} onChange={event => change(event.target.value || null)}><option value="">— none —</option>{(assets || []).map(asset => <option key={asset.id || asset.assetId} value={asset.id || asset.assetId}>{asset.name || asset.id}</option>)}</select>;

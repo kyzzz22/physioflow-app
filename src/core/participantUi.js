@@ -94,6 +94,12 @@ export function participantUiTemplate(kind = 'instruction', options = {}) {
     createUiElement('Input', { idFactory, props: { name: 'attention', inputType: 'text', label: 'Response', required: true } }),
     createUiElement('Button', { idFactory, props: { label: 'Submit', variant: 'primary' }, actions: [{ event: 'click', action: 'submit' }] }),
   ] });
+  if (kind === 'response') return createParticipantScreen({ idFactory, children: [
+    createUiElement('Text', { idFactory, props: { text: 'Respond when you see the target', variant: 'heading' } }),
+    createUiElement('Text', { idFactory, props: { text: 'Press one of the response keys to answer.', variant: 'body' } }),
+    createUiElement('Input', { idFactory, props: { name: 'response', inputType: 'text', label: 'Response', required: true } }),
+    createUiElement('Button', { idFactory, props: { label: 'Submit', variant: 'primary' }, actions: [{ event: 'click', action: 'submit' }] }),
+  ] });
   if (kind === 'device') return createParticipantScreen({ idFactory, children: [
     createUiElement('Text', { idFactory, props: { text: 'Equipment check', variant: 'heading' } }),
     createUiElement('Text', { idFactory, props: { text: 'Verify the setup, then continue.', variant: 'body' } }),

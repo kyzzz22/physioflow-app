@@ -23,6 +23,7 @@ const COMPONENTS = [
   { type: 'display.media', kind: 'participant', adapter: 'media' },
   { type: 'input.rating', kind: 'participant', adapter: 'rating' },
   { type: 'input.text', kind: 'participant', adapter: 'text' },
+  { type: 'input.response', kind: 'participant', adapter: 'response' },
   { type: 'input.questionnaire', kind: 'participant', adapter: 'schema' },
   { type: 'timing.wait', kind: 'participant', adapter: 'wait' },
   { type: 'stimulus.fixation', kind: 'participant', adapter: 'schema' },
@@ -92,7 +93,7 @@ function runtimeFor(protocol) {
 test('all 22 core components register with valid contracts', () => {
   const registry = createCoreComponentRegistry();
   const registeredTypes = new Set(registry.list().map(definition => definition.type));
-  assert.equal(COMPONENTS.length, 22);
+  assert.equal(COMPONENTS.length, 23);
   for (const { type } of COMPONENTS) {
     const definition = registry.get(type);
     assert.ok(definition, `${type} is registered`);

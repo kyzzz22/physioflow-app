@@ -153,6 +153,42 @@ export function createCoreComponentRegistry() {
     dataFields: ['value', 'reaction_time_ms'],
   });
   registry.register({
+    type: 'input.response', version: '1.0.0', label: 'Response', category: 'interaction',
+    runtime: { kind: 'participant', uiAdapter: 'response', completion: 'submit' },
+    ports: [
+      controlInput,
+      controlOutput,
+      { id: 'value', kind: 'data', direction: 'output', dataType: 'string' },
+    ],
+    defaultConfig: {
+      variable: 'response',
+      prompt: 'Respond when you see the target',
+      options: [
+        { value: 'yes', key: 'y', label: 'Yes' },
+        { value: 'no', key: 'n', label: 'No' },
+      ],
+      correctValue: null,
+      timeoutMs: 0,
+      required: true,
+      autoAdvance: true,
+      feedbackMode: 'none',
+      ui: participantUiTemplate('response'),
+      completion: { mode: 'manual' },
+    },
+    editorFields: [
+      { path: 'variable', label: 'Response variable', type: 'text', group: 'Response', help: 'Variable name used in exports and Condition nodes.' },
+      { path: 'prompt', label: 'Prompt', type: 'textarea', group: 'Response', help: 'Stimulus text shown while awaiting a response.' },
+      { path: 'options', label: 'Response options', type: 'textarea', group: 'Response', help: 'One per line: value=label,key=1  (key is optional; empty means free-form keys are accepted).' },
+      { path: 'correctValue', label: 'Correct value (optional)', type: 'text', group: 'Scoring', help: 'When set, each response is marked correct/incorrect in the export.' },
+      { path: 'feedbackMode', label: 'Feedback', type: 'select', options: ['none', 'correct_incorrect', 'always'], group: 'Scoring', help: 'none = no feedback; correct_incorrect = show correct/incorrect; always = show the pressed key and value.' },
+      { path: 'timeoutMs', label: 'Timeout (ms)', type: 'number', min: 0, group: 'Timing', help: '0 = wait indefinitely for a response.' },
+      { path: 'autoAdvance', label: 'Auto-advance on key press', type: 'boolean', group: 'Timing', help: 'Advance immediately after a valid key press.' },
+      { path: 'required', label: 'Response required', type: 'boolean', group: 'Response' },
+    ],
+    events: ['component_entered', 'key_pressed', 'response_submitted', 'response_timeout', 'component_completed'],
+    dataFields: ['value', 'response_key', 'reaction_time_ms', 'correct', 'timed_out'],
+  });
+  registry.register({
     type: 'input.questionnaire', version: '1.0.0', label: 'Questionnaire', category: 'interaction',
     runtime: { kind: 'participant', uiAdapter: 'schema', completion: 'submit' },
     ports: [controlInput, controlOutput],

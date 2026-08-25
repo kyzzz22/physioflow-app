@@ -1146,6 +1146,163 @@ async function verifyAlign() {
   check('distribute-y', Math.abs(gaps[0] - gaps[1]) < 2, `gaps=${gaps.map(g => Math.round(g)).join(',')}`);
 }
 
+async function buildResponseProtocol() {
+  const { pathToFileURL } = require('url');
+  const { createProtocolGraph } = await import(pathToFileURL(path.join(process.cwd(), 'src/core/protocolGraph.js')).href);
+  const { addNode, connect } = await import(pathToFileURL(path.join(process.cwd(), 'src/core/graphCommands.js')).href);
+  const { createCoreComponentRegistry } = await import(pathToFileURL(path.join(process.cwd(), 'src/core/componentRegistry.js')).href);
+  const registry = createCoreComponentRegistry();
+  const responseDefaults = registry.get('input.response').defaultConfig;
+  const now = '2026-08-26T00:00:00.000Z';
+  let p = createProtocolGraph({ name: 'Response Verify', now });
+  const start = p.graph.nodes.find(n => n.component.type === 'core.start');
+  const end = p.graph.nodes.find(n => n.component.type === 'core.end');
+  p.graph.edges = [];
+  const r = addNode(p, 'input.response', { id: 'resp', label: 'Respond', config: { ...responseDefaults, prompt: 'Press the matching key', correctValue: 'yes' }, layout: { x: 240, y: 160 }, now });
+  p = r.protocol;
+  const l1 = connect(p, 'control', { nodeId: start.id, portId: 'next' }, { nodeId: r.node.id, portId: 'in' });
+  p = l1.protocol;
+  const l2 = connect(p, 'control', { nodeId: r.node.id, portId: 'next' }, { nodeId: end.id, portId: 'in' });
+  p = l2.protocol;
+  return p;
+}
+
+async function verifyComposerResponse() {
+  const proto = await buildResponseProtocol();
+  await navigate(URL);
+  await evalJS(`(() => { localStorage.setItem('physioflow.protocols.v1', JSON.stringify([${JSON.stringify(proto)}])); return 'injected'; })()`);
+  await navigate(URL);
+  await sleep(600);
+  const editBtn = await evalJS(`(() => {
+    const b = [...document.querySelectorAll('button')].find(x => x.textContent.includes('Edit draft'));
+    if (!b) return null;
+    const r = b.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  })()`);
+  if (!editBtn) { check('resp-open-composer', false, 'no Edit draft'); return; }
+  await clickAt(editBtn.x, editBtn.y);
+  await sleep(1500);
+  const composerOpen = await evalJS(`(() => document.querySelectorAll('article.composer-node').length)()`);
+  if (!composerOpen) { check('resp-open-composer', false, 'composer not open'); return; }
+
+  // 1) Response node renders with its 5-output data badge.
+  const nodeInfo = await evalJS(`(() => {
+    const el = [...document.querySelectorAll('article.composer-node')].find(x => (x.textContent || '').includes('input.response'));
+    if (!el) return { found: false };
+    const badge = el.querySelector('.node-data-fields');
+    return { found: true, badge: badge ? badge.textContent : null };
+  })()`);
+  check('resp-node-renders', nodeInfo.found && nodeInfo.badge === '5 outputs', JSON.stringify(nodeInfo));
+
+  // 2) Selecting the node shows the default inline UI preview and the options textarea with the default line format.
+  const nodeCenter = await evalJS(`(() => {
+    const el = [...document.querySelectorAll('article.composer-node')].find(x => (x.textContent || '').includes('input.response'));
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  })()`);
+  await clickAt(nodeCenter.x, nodeCenter.y);
+  await sleep(700);
+  const previewInfo = await evalJS(`(() => {
+    const preview = document.querySelector('.node-inline-preview');
+    return preview ? { preview: true, text: preview.textContent || '' } : { preview: false };
+  })()`);
+  check('resp-inline-preview', previewInfo.preview && previewInfo.text.includes('Respond when you see the target') && previewInfo.text.includes('Submit'), JSON.stringify(previewInfo));
+  const optionsValue = await evalJS(`(() => {
+    const ta = [...document.querySelectorAll('textarea')].find(t => (t.closest('label')?.textContent || '').includes('Response options'));
+    return ta ? ta.value : null;
+  })()`);
+  check('resp-options-default', optionsValue === 'yes=Yes,key=y\nno=No,key=n', `options=${JSON.stringify(optionsValue)}`);
+
+  // 3) Editing the options textarea round-trips into the stored array and back.
+  const editResult = await evalJS(`(() => {
+    const ta = [...document.querySelectorAll('textarea')].find(t => (t.closest('label')?.textContent || '').includes('Response options'));
+    if (!ta) return 'missing';
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(ta, 'yes=Yes,key=y\\nno=No,key=n\\nmaybe=Maybe,key=m');
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    return 'set';
+  })()`);
+  check('resp-options-edit', editResult === 'set', `edit=${editResult}`);
+  await sleep(500);
+  const optionsAfter = await evalJS(`(() => {
+    const ta = [...document.querySelectorAll('textarea')].find(t => (t.closest('label')?.textContent || '').includes('Response options'));
+    return ta ? ta.value : null;
+  })()`);
+  check('resp-options-roundtrip', optionsAfter === 'yes=Yes,key=y\nno=No,key=n\nmaybe=Maybe,key=m', `after=${JSON.stringify(optionsAfter)}`);
+
+  // 4) Preview run → begin experiment → response runner appears with prompt and 3 option buttons.
+  const previewBtn = await evalJS(`(() => {
+    const b = [...document.querySelectorAll('button')].find(x => (x.textContent || '').includes('Preview run') && !x.disabled);
+    if (!b) return null;
+    const r = b.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  })()`);
+  if (!previewBtn) { check('resp-preview-open', false, 'no Preview run button'); return; }
+  await clickAt(previewBtn.x, previewBtn.y);
+  await sleep(1200);
+  const setupOpen = await evalJS(`(() => document.body.innerText.includes('Start session'))()`);
+  check('resp-preview-open', setupOpen === true, 'setup page visible');
+
+  const participantInput = await evalJS(`(() => {
+    const input = document.querySelector('#participant-id');
+    if (!input) return null;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'P1');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return 'filled';
+  })()`);
+  check('resp-setup-participant', participantInput === 'filled', `participant=${participantInput}`);
+  await sleep(400);
+  const startState = await evalJS(`(() => {
+    const b = [...document.querySelectorAll('button')].find(x => (x.textContent || '').includes('Start session'));
+    if (!b) return { found: false };
+    return { found: true, disabled: b.disabled, title: b.textContent.trim() };
+  })()`);
+  if (!startState.found) { check('resp-start-session', false, 'no Start session button'); return; }
+  const startClicked = await evalJS(`(() => {
+    const b = [...document.querySelectorAll('button')].find(x => (x.textContent || '').includes('Start session'));
+    if (!b || b.disabled) return 'disabled';
+    b.click();
+    return 'clicked';
+  })()`);
+  check('resp-start-session', startClicked === 'clicked' && !startState.disabled, `state=${JSON.stringify(startState)} result=${startClicked}`);
+  await sleep(2500);
+  const ready = await evalJS(`(() => ({ begin: document.body.innerText.includes('Begin experiment'), head: document.body.innerText.slice(0, 300).replace(/\\n/g, ' | ') }))()`);
+  check('resp-runner-ready', ready.begin === true, `runtime ready page · ${ready.head}`);
+
+  const beginBtn = await evalJS(`(() => {
+    const b = [...document.querySelectorAll('button')].find(x => (x.textContent || '').includes('Begin experiment'));
+    if (!b) return null;
+    const r = b.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  })()`);
+  if (!beginBtn) { check('resp-begin', false, 'no Begin experiment'); return; }
+  await clickAt(beginBtn.x, beginBtn.y);
+  await sleep(1000);
+  const runner = await evalJS(`(() => {
+    const el = document.querySelector('.response-runner');
+    if (!el) return { found: false };
+    const prompt = (el.querySelector('.response-stimulus')?.textContent || '');
+    const buttons = el.querySelectorAll('.response-options button').length;
+    const labels = [...el.querySelectorAll('.response-options button')].map(b => b.textContent.trim().replace(/\\s+/g, ' '));
+    const firstRaw = buttons ? el.querySelector('.response-options button').textContent : null;
+    const firstCodes = firstRaw ? [...firstRaw].map(c => c.charCodeAt(0)).join(',') : null;
+    return { found: true, prompt, buttons, labels, firstRaw, firstCodes };
+  })()`);
+  check('resp-runner-shows', runner.found && runner.prompt === 'Press the matching key' && runner.buttons === 3 && runner.labels.some(l => l.includes('Yes')) && runner.labels.some(l => l.includes('No')) && runner.labels.some(l => l.includes('Maybe')), JSON.stringify(runner));
+
+  // 5) A real key press ('y') auto-advances to the completed session and records 1 response.
+  await keyPress('y');
+  await sleep(1800);
+  const completed = await evalJS(`(() => {
+    const body = document.body.innerText;
+    const ev = body.match(/(\\d+)\\s+events/);
+    const rs = body.match(/(\\d+)\\s+responses/);
+    return { complete: body.includes('SESSION COMPLETE'), events: ev ? Number(ev[1]) : null, responses: rs ? Number(rs[1]) : null, tail: body.slice(0, 220).replace(/\\n/g, ' | ') };
+  })()`);
+  // One key press should produce exactly the 5 declared data-field rows (value/response_key/reaction_time_ms/correct/timed_out).
+  check('resp-key-advances', completed.complete === true && completed.responses === 5 && completed.events >= 5, JSON.stringify(completed));
+}
+
 async function main() {
   await startVite();
   startChrome();
@@ -1165,6 +1322,7 @@ async function main() {
   if (STEP === 'composer-step8') await verifyComposerStep8();
   if (STEP === 'composer-p2') await verifyComposerP2();
   if (STEP === 'composer-p3') await verifyComposerP3();
+  if (STEP === 'composer-response') await verifyComposerResponse();
   console.log('CONSOLE-errors:', consoleErrors.length ? JSON.stringify(consoleErrors) : 'none');
   cleanup(failures ? 1 : 0);
 }

@@ -3,6 +3,7 @@ import ParticipantRenderer from './ParticipantRenderer.jsx';
 import QuestionnaireForm from './QuestionnaireFormV2.jsx';
 import CognitiveTaskRunner from './CognitiveTaskRunner.jsx';
 import AttentionCheckRunner from './AttentionCheckRunner.jsx';
+import ResponseRunner from './ResponseRunner.jsx';
 import CalibrationRunner from './CalibrationRunner.jsx';
 import { protocolNameOf, protocolStatusOf, protocolVersionOf } from './core/index.js';
 import {
@@ -240,6 +241,8 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
       {runtime.status === 'paused' && <div className="pause-overlay">Paused</div>}
       {currentNode.component.type === 'stimulus.attention-check'
         ? <AttentionCheckRunner config={currentNode.config} language={data.session.participant_language || 'en'} disabled={runtime.status === 'paused'} onSubmit={complete} />
+        : currentNode.component.type === 'input.response'
+        ? <ResponseRunner config={currentNode.config} language={data.session.participant_language || 'en'} disabled={runtime.status === 'paused'} onSubmit={complete} />
         : currentNode.component.type === 'stimulus.screen-calibration'
         ? <CalibrationRunner config={currentNode.config} language={data.session.participant_language || 'en'} disabled={runtime.status === 'paused'} onSubmit={complete} />
         : currentNode.component.type === 'experiment.cognitive-task'

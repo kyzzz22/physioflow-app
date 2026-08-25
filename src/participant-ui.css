@@ -87,3 +87,13 @@
 .attention-check p { font-size: 1.15rem; }
 .attention-check .attention-stimulus { font-size: 2.4rem; font-weight: 700; }
 .attention-check.result h1 { margin: 0; }
+.response-runner { min-height: 40vh; display: grid; place-content: center; justify-items: center; gap: 18px; text-align: center; }
+.response-runner .eyebrow { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .1em; }
+.response-runner .response-stimulus { font-size: 2rem; font-weight: 700; max-width: 40ch; }
+.response-runner .response-hint { color: var(--muted); font-size: .9rem; }
+.response-runner .response-options { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.response-runner .response-options .participant-ui-button { display: inline-flex; align-items: center; gap: 8px; }
+.response-runner kbd { background: var(--surface, #eef4f0); border: 1px solid var(--line, #d9e2dc); border-bottom-width: 2px; border-radius: 6px; padding: 2px 7px; font-size: .85em; }
+.response-runner.result h1 { margin: 0; }
+.response-runner.result .response-pressed { font-size: 1.15rem; }
+.response-runner.result small { color: var(--muted); }
