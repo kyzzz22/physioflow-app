@@ -280,7 +280,9 @@ export default function App() {
       if (mod && (e.key.toLowerCase() === 'z' || e.key.toLowerCase() === 'y') && document.querySelector('.participant-ui-builder')) return;
       if (mod && e.key === 'z' && !e.shiftKey && viewRef.current === 'builder') { e.preventDefault(); undo(); return; }
       if (mod && ((e.key === 'z' && e.shiftKey) || e.key === 'y') && viewRef.current === 'builder') { e.preventDefault(); redo(); return; }
-      if (e.key === 'Escape' && viewRef.current === 'builder' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) { e.preventDefault(); handleBackFromBuilder(); return; }
+      // Note: Escape is intentionally NOT handled here — in the editors it means
+      // "cancel/deselect" (ComposerV2/FlowCanvas), not "leave". Leaving has an
+      // explicit ← Projects button so an accidental Escape never discards work.
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);

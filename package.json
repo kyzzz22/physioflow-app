@@ -18,6 +18,7 @@
     "lint": "npx eslint src server",
     "test": "node --test tests/*.test.js",
     "test:e2e": "node tests/e2e-cdp.mjs",
+    "test:interactions": "node .playwright-cli/verify-interactions.cjs",
     "test:refactor-e2e": "node --test tests/refactor-e2e.test.js",
     "test:e2e:refactor-browser": "node tests/e2e-composer-v2-self-hosted.mjs",
     "test:e2e:participant-public": "node tests/e2e-participant-public.mjs",

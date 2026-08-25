@@ -285,6 +285,13 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
   const [deletePending, setDeletePending] = useState(null);
   const clipboardRef = useRef({ nodes: [], edges: [] });
   const [guides, setGuides] = useState([]);
+  // Drag-to-connect: while the pointer is down on an output port we render a
+  // temporary wire (pendingWire) and, on release over an input port, connect.
+  const [pendingWire, setPendingWire] = useState(null);
+  const suppressWireClickRef = useRef(false);
+  // When Escape cancels an in-flight drag-connect, this flag makes the eventual
+  // pointerup a no-op so releasing the mouse cannot complete the wire.
+  const wireCancelRef = useRef(false);
   const pasteCountRef = useRef(0);
   const [collaborationBaseline, setCollaborationBaseline] = useState(() => structuredClone(protocol));
   const collaborationProtocolRef = useRef(protocol);
@@ -568,6 +575,47 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
     const rect = canvasRef.current.getBoundingClientRect();
     return { x: (event.clientX - rect.left - pan.x) / zoom, y: (event.clientY - rect.top - pan.y) / zoom };
   };
+  // Drag-to-connect: press on an output port, drag to an input port, release.
+  const startWire = (event, node, port) => {
+    if (port.direction !== 'output') return;
+    event.stopPropagation();
+    const from = viewportPoint(event);
+    setPendingWire({ nodeId: node.id, portId: port.id, from, to: from });
+    let moved = false;
+    const move = moveEvent => {
+      const to = viewportPoint(moveEvent);
+      if (Math.hypot(to.x - from.x, to.y - from.y) > 6) moved = true;
+      setPendingWire(wire => (wire ? { ...wire, to } : wire));
+    };
+    const up = upEvent => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      setPendingWire(null);
+      if (wireCancelRef.current) { wireCancelRef.current = false; return; }
+      const element = document.elementFromPoint(upEvent.clientX, upEvent.clientY);
+      const portElement = element?.closest('.composer-port');
+      const nodeElement = portElement?.closest('.composer-node');
+      const targetId = nodeElement?.dataset?.nodeId;
+      const targetPortId = portElement?.dataset?.portId;
+      if (moved && targetId && targetPortId && targetId !== node.id) {
+        const targetNode = protocol.graph.nodes.find(item => item.id === targetId);
+        const targetDef = targetNode && registry.get(targetNode.component.type, targetNode.component.version);
+        const targetPort = targetDef?.ports.find(item => item.id === targetPortId);
+        if (targetPort && targetPort.direction === 'input' && targetPort.kind === port.kind) {
+          try {
+            const result = connect(protocol, port.kind, { nodeId: node.id, portId: port.id }, { nodeId: targetId, portId: targetPortId });
+            commit(result.protocol);
+            setMessage('Connected');
+          } catch (error) { setMessage(error.message); }
+        }
+      }
+      // A real drag (not a click) must not also toggle port selection.
+      suppressWireClickRef.current = moved;
+      setTimeout(() => { suppressWireClickRef.current = false; }, 0);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
   const onCanvasPointerDown = event => {
     if (event.button !== 0 || event.target.closest('.composer-node, .composer-port, .composer-wires')) return;
     const point = viewportPoint(event);
@@ -717,11 +765,19 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
         if (key === 'c') { copySelection(); }
         else if (key === 'v') { event.preventDefault(); pasteClipboard(); }
         else if (key === 'd') { event.preventDefault(); duplicateSelection(); }
+        else if (key === 'a') { event.preventDefault(); const ids = protocol.graph.nodes.filter(node => node.id !== protocol.graph.entryNodeId).map(node => node.id); setSelectedIds(new Set(ids)); setSelectedNodeId(null); setSelectedEdgeId(null); }
+        else if (key === '0') { event.preventDefault(); setZoom(1); setPan({ x: 0, y: 0 }); }
+        else if (key === '=' || key === '+') { event.preventDefault(); setZoom(z => Math.min(2.5, +(z * 1.25).toFixed(2))); }
+        else if (key === '-' || key === '_') { event.preventDefault(); setZoom(z => Math.max(0.4, +(z * 0.8).toFixed(2))); }
       } else if ((event.key === 'Delete' || event.key === 'Backspace') && (selectedSet().size || selectedEdge)) {
         event.preventDefault();
         deleteSelection();
       } else if (event.key === 'Escape') {
-        if (deletePending) setDeletePending(null);
+        // Cancel in-flight operations first (most urgent), then clear selection.
+        if (pendingWire) { setPendingWire(null); wireCancelRef.current = true; return; }
+        if (pendingPort) { setPendingPort(null); setMessage(''); return; }
+        if (marquee) { setMarquee(null); return; }
+        if (deletePending) { setDeletePending(null); return; }
         setSelectedIds(new Set());
         setSelectedNodeId(null);
         setSelectedEdgeId(null);
@@ -874,10 +930,11 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
                 if (!sourcePort || !targetPort) return null;
                 return <path key={edge.id} className={`${edge.kind} ${selectedEdgeId === edge.id ? 'selected' : ''}`} d={edgePath(portPosition(sourceNode, sourcePort, sourceDef), portPosition(targetNode, targetPort, targetDef))} onClick={event => { event.stopPropagation(); setSelectedEdgeId(edge.id); setSelectedNodeId(null); }} />;
               })}
+              {pendingWire && <path className="composer-wire temp" d={edgePath(pendingWire.from, pendingWire.to)} />}
             </svg>
             {protocol.graph.nodes.map(node => {
               const definition = registry.get(node.component.type, node.component.version);
-              return <article key={node.id} className={`composer-node ${selectedIds.has(node.id) ? 'selected' : ''}`} style={{ left: node.layout.x, top: node.layout.y }} onClick={event => selectNode(node, event)} onDoubleClick={() => { setPreviewNodeId(node.id); setPreviewEdit(true); }} onPointerDown={event => startDrag(event, node)} onPointerMove={dragNode} onPointerUp={endDrag}>
+              return <article key={node.id} data-node-id={node.id} className={`composer-node ${selectedIds.has(node.id) ? 'selected' : ''}`} style={{ left: node.layout.x, top: node.layout.y }} onClick={event => selectNode(node, event)} onDoubleClick={() => { setPreviewNodeId(node.id); setPreviewEdit(true); }} onPointerDown={event => startDrag(event, node)} onPointerMove={dragNode} onPointerUp={endDrag}>
                 <span className="node-category">{definition?.category}</span>
                 <b>{node.label}</b>
                 <small>{node.component.type}</small>
@@ -886,7 +943,7 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
                     ? protocol.graph.edges.filter(edge => edge.kind === 'data' && edge.source.nodeId === node.id && edge.source.portId === port.id).map(edge => nodeLabelById.get(edge.target.nodeId) || edge.target.nodeId)
                     : [];
                   const hint = downstream.length ? `${port.label} → ${downstream.join(', ')}` : `${port.label} · ${port.kind} ${port.direction}`;
-                  return <button key={port.id} title={hint} className={`composer-port ${port.direction} ${port.kind} ${pendingPort?.nodeId === node.id && pendingPort?.portId === port.id ? 'pending' : ''}`} style={{ top: portPosition({ layout: { x: 0, y: 0 } }, port, definition).y }} onClick={event => { event.stopPropagation(); selectPort(node, port); }}><span>{port.label}</span></button>;
+                  return <button key={port.id} data-port-id={port.id} title={hint} className={`composer-port ${port.direction} ${port.kind} ${pendingPort?.nodeId === node.id && pendingPort?.portId === port.id ? 'pending' : ''}`} style={{ top: portPosition({ layout: { x: 0, y: 0 } }, port, definition).y }} onPointerDown={event => startWire(event, node, port)} onClick={event => { event.stopPropagation(); if (suppressWireClickRef.current) return; selectPort(node, port); }}><span>{port.label}</span></button>;
                 })}
                 {(definition?.dataFields || []).length > 0 && <span className="node-data-fields" title={`${t('Data columns')}: ${definition.dataFields.join(', ')}`}>{definition.dataFields.length} output{definition.dataFields.length > 1 ? 's' : ''}</span>}
               </article>;

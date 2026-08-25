@@ -28,6 +28,7 @@
 .composer-wires path { fill: none; stroke: #7d8794; stroke-width: 2.5; pointer-events: stroke; cursor: pointer; }
 .composer-wires path.data { stroke: #db7c2f; stroke-dasharray: 6 4; }
 .composer-wires path.selected { stroke: #6c63ff; stroke-width: 5; }
+.composer-wires path.temp { stroke: #6c63ff; stroke-width: 2.5; stroke-dasharray: 4 3; pointer-events: none; }
 .composer-group { position: absolute; box-sizing: border-box; padding: 9px 12px; border: 1px dashed #6c63ff88; border-radius: 16px; background: #6c63ff08; color: #5249d7; pointer-events: none; }
 .composer-group b { display: block; font-size: .72rem; }
 .composer-group small { font-size: .6rem; opacity: .75; }

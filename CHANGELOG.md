@@ -2,6 +2,21 @@
 
 All notable changes to PhysioFlow are documented in this file.
 
+## [0.5.3] — 2026-08-26
+
+### Added
+
+#### Composer V2 连线与键盘交互增强
+- **拖拽连线（drag-to-connect）**：从数据输出端口按住拖到兼容输入端口释放即建立连线，临时线随拖动实时绘制；Esc 可取消进行中的拖拽，随后松开鼠标不会误连接；点选式连线（先点输出端口再点输入端口）保留，两种方式共用同一 `connect` 校验。
+- **Ctrl+A 全选**：一键选中画布全部节点（自动排除入口节点），Shift/点击可继续调整选择。
+- **缩放快捷键**：`Ctrl+=` / `Ctrl+-` 步进缩放（×1.25 / ×0.8，0.4×–2.5× 限幅）、`Ctrl+0` 复位视图（缩放 100% + 平移归零）。
+- **Esc 分层取消语义**：编辑区内按 Esc 按优先级取消进行中操作——拖拽连线 → 点选连线 → 框选（marquee）→ 删除确认弹窗 → 最后清空全部选择与对齐参考线；`App.jsx` 全局层不再拦截 Escape，Esc 在 Builder 内永不触发退出。
+
+### Tests
+- 新增 `.playwright-cli/verify-interactions.cjs` 浏览器级验收：打开 Builder 后依次验证拖拽连线（2→3 条边、临时线无残留）、Ctrl+A 全选（4 节点选中 3）、Ctrl+=/Ctrl+0 缩放（100%→125%→100%）、点选连线中按 Esc 取消、Ctrl+A 后按 Esc 清空选择且不退出 Builder，8 项断言全部通过、无控制台错误。
+
+---
+
 ## [0.5.2] — 2026-08-26
 
 ### Added
