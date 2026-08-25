@@ -9,6 +9,7 @@ import { createDeploymentBundle } from '../src/deployment/index.js';
 import { HostedHttpClient, validateParticipantBootstrap } from '../src/hosted/index.js';
 import { createHostedNodeServer } from '../server/createHostedNodeServer.mjs';
 import { FileHostedStateStore } from '../server/fileHostedStateStore.mjs';
+import { assertFileMode } from './helpers/assertFileMode.js';
 
 const actors = [
   { actorId: 'node-owner', role: 'owner', accessToken: 'node-owner-token' },
@@ -95,7 +96,7 @@ test('Node hosted server persists its service, serves the participant app, and d
   const persisted = JSON.parse(await readFile(join(root, 'state', 'hosted.json'), 'utf8'));
   assert.equal(persisted.deployments.length, 2);
   assert.equal(persisted.auditEntries.filter(entry => entry.action === 'deployment.asset_uploaded').length, 2);
-  assert.equal((await stat(join(root, 'state', 'hosted.json'))).mode & 0o777, 0o600);
+  await assertFileMode(join(root, 'state', 'hosted.json'), 0o600);
   assert.equal(persisted.credentialProtection.primaryKeyId, 'node-old');
   assert.equal(persisted.credentialProtection.auditIntegrity.keyId, 'node-old');
   assert.equal(persisted.credentialProtection.auditIntegrity.entryCount, persisted.auditEntries.length);

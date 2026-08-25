@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { createHostedBackup, restoreHostedBackup, verifyHostedBackup } from '../server/hostedBackup.mjs';
 import { FileHostedStateStore } from '../server/fileHostedStateStore.mjs';
 import { HOSTED_STATE_SCHEMA_VERSION } from '../src/hosted/index.js';
+import { assertFileMode } from './helpers/assertFileMode.js';
 
 function emptyState() {
   return { schemaVersion: HOSTED_STATE_SCHEMA_VERSION, deployments: [], sessions: [], participantTokens: [], launchLinks: [], launchTokens: [], idempotency: [], auditEntries: [] };
@@ -25,8 +26,8 @@ test('hosted backup creates a private verified inventory and restores only to ne
   assert.equal(created.manifest.source.includesAssets, true);
   const verified = await verifyHostedBackup(destination);
   assert.equal(verified.valid, true);
-  assert.equal((await stat(join(destination, 'state.json'))).mode & 0o777, 0o600);
-  assert.equal((await stat(join(destination, 'assets', 'bundle_1', 'asset_1'))).mode & 0o777, 0o600);
+  await assertFileMode(join(destination, 'state.json'), 0o600);
+  await assertFileMode(join(destination, 'assets', 'bundle_1', 'asset_1'), 0o600);
 
   const restoredState = join(root, 'restored', 'state.json');
   const restoredAssets = join(root, 'restored', 'assets');

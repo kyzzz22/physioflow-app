@@ -51,12 +51,12 @@ async function waitForUrl(url, label, timeout = 15000) {
 const vite = spawn(process.execPath, ['./node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', String(APP_PORT)], { stdio: ['ignore', 'pipe', 'pipe'] });
 children.push(vite);
 await waitForUrl(appUrl, 'Vite');
-const chromeProcess = spawn(chrome, ['--headless=new', '--no-sandbox', '--disable-gpu', `--remote-debugging-port=${DEBUG_PORT}`, `--user-data-dir=${profileDirectory}`, appUrl], { stdio: ['ignore', 'pipe', 'pipe'] });
+const chromeProcess = spawn(chrome, ['--headless=new', '--no-sandbox', '--disable-gpu', `--remote-debugging-port=${DEBUG_PORT}`, `--user-data-dir=${profileDirectory}`, 'about:blank'], { stdio: ['ignore', 'pipe', 'pipe'] });
 children.push(chromeProcess);
 await waitForUrl(`${debugUrl}/json/list`, 'Chrome DevTools');
 
 const targets = await fetch(`${debugUrl}/json/list`).then(response => response.json());
-const target = targets.find(item => item.type === 'page' && item.url.startsWith(appUrl));
+const target = targets.find(item => item.type === 'page');
 if (!target) throw new Error('Legacy E2E page target was not created');
 
 const socket = new WebSocket(target.webSocketDebuggerUrl);
@@ -93,6 +93,18 @@ const waitFor = async (expression, label, timeout = 8000) => {
   }
   const pageText = await evaluate(`document.body.innerText.slice(0, 1200)`);
   throw new Error(`Timed out waiting for ${label}. Page text: ${pageText}`);
+};
+const navigateTo = async (url, timeout = 15000) => {
+  await send('Page.navigate', { url });
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    try {
+      const info = await evaluate(`({ href: location.href, text: document.body ? document.body.innerText.trim().length : 0 })`);
+      if (info && info.href && info.href.startsWith('http') && info.text > 0) return;
+    } catch { /* page still navigating */ }
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+  throw new Error(`Timed out navigating to ${url}`);
 };
 const clickText = async (text, selector = 'button') => {
   const clicked = await evaluate(`(() => {
@@ -151,6 +163,7 @@ const seedProtocol = async (name, frozen) => {
 await send('Page.enable');
 await send('Runtime.enable');
 
+await navigateTo(appUrl);
 await resetWorkspace();
 await seedProtocol('E2E formal storage gate', true);
 assert.equal(await evaluate(`document.body.textContent.includes('blocked')`), true);
