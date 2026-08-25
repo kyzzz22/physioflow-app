@@ -204,13 +204,13 @@ PhysioFlow 的定位是「行为与生理实验的可视化工作流系统」。
 
 ### 🟡 P2 — 体验 / 可用性问题
 
-| 问题 |
-|---|
-| media URL / assetId 无校验无预览——无效 URL 只在运行时 `media_error` 才发现 |
-| 数据流不可见：节点 data 端口/变量绑定，用户看不到"该节点输出是什么、接给谁" |
-| 完成模式在各节点间不一致且暴露不全（screen 有 manual/fixed、media 只有 fixed、questionnaire 直接 submit） |
-| validation 错误只显示前 8 条、英文、代码式 |
-| condition 的变量选择器只列协议变量，无法引用上游节点输出 |
+| 问题 | 状态 |
+|---|---|
+| media URL / assetId 无校验无预览——无效 URL 只在运行时 `media_error` 才发现 | ✅ 已修复（2026-08-25）：配置校验新增 `config.media_url_invalid`；Inspector Source URL 实时红框 + 提示（`ComposerV2.jsx` + `freezeProtocolGraph.js`） |
+| 数据流不可见：节点 data 端口/变量绑定，用户看不到"该节点输出是什么、接给谁" | ✅ 已修复（2026-08-25）：画布节点底部 dataFields 输出徽标；数据输出端口悬停显示下游目标（`ComposerV2.jsx` + `composer-v2.css`） |
+| 完成模式在各节点间不一致且暴露不全（screen 有 manual/fixed、media 只有 fixed、questionnaire 直接 submit） | ✅ 已修复（2026-08-25）：`stimulus.fixation` 补 manual/fixed 选择器；manual 由 `schemaForNode` 注入 Continue 按钮（`componentRegistry.js` + `nodeSchema.js` + `freezeProtocolGraph.js`） |
+| validation 错误只显示前 8 条、英文、代码式 | ✅ 已修复（2026-08-25）：支持展开全部（Show all (N)）；zh 界面 code → 中文模板 + 节点名（`ComposerV2.jsx` + `i18n.jsx`） |
+| condition 的变量选择器只列协议变量，无法引用上游节点输出 | ✅ 已修复（2026-08-25）：变量选择器新增 "Node outputs (upstream)" 分组（`kind: 'output'` 绑定，运行时 `resolveBinding` 原生支持）；`Expected` 类型随输出端口 dataType 联动（`ComposerV2.jsx`） |
 
 ### 建议修复优先级
 

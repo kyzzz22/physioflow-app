@@ -70,3 +70,4 @@ Composer V2（Protocol Graph 编辑器）与旧版（Block→Trial→Step 编辑
 - 问卷用新架构实现（`questionnaireModel.js` 纯模型 + `QuestionnaireEditorV2`/`QuestionnaireFormV2`），不依赖旧版 UI 组件。
 - i18n 复用旧版 `src/i18n.jsx` 词条表（共享基础设施，非 UI 组件）。
 - 已补：实验节点（fixation/attention/device/manual/calibration/custom-html/note/junction）+ Html 元素、全屏节点编辑、BIDS、任务模板、性能变量回填、主题预设、stimuli 媒体库、visual angle、分析窗口/恢复字段、画布交互（pan/zoom/snap/多选/复制粘贴/搜索/自动布局/流快照/小地图）、对齐辅助线与吸附、键盘导航（方向键微调/Escape/Enter）、复制粘贴携带内部连线。
+- 已补（2026-08-25 P2 体验）：media URL 格式校验（`config.media_url_invalid`）与 Inspector 内联红框/提示；画布节点 dataFields 输出徽标 + 数据端口悬停显示下游目标（数据流可见性）；`stimulus.fixation` 完成模式选择器（manual 运行时自动注入 Continue 按钮）；validation 错误支持展开全部 + zh 本地化（code → 中文模板 + 节点名）；condition/loop 变量选择器新增 "Node outputs (upstream)" 分组（引用上游节点数据输出，`Expected` 类型随输出端口 dataType 联动）。

@@ -795,6 +795,138 @@ async function verifyComposerStep8() {
   check('undo-removes-paste', c2 === c0, `nodes ${c1}->${c2}`);
 }
 
+async function buildP2Protocol() {
+  const { pathToFileURL } = require('url');
+  const { createProtocolGraph } = await import(pathToFileURL(path.join(process.cwd(), 'src/core/protocolGraph.js')).href);
+  const { addNode, connect } = await import(pathToFileURL(path.join(process.cwd(), 'src/core/graphCommands.js')).href);
+  const { createCoreComponentRegistry } = await import(pathToFileURL(path.join(process.cwd(), 'src/core/componentRegistry.js')).href);
+  const registry = createCoreComponentRegistry();
+  const mediaDefaults = registry.get('display.media').defaultConfig;
+  const ratingDefaults = registry.get('input.rating').defaultConfig;
+  const condDefaults = registry.get('logic.condition').defaultConfig;
+  const now = '2026-08-25T00:00:00.000Z';
+  let p = createProtocolGraph({ name: 'P2 Verify', now });
+  const id = { start: p.graph.entryNodeId };
+  let   r = addNode(p, 'display.media', { id: 'm1', label: 'Media', config: { ...mediaDefaults, mediaType: 'image', sourceUrl: 'not-a-url', completion: { mode: 'fixed', durationMs: 2000 } }, layout: { x: 200, y: 140 }, now });
+  p = r.protocol; id.media = r.node.id;
+  r = addNode(p, 'input.rating', { id: 'r1', label: 'Rating', config: { ...ratingDefaults, min: 1, max: 7, required: true }, layout: { x: 440, y: 140 }, now });
+  p = r.protocol; id.rating = r.node.id;
+  r = addNode(p, 'logic.condition', { id: 'c1', label: 'Cond', config: { ...condDefaults, operator: 'gte', expected: 3 }, layout: { x: 680, y: 140 }, now });
+  p = r.protocol; id.cond = r.node.id;
+  r = addNode(p, 'core.end', { label: 'End', layout: { x: 920, y: 140 }, now });
+  p = r.protocol; id.end = r.node.id;
+  p.variables = [{ name: 'score', type: 'number', scope: 'participant', createdAt: now, updatedAt: now }];
+  const link = (from, portId, to) => { const out = connect(p, 'control', { nodeId: from, portId }, { nodeId: to, portId: 'in' }); p = out.protocol; };
+  link(id.start, 'next', id.media);
+  link(id.media, 'next', id.rating);
+  link(id.rating, 'next', id.cond);
+  const de = connect(p, 'data', { nodeId: id.rating, portId: 'value' }, { nodeId: id.cond, portId: 'value' });
+  p = de.protocol;
+  return p;
+}
+
+async function openComposerWithP2() {
+  const p2 = await buildP2Protocol();
+  await navigate(URL);
+  await evalJS(`(async () => {
+    const p2 = ${JSON.stringify(p2)};
+    localStorage.setItem('physioflow.protocols.v1', JSON.stringify([p2]));
+    return 'injected';
+  })()`);
+  await navigate(URL);
+  await sleep(600);
+  const editBtn = await evalJS(`(() => {
+    const b = [...document.querySelectorAll('button')].find(x => x.textContent.includes('Edit draft'));
+    if (!b) return null;
+    const r = b.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  })()`);
+  if (!editBtn) return { ok: false, reason: 'no Edit draft' };
+  await clickAt(editBtn.x, editBtn.y);
+  await sleep(1500);
+  const count = await evalJS(`(() => document.querySelectorAll('article.composer-node').length)()`);
+  return count ? { ok: true } : { ok: false, reason: 'composer not open' };
+}
+
+async function verifyComposerP2() {
+  const b = await openComposerWithP2();
+  if (!b.ok) { check('p2-composer-open', false, b.reason); return; }
+  const clickNode = async type => {
+    const rect = await evalJS(`(() => {
+      const el = [...document.querySelectorAll('article.composer-node')].find(x => (x.textContent || '').includes(${JSON.stringify(type)}));
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    })()`);
+    if (!rect) return 'missing';
+    await clickAt(rect.x, rect.y);
+    return 'clicked';
+  };
+
+  // 1) Rating node shows its data output badge (data-flow visibility).
+  const badge = await evalJS(`(() => {
+    const el = [...document.querySelectorAll('article.composer-node')].find(x => (x.textContent || '').includes('input.rating'));
+    if (!el) return 'missing';
+    const badge = el.querySelector('.node-data-fields');
+    return badge ? badge.textContent : null;
+  })()`);
+  check('p2-data-badge', badge === '2 outputs', `badge=${badge}`);
+
+  // 2) Condition inspector offers a Node outputs (upstream) group.
+  await clickNode('logic.condition');
+  await sleep(600);
+  const cond = await evalJS(`(() => {
+    const inspector = document.querySelector('.composer-inspector');
+    const summary = inspector ? inspector.textContent.slice(0, 220).replace(/\\s+/g, ' ') : 'no-inspector';
+    const sel = [...(inspector ? inspector.querySelectorAll('select') : [])].find(s => s.getAttribute('aria-label') === 'Condition input variable');
+    if (!sel) return { summary, state: 'no-select' };
+    const groups = [...sel.querySelectorAll('optgroup')].map(g => g.label);
+    const opts = [...sel.querySelectorAll('option')].map(o => o.value);
+    return { summary, groups, opts, state: 'ok' };
+  })()`);
+  const hasOutput = cond.state === 'ok' && (cond.opts || []).some(o => /^output:.+:value$/.test(o));
+  const hasVar = cond.state === 'ok' && (cond.opts || []).some(o => o.startsWith('variable:'));
+  check('p2-node-outputs-group', cond.state === 'ok' && cond.groups.includes('Node outputs (upstream)') && hasOutput && hasVar, `summary=${cond.summary} groups=${cond.state === 'ok' ? cond.groups.join('|') : '-'} opts=${cond.state === 'ok' ? cond.opts.join('|') : '-'}`);
+
+  // 3) Binding a node output turns Expected into a number input.
+  const bound = await evalJS(`(() => {
+    const sel = [...document.querySelectorAll('.composer-inspector select')].find(s => s.getAttribute('aria-label') === 'Condition input variable');
+    if (!sel) return 'no-select';
+    const outputOption = [...sel.querySelectorAll('option')].find(o => o.value.startsWith('output:'));
+    if (!outputOption) return 'no-output-option';
+    sel.value = outputOption.value;
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    return outputOption.value;
+  })()`);
+  await sleep(600);
+  const expected = await evalJS(`(() => {
+    const label = [...document.querySelectorAll('.composer-inspector label')].find(x => (x.textContent || '').includes('Expected'));
+    if (!label) return null;
+    const input = label.querySelector('input');
+    return input ? { type: input.type, value: input.value } : null;
+  })()`);
+  check('p2-expected-follows-output-type', bound !== 'no-output-option' && expected && expected.type === 'number', `bound=${bound} expected=${JSON.stringify(expected)}`);
+
+  // 4) The invalid media URL surfaces as a validation issue (localized in zh).
+  const validation = await evalJS(`(() => {
+    const btn = [...document.querySelectorAll('.composer-validation button')].find(x => (x.textContent || '').includes('config.media_url_invalid'));
+    return btn ? btn.textContent : null;
+  })()`);
+  check('p2-media-url-invalid-listed', validation && (validation.includes('媒体') || validation.includes('invalid')), `validation=${validation}`);
+
+  // 5) The media inspector flags the bad URL inline.
+  await clickNode('display.media');
+  await sleep(600);
+  const media = await evalJS(`(() => {
+    const inspector = document.querySelector('.composer-inspector');
+    const summary = inspector ? inspector.textContent.slice(0, 160).replace(/\\s+/g, ' ') : 'no-inspector';
+    const label = [...document.querySelectorAll('.composer-inspector label')].find(x => (x.textContent || '').includes('Source URL'));
+    if (!label) return { summary, state: 'no-label' };
+    return { summary, invalid: label.classList.contains('field-invalid'), hint: !!(label.querySelector('.field-hint')), state: 'ok' };
+  })()`);
+  check('p2-media-url-inline-error', media.state === 'ok' && media.invalid && media.hint, `summary=${media.summary} invalid=${media.invalid} hint=${media.hint}`);
+}
+
 async function verifyAlign() {
   const b = await openBuilder();
   if (!b.ok) { check('builder-open', false, b.reason); return; }
@@ -874,6 +1006,7 @@ async function main() {
   if (STEP === 'undo-redo') await verifyUndoRedo();
   if (STEP === 'tree-reorder') await verifyTreeReorder();
   if (STEP === 'composer-step8') await verifyComposerStep8();
+  if (STEP === 'composer-p2') await verifyComposerP2();
   console.log('CONSOLE-errors:', consoleErrors.length ? JSON.stringify(consoleErrors) : 'none');
   cleanup(failures ? 1 : 0);
 }

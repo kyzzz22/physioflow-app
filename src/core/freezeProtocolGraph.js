@@ -22,6 +22,19 @@ function uiElements(schema) {
   return elements;
 }
 
+function isPlausibleMediaUrl(value) {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  const trimmed = value.trim();
+  if (/[\s]/.test(trimmed)) return false;
+  try {
+    const parsed = new URL(trimmed);
+    return ['http:', 'https:', 'data:', 'blob:'].includes(parsed.protocol);
+  } catch {
+    // Relative paths (local dev / packaged asset files) must look like a file path.
+    return trimmed.includes('/') && !/^[a-z][a-z0-9+.-]*:/i.test(trimmed);
+  }
+}
+
 export async function hashProtocolGraph(protocol) {
   if (!globalThis.crypto?.subtle) throw new Error('Web Crypto SHA-256 is unavailable');
   const bytes = new TextEncoder().encode(serializeProtocolGraph(hashableProtocol(protocol), 0));
@@ -81,13 +94,19 @@ export function validateProtocolGraphConfiguration(protocol, registry) {
         errors.push({ code: 'config.input_missing', message: `${node.label} needs at least one participant input`, path: `${path}.ui`, nodeId: node.id });
       }
       const requiresManualSubmit = requiresInput || node.config?.completion?.mode === 'manual';
-      const hasSubmit = elements.some(element => element.type === 'Button' && (element.actions || []).some(action => ['submit', 'next'].includes(action.action)));
+      // Fixation manual mode gets its Continue button injected by schemaForNode at run time,
+      // so the stored UI schema does not need to carry one.
+      const injectedButton = node.component?.type === 'stimulus.fixation' && requiresManualSubmit;
+      const hasSubmit = injectedButton || elements.some(element => element.type === 'Button' && (element.actions || []).some(action => ['submit', 'next'].includes(action.action)));
       if (requiresManualSubmit && !hasSubmit) {
         errors.push({ code: 'config.completion_action_missing', message: `${node.label} needs a submit or next button`, path: `${path}.ui`, nodeId: node.id });
       }
     }
     if (node.component?.type === 'display.media' && !node.config?.sourceUrl && !node.config?.assetId) {
       errors.push({ code: 'config.media_source_missing', message: `${node.label} needs a media URL or asset`, path, nodeId: node.id });
+    }
+    if (node.component?.type === 'display.media' && node.config?.sourceUrl && !isPlausibleMediaUrl(node.config.sourceUrl)) {
+      errors.push({ code: 'config.media_url_invalid', message: `${node.label} has an invalid media URL`, path: `${path}.sourceUrl`, nodeId: node.id });
     }
     const mediaMode = node.config?.completion?.mode;
     if (node.component?.type === 'display.media' && mediaMode && !['manual', 'fixed', 'media-ended'].includes(mediaMode)) {

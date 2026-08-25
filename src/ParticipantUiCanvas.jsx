@@ -92,6 +92,7 @@ export default function ParticipantUiCanvas({
   const [liveSize, setLiveSize] = useState(null); // { elementId, w, h } during an active resize
   const [editingId, setEditingId] = useState(null); // element id currently edited inline (double-click)
   const [guides, setGuides] = useState(null); // { containerId, v: [x], h: [y] } alignment lines in container coords
+  const suppressFocusSelectRef = useRef(false);
   useEffect(() => {
     const closeOnPointer = event => {
       if (event.target?.closest?.('.ui-slot.editing')) return;
@@ -314,7 +315,6 @@ export default function ParticipantUiCanvas({
   // Keyboard accessibility: every canvas element is focusable; focusing via the
   // keyboard (Tab) selects it, while mouse-initiated focus is suppressed so it
   // does not fight shift+click additive selection.
-  const suppressFocusSelectRef = useRef(false);
   const markSuppressFocusSelect = () => {
     suppressFocusSelectRef.current = true;
     requestAnimationFrame(() => { suppressFocusSelectRef.current = false; });

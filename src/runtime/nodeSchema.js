@@ -49,6 +49,11 @@ export function schemaForNode(node, definition, resources) {
       text.props = { ...(text.props || {}), text: glyph, ...(node.config?.pulse ? { pulse: true } : {}) };
       text.style = { ...(text.style || {}), fontSize: `${node.config?.sizePx || 48}px`, color: node.config?.color || '#17231d', textAlign: 'center' };
     }
+    // manual completion needs an advance control; inject one when the designer's
+    // schema has none (fixed mode keeps the bare fixation cross).
+    if (node.config?.completion?.mode === 'manual' && !findUiElement(schema.root, 'Button')) {
+      schema.root.children.push(createUiElement('Button', { props: { label: 'Continue', variant: 'primary' }, actions: [{ event: 'click', action: 'submit' }] }));
+    }
     return schema;
   }
   if (node.component.type === 'stimulus.attention-check') {

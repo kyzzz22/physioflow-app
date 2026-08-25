@@ -80,6 +80,114 @@ function setPath(value, path, nextValue) {
   return next;
 }
 
+// zh-CN explanations for validation issue codes surfaced in the inspector.
+const VALIDATION_MESSAGES_ZH = {
+  'protocol.invalid': '协议文档结构无效',
+  'protocol.id_missing': '协议缺少 ID',
+  'protocol.name_missing': '协议缺少名称',
+  'graph.empty': '协议流程为空，请先添加节点',
+  'graph.entry_missing': '流程缺少开始节点',
+  'graph.entry_not_start': '入口节点不是 start 节点',
+  'graph.start_count': '流程中存在多个开始节点',
+  'graph.end_missing': '流程缺少结束节点',
+  'graph.end_unreachable': '结束节点不可达（有节点未连到主路径）',
+  'node.unreachable': '节点不可达，缺少输入边',
+  'node.id_missing': '节点缺少 ID',
+  'node.id_duplicate': '节点 ID 重复',
+  'node.component_missing': '节点缺少组件类型',
+  'node.component_unknown': '未知的组件类型，请安装对应 SDK 包',
+  'edge.source_missing': '连线缺少源节点',
+  'edge.target_missing': '连线缺少目标节点',
+  'edge.source_port_missing': '连线缺少源端口',
+  'edge.target_port_missing': '连线缺少目标端口',
+  'edge.source_direction': '连线源方向错误（应从输出端口出发）',
+  'edge.target_direction': '连线目标方向错误（应指向输入端口）',
+  'edge.kind_mismatch': '连线类型与控制流端口不匹配',
+  'edge.target_multiple': '控制端口已有多条连线，只能保留一条',
+  'port.required_unbound': '必需端口未绑定变量',
+  'port.required_unconnected': '必需端口未连接',
+  'binding.variable_missing': '绑定的变量不存在',
+  'binding.variable_type_mismatch': '绑定变量的类型与端口不匹配',
+  'variable.name_missing': '变量缺少名称',
+  'variable.name_duplicate': '变量名称重复',
+  'variable.type_invalid': '变量类型无效',
+  'variable.scope_invalid': '变量作用域无效',
+  'group.name_missing': '分组缺少名称',
+  'group.empty': '分组为空',
+  'group.node_missing': '分组中的节点不存在',
+  'group.node_multiple': '节点只能属于一个分组',
+  'subflow.parameter_mapping_missing': '子流程参数映射缺失',
+  'subflow.parameter_mapping_type_mismatch': '子流程参数映射类型不匹配',
+  'subflow.template_empty': '子流程模板为空',
+  'subflow.entry_invalid': '子流程入口节点无效',
+  'subflow.exit_invalid': '子流程出口节点无效',
+  'sdk.permission_unapproved': 'SDK 权限未批准',
+  'sdk.permission_variable_read': 'SDK 缺少变量读取权限',
+  'sdk.permission_network_media': 'SDK 缺少网络媒体权限',
+  'sdk.permission_asset_read': 'SDK 缺少资产读取权限',
+  'device.connector_missing': '未安装设备连接器',
+  'device.connector_invalid': '设备连接器无效',
+  'device.permission_unapproved': '设备权限未批准',
+  'config.media_source_missing': '媒体节点缺少 URL 或资产',
+  'config.media_url_invalid': '媒体 URL 无效，请检查地址或改用资产',
+  'config.media_mode_invalid': '媒体完成模式无效',
+  'config.participant_ui_missing': '界面模板为空',
+  'config.ui_variable_missing': '界面绑定引用了不存在的变量',
+  'config.input_missing': '界面缺少输入控件',
+  'config.completion_action_missing': '手动完成模式需要界面中有提交按钮',
+  'config.duration_invalid': '持续时间无效（需为正数）',
+  'config.wait_duration_invalid': '等待时长无效（需为正数）',
+  'config.rating_range_invalid': '评分范围无效（min 需小于 max）',
+  'config.loop_limit_invalid': '循环次数无效（需为正整数）',
+  'config.condition_operator_invalid': '条件运算符无效',
+  'config.loop_until_operator_invalid': '循环终止运算符无效',
+  'config.random_probability_invalid': '随机概率需在 0–100 之间',
+  'config.fixation_shape_invalid': '注视点形状无效',
+  'config.cognitive_task_kind_invalid': '认知任务类型无效',
+  'config.cognitive_task_trials_empty': '认知任务没有试次，请先生成',
+  'config.cognitive_task_trial_id_invalid': '认知任务试次 ID 无效',
+  'config.cognitive_task_timing_invalid': '认知任务试次时长无效',
+  'config.migration.review_required': '迁移后需要人工复核配置',
+};
+
+function isValidMediaUrl(value) {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  const trimmed = value.trim();
+  if (/[\s]/.test(trimmed)) return false;
+  try {
+    const parsed = new URL(trimmed);
+    return ['http:', 'https:', 'data:', 'blob:'].includes(parsed.protocol);
+  } catch {
+    // Relative paths (local dev / packaged asset files) must look like a file path.
+    return trimmed.includes('/') && !/^[a-z][a-z0-9+.-]*:/i.test(trimmed);
+  }
+}
+
+function validationIssueMessage(issue, language, protocol) {
+  if (language !== 'zh') return issue.message;
+  const template = VALIDATION_MESSAGES_ZH[issue.code];
+  if (!template) return issue.message;
+  const node = protocol?.graph?.nodes?.find(item => item.id === issue.nodeId);
+  return node?.label ? `「${node.label}」${template}` : template;
+}
+
+function bindingValue(binding) {
+  if (!binding) return '';
+  if (binding.kind === 'variable') return `variable:${binding.variable}`;
+  if (binding.kind === 'output') return `output:${binding.nodeId}:${binding.portId}`;
+  return '';
+}
+
+function parseBindingValue(raw) {
+  if (!raw) return null;
+  if (raw.startsWith('variable:')) return { kind: 'variable', variable: raw.slice(9) };
+  if (raw.startsWith('output:')) {
+    const match = raw.slice(7).match(/^([^:]+):(.+)$/);
+    return match ? { kind: 'output', nodeId: match[1], portId: match[2] } : null;
+  }
+  return null;
+}
+
 function portPosition(node, port, definition) {
   const ports = definition.ports.filter(item => item.direction === port.direction);
   const index = ports.findIndex(item => item.id === port.id);
@@ -152,6 +260,7 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
   const [selectedNodeId, setSelectedNodeId] = useState(protocol.graph.entryNodeId);
   const [selectedEdgeId, setSelectedEdgeId] = useState(null);
   const [pendingPort, setPendingPort] = useState(null);
+  const [showAllValidation, setShowAllValidation] = useState(false);
   const [message, setMessage] = useState('');
   const [editorMode, setEditorMode] = useState('quick');
   const [codeView, setCodeView] = useState(false);
@@ -184,7 +293,7 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
     };
     measure();
     if (canvasRef.current) {
-      const observer = new ResizeObserver(measure);
+      const observer = new globalThis.ResizeObserver(measure);
       observer.observe(canvasRef.current);
       return () => observer.disconnect();
     }
@@ -195,6 +304,39 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
     .filter(item => !['core.start', 'core.end', 'legacy.step'].includes(item.type))
     .reduce((groups, item) => { (groups[item.category] ??= []).push(item); return groups; }, {})), [registry]);
   const validation = useMemo(() => validateProtocolGraphConfiguration(protocol, registry), [protocol, registry]);
+  const nodeLabelById = useMemo(() => new Map(protocol.graph.nodes.map(node => [node.id, node.label])), [protocol.graph.nodes]);
+  const controlPredecessors = useMemo(() => {
+    const edges = protocol.graph.edges.filter(edge => edge.kind === 'control');
+    const memo = new Map();
+    const collect = (nodeId, seen) => {
+      if (memo.has(nodeId)) return memo.get(nodeId);
+      if (seen.has(nodeId)) return new Set();
+      seen.add(nodeId);
+      const result = new Set();
+      for (const edge of edges) {
+        if (edge.target.nodeId === nodeId) {
+          result.add(edge.source.nodeId);
+          for (const pred of collect(edge.source.nodeId, seen)) result.add(pred);
+        }
+      }
+      seen.delete(nodeId);
+      memo.set(nodeId, result);
+      return result;
+    };
+    return nodeId => (nodeId ? collect(nodeId, new Set()) : new Set());
+  }, [protocol.graph.edges]);
+  const dataOutputOptions = useMemo(() => {
+    if (!selectedNodeId) return [];
+    const predecessors = controlPredecessors(selectedNodeId);
+    const list = [];
+    for (const item of protocol.graph.nodes) {
+      if (item.id === selectedNodeId || !predecessors.has(item.id)) continue;
+      const definition = registry.get(item.component.type, item.component.version);
+      const ports = (definition?.ports || []).filter(port => port.direction === 'output' && port.kind === 'data');
+      if (ports.length) list.push({ nodeId: item.id, label: item.label, ports });
+    }
+    return list;
+  }, [protocol.graph.nodes, selectedNodeId, registry, controlPredecessors]);
   const selectedNode = protocol.graph.nodes.find(node => node.id === selectedNodeId) || null;
   const selectedEdge = protocol.graph.edges.find(edge => edge.id === selectedEdgeId) || null;
   const previewNode = previewNodeId ? protocol.graph.nodes.find(node => node.id === previewNodeId) : null;
@@ -408,7 +550,7 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
         if (!from || !to) continue;
         try {
           next = connect(next, edge.kind, { nodeId: from, portId: edge.source.portId }, { nodeId: to, portId: edge.target.portId }).protocol;
-        } catch (error) { /* 端口不兼容时跳过该连线 */ }
+        } catch { /* 端口不兼容时跳过该连线 */ }
       }
       commit(next);
       setSelectedIds(new Set(ids));
@@ -695,7 +837,14 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
                 <span className="node-category">{definition?.category}</span>
                 <b>{node.label}</b>
                 <small>{node.component.type}</small>
-                {(definition?.ports || []).map(port => <button key={port.id} title={`${port.label} · ${port.kind} ${port.direction}`} className={`composer-port ${port.direction} ${port.kind} ${pendingPort?.nodeId === node.id && pendingPort?.portId === port.id ? 'pending' : ''}`} style={{ top: portPosition({ layout: { x: 0, y: 0 } }, port, definition).y }} onClick={event => { event.stopPropagation(); selectPort(node, port); }}><span>{port.label}</span></button>)}
+                {(definition?.ports || []).map(port => {
+                  const downstream = port.direction === 'output' && port.kind === 'data'
+                    ? protocol.graph.edges.filter(edge => edge.kind === 'data' && edge.source.nodeId === node.id && edge.source.portId === port.id).map(edge => nodeLabelById.get(edge.target.nodeId) || edge.target.nodeId)
+                    : [];
+                  const hint = downstream.length ? `${port.label} → ${downstream.join(', ')}` : `${port.label} · ${port.kind} ${port.direction}`;
+                  return <button key={port.id} title={hint} className={`composer-port ${port.direction} ${port.kind} ${pendingPort?.nodeId === node.id && pendingPort?.portId === port.id ? 'pending' : ''}`} style={{ top: portPosition({ layout: { x: 0, y: 0 } }, port, definition).y }} onClick={event => { event.stopPropagation(); selectPort(node, port); }}><span>{port.label}</span></button>;
+                })}
+                {(definition?.dataFields || []).length > 0 && <span className="node-data-fields" title={`${t('Data columns')}: ${definition.dataFields.join(', ')}`}>{definition.dataFields.length} output{definition.dataFields.length > 1 ? 's' : ''}</span>}
               </article>;
             })}
             {marquee && <div className="composer-marquee" style={{ left: Math.min(marquee.x0, marquee.x1), top: Math.min(marquee.y0, marquee.y1), width: Math.abs(marquee.x1 - marquee.x0), height: Math.abs(marquee.y1 - marquee.y0) }} />}
@@ -722,7 +871,7 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
       <aside className="composer-inspector">
         <h2>{t('Inspector')}</h2>
         {migrationReviewRequired && <div className="migration-review-warning"><b>Migration review required</b><span>{protocol.legacy.migrationReport.issues.length} item(s) must be checked before this draft can be frozen.</span></div>}
-        {selectedNode && <NodeInspector node={selectedNode} definition={registry.get(selectedNode.component.type, selectedNode.component.version)} variables={protocol.variables || []} groups={protocol.graph.groups || []} mode={editorMode} onUpdate={updateSelected} onAssignGroup={groupId => commit(assignNodeToGroup(protocol, selectedNode.id, groupId))} questionnaireLibrary={protocol.questionnaireLibrary || []} onLibraryChange={library => commit({ ...protocol, questionnaireLibrary: library })} assets={protocol.assets || []} onCreateGroup={() => {
+        {selectedNode && <NodeInspector node={selectedNode} definition={registry.get(selectedNode.component.type, selectedNode.component.version)} variables={protocol.variables || []} groups={protocol.graph.groups || []} mode={editorMode} onUpdate={updateSelected} onAssignGroup={groupId => commit(assignNodeToGroup(protocol, selectedNode.id, groupId))} questionnaireLibrary={protocol.questionnaireLibrary || []} onLibraryChange={library => commit({ ...protocol, questionnaireLibrary: library })} assets={protocol.assets || []} dataOutputOptions={dataOutputOptions} onCreateGroup={() => {
           try {
             const result = createNodeGroup(protocol, [selectedNode.id], { name: `${selectedNode.label} group` });
             commit(result.protocol);
@@ -735,7 +884,14 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
         {!locked && selectedNode && selectedNode.component.type !== 'core.start' && <button className="danger" onClick={deleteSelection}>Delete node</button>}
         <section className={`composer-validation ${validation.valid ? 'valid' : 'invalid'}`}>
           <h3>{validation.valid ? `✓ ${t('Graph valid')}` : `${validation.errors.length} ${t('blocking issues')}`}</h3>
-          {[...validation.errors, ...validation.warnings].slice(0, 8).map((issue, index) => <button key={`${issue.code}-${index}`} onClick={() => issue.nodeId && setSelectedNodeId(issue.nodeId)}><b>{issue.code}</b><span>{issue.message}</span></button>)}
+          {(() => {
+            const allIssues = [...validation.errors, ...validation.warnings];
+            const visible = showAllValidation ? allIssues : allIssues.slice(0, 8);
+            return <>
+              {visible.map((issue, index) => <button key={`${issue.code}-${index}`} onClick={() => issue.nodeId && setSelectedNodeId(issue.nodeId)}><b>{issue.code}</b><span>{validationIssueMessage(issue, language, protocol)}</span></button>)}
+              {allIssues.length > 8 && <button className="composer-validation-more" onClick={() => setShowAllValidation(show => !show)}>{showAllValidation ? `− ${t('Show fewer')}` : `+ ${t('Show all')} (${allIssues.length})`}</button>}
+            </>;
+          })()}
         </section>
       </aside>
     </div>}
@@ -764,10 +920,26 @@ function CodeView({ text, error, locked, onChange, onApply }) {
   </div>;
 }
 
-function NodeInspector({ node, definition, variables, groups, mode, onUpdate, onAssignGroup, onCreateGroup, questionnaireLibrary, onLibraryChange, assets }) {
+function NodeInspector({ node, definition, variables, groups, mode, onUpdate, onAssignGroup, onCreateGroup, questionnaireLibrary, onLibraryChange, assets, dataOutputOptions }) {
   const { language } = useLanguage();
   const t = key => translate(key, language);
   const currentGroup = groups.find(group => group.nodeIds.includes(node.id));
+  const boundValueType = () => {
+    if (node.component.type !== 'logic.condition') return null;
+    const binding = node.bindings?.value;
+    if (!binding) return null;
+    if (binding.kind === 'variable') return variables.find(variable => variable.name === binding.variable)?.type || null;
+    if (binding.kind === 'output') {
+      const option = (dataOutputOptions || []).find(item => item.nodeId === binding.nodeId);
+      const port = option?.ports.find(item => item.id === binding.portId);
+      return ['number', 'boolean'].includes(port?.dataType) ? port.dataType : port?.dataType || null;
+    }
+    return null;
+  };
+  const renderOutputOptions = () => (dataOutputOptions || []).flatMap(option =>
+    option.ports.map(port => <option key={`output:${option.nodeId}:${port.id}`} value={`output:${option.nodeId}:${port.id}`}>{option.label} · {port.label}{port.dataType ? ` (${port.dataType})` : ''}</option>));
+  const renderVariableOptions = (withScope = false) => variables.map(variable =>
+    <option key={`variable:${variable.name}`} value={`variable:${variable.name}`}>{variable.name} · {variable.type}{withScope ? ` / ${variable.scope}` : ''}</option>);
 
   const contentSpec = {
     'display.media': { elementType: 'Media', fields: [{ key: 'mediaType', label: 'Media type', type: 'select', options: ['image', 'audio', 'video'] }, { key: 'sourceUrl', label: 'Source URL', type: 'text' }, { key: 'assetId', label: 'Asset', type: 'asset' }] },
@@ -802,14 +974,15 @@ function NodeInspector({ node, definition, variables, groups, mode, onUpdate, on
 
   const renderField = field => {
     if (field.showWhen && getPath(node.config, field.showWhen.path) !== field.showWhen.equals) return null;
-    // Type-aware Expected value for conditions: follow the bound input variable's type.
-    if (node.component.type === 'logic.condition' && field.path === 'expected' && node.bindings?.value?.kind === 'variable') {
-      const boundVariable = variables.find(variable => variable.name === node.bindings.value.variable);
+    // Type-aware Expected value for conditions: follow the bound input variable's type
+    // (protocol variable or upstream node output).
+    if (node.component.type === 'logic.condition' && field.path === 'expected' && node.bindings?.value?.kind) {
+      const boundType = boundValueType();
       const expected = node.config?.expected;
-      if (boundVariable?.type === 'number') {
+      if (boundType === 'number') {
         return <label key={field.path}>{field.label}<input type="number" value={typeof expected === 'number' ? expected : Number.isFinite(Number(expected)) ? Number(expected) : ''} onChange={event => onUpdate({ config: setPath(node.config, 'expected', event.target.value === '' ? '' : Number(event.target.value)) })} />{field.help && <small className="field-help">{field.help}</small>}</label>;
       }
-      if (boundVariable?.type === 'boolean') {
+      if (boundType === 'boolean') {
         const boolValue = String(expected) === 'true' ? 'true' : String(expected) === 'false' ? 'false' : '';
         return <label key={field.path}>{field.label}<select value={boolValue} onChange={event => onUpdate({ config: setPath(node.config, 'expected', event.target.value === '' ? null : event.target.value === 'true') })}><option value="">choose…</option><option value="true">true</option><option value="false">false</option></select>{field.help && <small className="field-help">{field.help}</small>}</label>;
       }
@@ -848,19 +1021,22 @@ function NodeInspector({ node, definition, variables, groups, mode, onUpdate, on
     <small>{node.component.type}@{node.component.version}</small>
     {emptyHint && <div className="node-empty-hint">▶ {emptyHint}</div>}
     {node.config?.ui && !['core.start', 'core.end'].includes(node.component.type) && <div className="node-inline-preview"><ParticipantRenderer key={node.id} schema={schemaForNode(node, definition, localResourceManifest(assets || []))} preview /></div>}
-    {contentSpec && <div className="content-fields"><b>Content</b>{contentSpec.fields.map(field => <ContentField key={field.key} field={field} value={node.config?.[field.key]} assets={assets} onChange={value => updateContentField(field.key, value)} />)}</div>}
+    {contentSpec && <div className="content-fields"><b>Content</b>{contentSpec.fields.map(field => <ContentField key={field.key} field={field} value={node.config?.[field.key]} assets={assets} onChange={value => updateContentField(field.key, value)} invalid={field.key === 'sourceUrl' && Boolean(node.config?.sourceUrl) && !isValidMediaUrl(node.config.sourceUrl)} hint={field.key === 'sourceUrl' && Boolean(node.config?.sourceUrl) && !isValidMediaUrl(node.config.sourceUrl) ? 'Invalid URL — fix it or pick an asset instead.' : undefined} />)}</div>}
     {fieldGroups.map(([group, fields]) => <details key={group} className="field-group" open={group === 'General' || fieldGroups.length === 1}><summary>{group}</summary>{fields.map(renderField)}</details>)}
-    {node.component.type === 'logic.condition' && <label>Input variable<select aria-label="Condition input variable" value={node.bindings?.value?.kind === 'variable' ? node.bindings.value.variable : ''} onChange={event => onUpdate({ bindings: event.target.value ? { ...node.bindings, value: { kind: 'variable', variable: event.target.value } } : Object.fromEntries(Object.entries(node.bindings || {}).filter(([key]) => key !== 'value')) })}>
+    {node.component.type === 'logic.condition' && <label>Input variable<select aria-label="Condition input variable" value={bindingValue(node.bindings?.value)} onChange={event => { const binding = parseBindingValue(event.target.value); onUpdate({ bindings: binding ? { ...node.bindings, value: binding } : Object.fromEntries(Object.entries(node.bindings || {}).filter(([key]) => key !== 'value')) }); }}>
       <option value="">Choose a variable…</option>
-      {variables.map(variable => <option key={variable.name} value={variable.name}>{variable.name} · {variable.type} / {variable.scope}</option>)}
+      <optgroup label="Protocol variables">{renderVariableOptions(true)}</optgroup>
+      {(dataOutputOptions || []).length > 0 && <optgroup label="Node outputs (upstream)">{renderOutputOptions()}</optgroup>}
     </select></label>}
-    {node.component.type === 'logic.condition' && <label>Compare with variable<select aria-label="Condition compare variable" value={node.bindings?.compare?.kind === 'variable' ? node.bindings.compare.variable : ''} onChange={event => onUpdate({ bindings: event.target.value ? { ...node.bindings, compare: { kind: 'variable', variable: event.target.value } } : Object.fromEntries(Object.entries(node.bindings || {}).filter(([key]) => key !== 'compare')) })}>
+    {node.component.type === 'logic.condition' && <label>Compare with variable<select aria-label="Condition compare variable" value={bindingValue(node.bindings?.compare)} onChange={event => { const binding = parseBindingValue(event.target.value); onUpdate({ bindings: binding ? { ...node.bindings, compare: binding } : Object.fromEntries(Object.entries(node.bindings || {}).filter(([key]) => key !== 'compare')) }); }}>
       <option value="">— none (use Expected value) —</option>
-      {variables.map(variable => <option key={variable.name} value={variable.name}>{variable.name} · {variable.type} / {variable.scope}</option>)}
+      <optgroup label="Protocol variables">{renderVariableOptions(true)}</optgroup>
+      {(dataOutputOptions || []).length > 0 && <optgroup label="Node outputs (upstream)">{renderOutputOptions()}</optgroup>}
     </select></label>}
-    {node.component.type === 'logic.loop' && <label>Until variable<select aria-label="Loop until variable" value={node.bindings?.until?.kind === 'variable' ? node.bindings.until.variable : ''} onChange={event => onUpdate({ bindings: event.target.value ? { ...node.bindings, until: { kind: 'variable', variable: event.target.value } } : Object.fromEntries(Object.entries(node.bindings || {}).filter(([key]) => key !== 'until')) })}>
+    {node.component.type === 'logic.loop' && <label>Until variable<select aria-label="Loop until variable" value={bindingValue(node.bindings?.until)} onChange={event => { const binding = parseBindingValue(event.target.value); onUpdate({ bindings: binding ? { ...node.bindings, until: binding } : Object.fromEntries(Object.entries(node.bindings || {}).filter(([key]) => key !== 'until')) }); }}>
       <option value="">— none (iterate by maxIterations) —</option>
-      {variables.map(variable => <option key={variable.name} value={variable.name}>{variable.name} · {variable.type} / {variable.scope}</option>)}
+      <optgroup label="Protocol variables">{renderVariableOptions(true)}</optgroup>
+      {(dataOutputOptions || []).length > 0 && <optgroup label="Node outputs (upstream)">{renderOutputOptions()}</optgroup>}
     </select></label>}
     {node.component.type === 'input.questionnaire' && <QuestionnaireEditor value={node.config.questionnaire} onChange={questionnaire => onUpdate({ config: { ...node.config, questionnaire } })} library={questionnaireLibrary} onLibraryChange={onLibraryChange} />}
     {node.component.type === 'experiment.cognitive-task' && <div className="cognitive-generate">
@@ -888,11 +1064,11 @@ function NodeInspector({ node, definition, variables, groups, mode, onUpdate, on
   </div>;
 }
 
-function ContentField({ field, value, assets, onChange }) {
-  if (field.type === 'select') return <label>{field.label}<select value={value ?? ''} onChange={event => onChange(event.target.value)}>{field.options.map(option => <option key={option} value={option}>{option}</option>)}</select></label>;
+function ContentField({ field, value, assets, onChange, invalid, hint }) {
+  if (field.type === 'select') return <label className={invalid ? 'field-invalid' : undefined}>{field.label}<select value={value ?? ''} onChange={event => onChange(event.target.value)}>{field.options.map(option => <option key={option} value={option}>{option}</option>)}</select>{invalid && hint && <small className="field-hint">{hint}</small>}</label>;
   if (field.type === 'asset') return <label>{field.label}<select value={value ?? ''} onChange={event => onChange(event.target.value || null)}><option value="">— none / direct URL —</option>{(assets || []).map(asset => <option key={asset.id || asset.assetId} value={asset.id || asset.assetId}>{asset.name || asset.id}</option>)}</select></label>;
   if (field.type === 'boolean') return <label className="checkbox-row"><input type="checkbox" checked={Boolean(value)} onChange={event => onChange(event.target.checked)} /> {field.label}</label>;
-  return <label>{field.label}<input type={field.type || 'text'} value={value ?? ''} onChange={event => onChange(field.type === 'number' ? Number(event.target.value) : event.target.value)} /></label>;
+  return <label className={invalid ? 'field-invalid' : undefined}>{field.label}<input type={field.type || 'text'} value={value ?? ''} onChange={event => onChange(field.type === 'number' ? Number(event.target.value) : event.target.value)} />{invalid && hint && <small className="field-hint">{hint}</small>}</label>;
 }
 
 function toHexColor(value) {

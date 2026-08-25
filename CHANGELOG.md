@@ -2,6 +2,23 @@
 
 All notable changes to PhysioFlow are documented in this file.
 
+## [0.5.1] — 2026-08-25
+
+### Added
+
+#### 体验问题修复（节点功能业务审查 P2 全部闭环）
+- **media URL 校验与内联提示**：配置校验新增 `config.media_url_invalid`（`http(s)/data/blob` 与相对路径判定，含空格/伪协议拒绝）；Inspector 的 Source URL 输入框实时红框 + 错误提示，无效 URL 在编辑器内即被发现，不再只等运行时 `media_error`。
+- **数据流可见性**：画布节点底部显示数据输出徽标（dataFields 数量，悬停列出列名）；数据端口悬停显示下游连接目标（"value → 某节点"），"节点输出是什么、接给谁"一目了然。
+- **完成模式一致性**：`stimulus.fixation` 新增 `completion.mode` 选择器（manual/fixed，durationMs 仅 fixed 显示）；manual 模式由 `schemaForNode` 自动注入 Continue 按钮（运行时行为，存储 schema 无需携带），fixed 模式保持纯注视点；配置校验对 fixation manual 豁免按钮检查。
+- **validation 展示改进**：错误/警告不再截断前 8 条——超出时显示 "Show all (N)" 展开按钮；`zh` 界面下错误消息本地化为中文（code → 中文模板 + 节点名），`en/ja` 保持原文。
+- **condition/loop 变量选择器引用上游节点输出**：新增 "Node outputs (upstream)" 分组，列出控制流上游节点的数据输出端口（`kind: 'output'` 绑定，运行时 `resolveBinding` 原生支持）；`Expected` 字段类型随输出端口 dataType 联动（number/boolean 专用输入）。
+
+### Fixed
+- 验收脚本 `.playwright-cli/verify-step.cjs` 新增 `composer-p2` STEP：数据徽标、Node outputs 分组、Expected 类型跟随、无效 URL 校验与内联错误 5 项浏览器级验收全通过。
+- lint 清零：`ResizeObserver` 改用 `globalThis`、未用 `catch (error)` 收敛、`ParticipantUiCanvas` 的 `useRef` 上移至 hooks 区。
+
+---
+
 ## [0.5.0] — 2026-08-25
 
 ### Added

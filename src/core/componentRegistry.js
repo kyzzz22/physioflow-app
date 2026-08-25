@@ -179,7 +179,8 @@ export function createCoreComponentRegistry() {
       { path: 'sizePx', label: 'Size (px)', type: 'number', min: 8, group: 'Appearance' },
       { path: 'color', label: 'Color', type: 'color', group: 'Appearance' },
       { path: 'pulse', label: 'Pulse animation', type: 'boolean', group: 'Appearance' },
-      { path: 'completion.durationMs', label: 'Duration (ms)', type: 'number', min: 0, group: 'Timing' },
+      { path: 'completion.mode', label: 'Completion', type: 'select', options: ['manual', 'fixed'], group: 'Timing', help: 'How this stimulus advances: a click, or a fixed duration.' },
+      { path: 'completion.durationMs', label: 'Duration (ms)', type: 'number', min: 0, group: 'Timing', showWhen: { path: 'completion.mode', equals: 'fixed' } },
     ],
     events: ['component_entered', 'component_completed'],
   });

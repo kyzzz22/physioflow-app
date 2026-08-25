@@ -323,6 +323,27 @@ test('media schemaForNode removes the advance button in media-ended mode', () =>
   assert.ok(collectElements(manual, 'Button').length > 0);
 });
 
+test('fixation inspector exposes manual/fixed completion modes', () => {
+  const registry = createCoreComponentRegistry();
+  const definition = registry.get('stimulus.fixation');
+  const modeField = definition.editorFields.find(field => field.path === 'completion.mode');
+  assert.ok(modeField, 'fixation inspector should offer a completion mode field');
+  assert.deepEqual(modeField.options, ['manual', 'fixed']);
+  const duration = definition.editorFields.find(field => field.path === 'completion.durationMs');
+  assert.deepEqual(duration.showWhen, { path: 'completion.mode', equals: 'fixed' });
+});
+
+test('fixation manual mode injects a Continue button when the schema has none', () => {
+  const registry = createCoreComponentRegistry();
+  const definition = registry.get('stimulus.fixation');
+  const base = { id: 'fix_2', component: { type: 'stimulus.fixation', version: '1.0.0' }, label: 'Fix' };
+  const manual = schemaForNode({ ...base, config: { shape: 'cross', completion: { mode: 'manual' } } }, definition, null);
+  const buttons = collectElements(manual, 'Button');
+  assert.ok(buttons.some(button => (button.actions || []).some(action => action.action === 'submit')), 'manual fixation should get a submit button');
+  const fixed = schemaForNode({ ...base, config: { shape: 'cross', completion: { mode: 'fixed', durationMs: 500 } } }, definition, null);
+  assert.equal(collectElements(fixed, 'Button').length, 0, 'fixed fixation keeps the bare cross');
+});
+
 test('formal validation rejects unsupported media completion modes and fixation shapes', () => {
   const registry = createCoreComponentRegistry();
   const protocol = createProtocolGraph({ idFactory: createSequentialIdFactory(), name: 'Val', now: '2026-08-22T00:00:00.000Z' });
@@ -345,6 +366,30 @@ test('formal validation rejects unsupported media completion modes and fixation 
   badShape.graph.nodes.find(node => node.id === 'f_1').config.shape = 'star';
   const shapeResult = validateProtocolGraphConfiguration(badShape, registry);
   assert.ok(shapeResult.errors.some(error => error.code === 'config.fixation_shape_invalid'));
+});
+
+test('media URL validation rejects malformed URLs and accepts valid schemes', () => {
+  const registry = createCoreComponentRegistry();
+  const protocol = createProtocolGraph({ idFactory: createSequentialIdFactory(), name: 'URL', now: '2026-08-23T00:00:00.000Z' });
+  const start = protocol.graph.nodes.find(node => node.component.type === 'core.start');
+  const end = protocol.graph.nodes.find(node => node.component.type === 'core.end');
+  protocol.graph.edges = [];
+  const withConfig = (type, overrides) => ({ ...(registry.get(type)?.defaultConfig || {}), ...overrides });
+  const valid = addNode(protocol, 'display.media', { id: 'm_1', label: 'M', config: withConfig('display.media', { sourceUrl: 'https://cdn.example.com/a.png', mediaType: 'image' }) }).protocol;
+  const connected = connect(valid, 'control', { nodeId: start.id, portId: 'next' }, { nodeId: 'm_1', portId: 'in' }).protocol;
+  const done = connect(connected, 'control', { nodeId: 'm_1', portId: 'next' }, { nodeId: end.id, portId: 'in' }).protocol;
+  assert.equal(validateProtocolGraphConfiguration(done, registry).valid, true);
+  for (const bad of ['not-a-url', 'ftp://example.com/a.png', 'http://', 'https://exa mple.com/a.png']) {
+    const mutated = structuredClone(done);
+    mutated.graph.nodes.find(node => node.id === 'm_1').config.sourceUrl = bad;
+    const result = validateProtocolGraphConfiguration(mutated, registry);
+    assert.ok(result.errors.some(error => error.code === 'config.media_url_invalid'), `expected invalid URL: ${bad}`);
+  }
+  for (const good of ['data:image/png;base64,AAAA', 'blob:https://example.com/uuid', './assets/logo.png', 'assets/img.png']) {
+    const mutated = structuredClone(done);
+    mutated.graph.nodes.find(node => node.id === 'm_1').config.sourceUrl = good;
+    assert.equal(validateProtocolGraphConfiguration(mutated, registry).valid, true, `expected valid URL: ${good}`);
+  }
 });
 
 test('legacy.step exposes content editor fields', () => {
