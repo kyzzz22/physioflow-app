@@ -31,6 +31,8 @@ import {
 } from './core/index.js';
 import { createProjectComponentRegistry } from './sdk/index.js';
 import { migrateLegacyProtocolV1 } from './legacy/migrateProtocolV1.js';
+import { useGlobalShortcuts } from './app/useGlobalShortcuts.js';
+import { useUndoRedo } from './app/useUndoRedo.js';
 
 // Lazy-loaded for code splitting
 const Analytics = lazy(() => import('./Analytics.jsx'));
@@ -44,7 +46,6 @@ const SessionManager = lazy(() => import('./SessionManager.jsx'));
 const LoadingFallback = () => <div style={{ position:'fixed',inset:0,zIndex:2000,display:'grid',placeItems:'center',background:'var(--surface)' }}><span style={{ color:'var(--muted)',fontSize:'.9rem' }}>Loading…</span></div>;
 
 const clone = x => structuredClone(x);
-const MAX_UNDO = 60;
 const stepDefaultExtras = defaults => Object.fromEntries(Object.entries(defaults).filter(([key]) => !['name', 'duration_mode', 'planned_duration_ms', 'recovery_behavior'].includes(key)));
 const responseOptionsText = options => (options || []).map(option => {
   const label = option.label_i18n?.en || option.label_i18n?.zh || option.label_i18n?.ja || option.value || '';
@@ -94,12 +95,10 @@ export default function App() {
   const [builderFocusTarget, setBuilderFocusTarget] = useState(null);
 
   // Undo/redo
-  const [undoStack, setUndoStack] = useState([]);
-  const [redoStack, setRedoStack] = useState([]);
   const [hasUnsaved, setHasUnsaved] = useState(false);
   const lastSaved = useRef([]);
   const dataLoaded = useRef(false);
-  const undoThrottle = useRef(0);
+  const { undoStack, setUndoStack, redoStack, setRedoStack, undoThrottle, pushUndo, undo, redo } = useUndoRedo({ current, setCurrent, setHasUnsaved });
 
   // Onboarding
   const [onboardingOpen, setOnboardingOpen] = useState(false);
@@ -174,34 +173,6 @@ export default function App() {
     return () => { resetThemeToDOM(); };
   }, [currentProtocolId, currentTheme]);
 
-  const pushUndo = useCallback((val, pushRedo = true) => {
-    setUndoStack(prev => { const next = [...prev, val]; return next.length > MAX_UNDO ? next.slice(-MAX_UNDO) : next; });
-    if (pushRedo) setRedoStack([]);
-    setHasUnsaved(true);
-  }, []);
-
-  const undo = useCallback(() => {
-    setUndoStack(prev => {
-      if (!prev.length) return prev;
-      const snapshot = prev[prev.length - 1];
-      setRedoStack(r => [...r, clone(current)]);
-      setCurrent(clone(snapshot));
-      setHasUnsaved(true);
-      return prev.slice(0, -1);
-    });
-  }, [current]);
-
-  const redo = useCallback(() => {
-    setRedoStack(prev => {
-      if (!prev.length) return prev;
-      const snapshot = prev[prev.length - 1];
-      setUndoStack(u => [...u, clone(current)]);
-      setCurrent(clone(snapshot));
-      setHasUnsaved(true);
-      return prev.slice(0, -1);
-    });
-  }, [current]);
-
   const showProtocolSaveError = useCallback(error => {
     setAlert({
       title: 'Save failed',
@@ -270,23 +241,8 @@ export default function App() {
     }
   };
 
-  // Keyboard shortcuts — must be after undo/redo/handleSave are defined
-  useEffect(() => {
-    const handler = (e) => {
-      const tag = document.activeElement?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || document.activeElement?.isContentEditable) return;
-      const mod = e.metaKey || e.ctrlKey;
-      if (mod && e.key === 's') { e.preventDefault(); const cur = currentRef.current; if (cur) handleSave(cur); return; }
-      if (mod && (e.key.toLowerCase() === 'z' || e.key.toLowerCase() === 'y') && document.querySelector('.participant-ui-builder')) return;
-      if (mod && e.key === 'z' && !e.shiftKey && viewRef.current === 'builder') { e.preventDefault(); undo(); return; }
-      if (mod && ((e.key === 'z' && e.shiftKey) || e.key === 'y') && viewRef.current === 'builder') { e.preventDefault(); redo(); return; }
-      // Note: Escape is intentionally NOT handled here — in the editors it means
-      // "cancel/deselect" (ComposerV2/FlowCanvas), not "leave". Leaving has an
-      // explicit ← Projects button so an accidental Escape never discards work.
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [undo, redo, handleSave, handleBackFromBuilder]);
+  // Keyboard shortcuts — refs avoid stale closures; must come after handleSave/undo/redo
+  useGlobalShortcuts({ viewRef, currentRef, onSave: handleSave, onUndo: undo, onRedo: redo });
 
   const archive = value => {
     setDeleteConfirm({
