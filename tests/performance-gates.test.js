@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
-import { createCoreComponentRegistry, createEdge, createNode, createProtocolGraph, createSequentialIdFactory, moveNodes, participantUiTemplate, validateProtocolGraphConfiguration } from '../src/core/index.js';
+import { createCoreComponentRegistry, createEdge, createNode, createProtocolGraph, createSequentialIdFactory, moveNodes, participantUiTemplate, updateNode, validateProtocolGraphConfiguration } from '../src/core/index.js';
 import { buildGraphSessionFiles } from '../src/data/index.js';
 
 test('performance gate: validate and edit a 500-node Protocol Graph', () => {
@@ -26,6 +26,64 @@ test('performance gate: validate and edit a 500-node Protocol Graph', () => {
   assert.equal(validation.valid, true, JSON.stringify(validation.errors.slice(0, 3)));
   assert.equal(moved.graph.nodes.find(node => node.id === 'wait_250').layout.x, 5000);
   assert.ok(elapsedMs < 2000, `500-node validation/edit took ${elapsedMs.toFixed(1)}ms`);
+});
+
+test('performance gate: 500-node drag move frames stay within interaction budget', () => {
+  const protocol = createProtocolGraph({ idFactory: createSequentialIdFactory(), name: '500 node drag gate', now: '2026-08-23T00:00:00.000Z' });
+  const start = protocol.graph.nodes[0];
+  const end = protocol.graph.nodes[1];
+  const waits = Array.from({ length: 498 }, (_, index) => createNode('timing.wait', {
+    id: `wait_${index + 1}`,
+    label: `Wait ${index + 1}`,
+    config: { durationMs: 1, ui: participantUiTemplate('instruction') },
+    layout: { x: 280 + index * 18, y: 180 + (index % 4) * 140 },
+  }));
+  const nodes = [start, ...waits, end];
+  protocol.graph.nodes = nodes;
+  protocol.graph.edges = nodes.slice(0, -1).map((node, index) => createEdge('control', { nodeId: node.id, portId: 'next' }, { nodeId: nodes[index + 1].id, portId: 'in' }, { id: `perf_edge_${index + 1}` }));
+
+  // Simulate 60 frames of drag-move: node position update + the derived indices the
+  // canvas rebuilds per frame (nodeById / filtered node index used by NodeCard).
+  let moved = protocol;
+  const started = performance.now();
+  for (let frame = 0; frame < 60; frame++) {
+    moved = moveNodes(moved, { wait_250: { x: 280 + 250 * 18 + frame * 3, y: 200 + frame * 2 } });
+    const nodeById = new Map(moved.graph.nodes.map(node => [node.id, node]));
+    const filteredIds = new Set();
+    for (const node of moved.graph.nodes) { nodeById.get(node.id); filteredIds.add(node.id); }
+  }
+  const elapsedMs = performance.now() - started;
+  assert.equal(moved.graph.nodes.find(node => node.id === 'wait_250').layout.x, 280 + 250 * 18 + 59 * 3);
+  assert.ok(elapsedMs < 500, `60 drag frames took ${elapsedMs.toFixed(1)}ms (${(elapsedMs / 60).toFixed(2)}ms/frame)`);
+});
+
+test('performance gate: 500-node label edits stay within interaction budget', () => {
+  const protocol = createProtocolGraph({ idFactory: createSequentialIdFactory(), name: '500 node edit gate', now: '2026-08-23T00:00:00.000Z' });
+  const start = protocol.graph.nodes[0];
+  const end = protocol.graph.nodes[1];
+  const waits = Array.from({ length: 498 }, (_, index) => createNode('timing.wait', {
+    id: `wait_${index + 1}`,
+    label: `Wait ${index + 1}`,
+    config: { durationMs: 1, ui: participantUiTemplate('instruction') },
+    layout: { x: 280 + index * 18, y: 180 + (index % 4) * 140 },
+  }));
+  const nodes = [start, ...waits, end];
+  protocol.graph.nodes = nodes;
+  protocol.graph.edges = nodes.slice(0, -1).map((node, index) => createEdge('control', { nodeId: node.id, portId: 'next' }, { nodeId: nodes[index + 1].id, portId: 'in' }, { id: `perf_edge_${index + 1}` }));
+
+  // 20 rapid label edits (typeahead), each followed by the derived index rebuild
+  // the memoized node cards rely on.
+  let edited = protocol;
+  const started = performance.now();
+  for (let i = 0; i < 20; i++) {
+    edited = updateNode(edited, 'wait_250', { label: `Wait renamed ${i}` });
+    const nodeById = new Map(edited.graph.nodes.map(node => [node.id, node]));
+    const filteredIds = new Set();
+    for (const node of edited.graph.nodes) { nodeById.get(node.id); filteredIds.add(node.id); }
+  }
+  const elapsedMs = performance.now() - started;
+  assert.equal(edited.graph.nodes.find(node => node.id === 'wait_250').label, 'Wait renamed 19');
+  assert.ok(elapsedMs < 200, `20 label edits took ${elapsedMs.toFixed(1)}ms (${(elapsedMs / 20).toFixed(2)}ms/edit)`);
 });
 
 test('performance gate: export a 10,000-event graph session', () => {

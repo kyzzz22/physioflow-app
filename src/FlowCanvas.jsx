@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { step as createStep, stepContentIssues } from './domain';
+import { step as createStep } from './domain';
 import { normalizeFlow, validateFlow } from './flowEngine';
 import { Inspector } from './Inspector';
 import { FLOW_PRESETS, PALETTE } from './constants.js';
@@ -8,7 +8,8 @@ import QuestionnaireWorkspace from './QuestionnaireWorkspace';
 import FlowJsonEditor from './FlowJsonEditor.jsx';
 import { NodeGlyph, nodeBadgeStyle, nodeColor, tint } from './flowIcons.jsx';
 import { useT } from './i18n.jsx';
-import { GRID_SIZE, SCROLL_EDGE, SCROLL_SPEED, SNAP_THRESHOLD, branchesFor, branchStyle, edgePath, nodeHeight, nodeWidth } from './flowCanvas/layout.js';
+import { GRID_SIZE, SCROLL_EDGE, SCROLL_SPEED, SNAP_THRESHOLD, branchStyle, edgePath, nodeHeight, nodeWidth } from './flowCanvas/layout.js';
+import NodeCard from './flowCanvas/NodeCard.jsx';
 import { NodePreviewModal } from './flowCanvas/NodePreviewModal.jsx';
 
 let clipboardNode = null;
@@ -46,6 +47,15 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   const canvasRef = useRef(null);
   const panDragRef = useRef(null);
   const spaceHeld = useRef(false);
+  // Live refs so drag handlers stay referentially stable across renders (keeps NodeCard memo effective)
+  const panRef = useRef(pan);
+  const zoomRef = useRef(zoom);
+  const selectedIdsRef = useRef(selectedNodeIds);
+  const snapRef = useRef(snapEnabled);
+  useEffect(() => { panRef.current = pan; }, [pan]);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+  useEffect(() => { selectedIdsRef.current = selectedNodeIds; }, [selectedNodeIds]);
+  useEffect(() => { snapRef.current = snapEnabled; }, [snapEnabled]);
   // Undo/redo
   const undoStack = useRef([]);
   const redoStack = useRef([]);
@@ -109,7 +119,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   }, [focusTarget, flow.nodes, trial.steps, trial.trial_id, trial.name]);
 
   const updateFlow = useCallback(next => onChange({ ...trialRef.current, flow: next }), [onChange]);
-  const updateNode = (id, values) => { pushUndo(); updateFlow({ ...flowRef.current, nodes: flowRef.current.nodes.map(n => n.id === id ? { ...n, ...values } : n) }); };
+  const updateNode = useCallback((id, values) => { pushUndo(); updateFlow({ ...flowRef.current, nodes: flowRef.current.nodes.map(n => n.id === id ? { ...n, ...values } : n) }); }, [pushUndo, updateFlow]);
   const updateStep = (stepId, values) => { pushUndo(); onChange({ ...trialRef.current, steps: trialRef.current.steps.map(s => s.step_id === stepId ? { ...s, ...values } : s), flow: flowRef.current }); };
   // Shared helper to clone an event node (used by paste and duplicate)
   const cloneEventNode = useCallback((sourceNode, sourceStep, offsetX = 40, offsetY = 40) => {
@@ -378,15 +388,15 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   }, [trial, flow, onChange, updateFlow, cloneEventNode]);
 
   // Direct click on input port (no drag)
-  const finishConnection = targetId => {
-    const current = dragConnRef.current || dragConnection;
+  const finishConnection = useCallback(targetId => {
+    const current = dragConnRef.current;
     if (!current?.source || current.source === targetId) return;
     const sourceNode = flowRef.current.nodes.find(n => n.id === current.source);
     if (!sourceNode) return;
     pushUndo();
     const withoutSameBranch = flowRef.current.edges.filter(e => !(e.source === current.source && e.branch === current.branch));
     updateFlow({ ...flowRef.current, edges: [...withoutSameBranch, { id: `edge_${crypto.randomUUID()}`, source: current.source, target: targetId, branch: current.branch }] });
-  };
+  }, [pushUndo, updateFlow]);
   const removeNode = useCallback(id => {
     pushUndo();
     const node = flow.nodes.find(n => n.id === id);
@@ -584,17 +594,17 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
 
   const snapVal = useCallback((v) => snapEnabled ? Math.round(v / GRID_SIZE) * GRID_SIZE : v, [snapEnabled]);
 
-  const beginDrag = (e, node) => {
+  const beginDrag = useCallback((e, node) => {
     if (disabled || e.target.closest('button,input,select')) return;
     pushUndo(); // capture state before drag
     const rect = canvasRef.current.getBoundingClientRect();
-    const dx = (e.clientX - rect.left) / zoom - node.x - pan.x / zoom;
-    const dy = (e.clientY - rect.top) / zoom - node.y - pan.y / zoom;
-    const isMultiDrag = selectedNodeIds.size > 1 && selectedNodeIds.has(node.id);
+    const dx = (e.clientX - rect.left) / zoomRef.current - node.x - panRef.current.x / zoomRef.current;
+    const dy = (e.clientY - rect.top) / zoomRef.current - node.y - panRef.current.y / zoomRef.current;
+    const isMultiDrag = selectedIdsRef.current.size > 1 && selectedIdsRef.current.has(node.id);
     if (isMultiDrag) {
       const offsets = {};
-      selectedNodeIds.forEach(id => { const n = flowRef.current.nodes.find(nd => nd.id === id); if (n) offsets[id] = { dx: n.x - node.x, dy: n.y - node.y }; });
-      dragRef.current = { nodeIds: [...selectedNodeIds], offsets, dx, dy, startX: node.x, startY: node.y };
+      selectedIdsRef.current.forEach(id => { const n = flowRef.current.nodes.find(nd => nd.id === id); if (n) offsets[id] = { dx: n.x - node.x, dy: n.y - node.y }; });
+      dragRef.current = { nodeIds: [...selectedIdsRef.current], offsets, dx, dy, startX: node.x, startY: node.y };
     } else {
       setSelectedNodeIds(new Set([node.id]));
       dragRef.current = { nodeId: node.id, dx, dy, startX: node.x, startY: node.y };
@@ -606,9 +616,9 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
       raf = requestAnimationFrame(() => {
         raf = null;
         if (!dragRef.current) return;
-        const shouldSnap = snapEnabled && !ev.altKey;
-        const rawX = (ev.clientX - rect.left) / zoom - dragRef.current.dx - pan.x / zoom;
-        const rawY = (ev.clientY - rect.top) / zoom - dragRef.current.dy - pan.y / zoom;
+        const shouldSnap = snapRef.current && !ev.altKey;
+        const rawX = (ev.clientX - rect.left) / zoomRef.current - dragRef.current.dx - panRef.current.x / zoomRef.current;
+        const rawY = (ev.clientY - rect.top) / zoomRef.current - dragRef.current.dy - panRef.current.y / zoomRef.current;
         const nx = Math.max(20, shouldSnap ? snapVal(rawX) : rawX);
         const ny = Math.max(20, shouldSnap ? snapVal(rawY) : rawY);
         // Auto-scroll near edges
@@ -666,13 +676,13 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
-  };
+  }, [disabled, pushUndo, updateNode, snapVal]);
 
   // Drag-to-connect ref to avoid React closure stale state
   const dragConnRef = useRef(null);
   useEffect(() => { dragConnRef.current = dragConnection; }, [dragConnection]);
 
-  const beginConnDrag = (e, node, branch) => {
+  const beginConnDrag = useCallback((e, node, branch) => {
     e.stopPropagation(); e.preventDefault();
     const conn = { source: node.id, branch, clientX: e.clientX, clientY: e.clientY };
     setDragConnection(conn);
@@ -705,7 +715,15 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
-  };
+  }, [pushUndo, updateFlow]);
+
+  // Stable node click handler (multi-select with shift)
+  const handleNodeClick = useCallback((e, node) => {
+    e.stopPropagation();
+    if (e.shiftKey) { setSelectedNodeIds(prev => { const next = new Set(prev); if (next.has(node.id)) next.delete(node.id); else next.add(node.id); return next; }); }
+    else { setSelectedNodeIds(new Set([node.id])); }
+    setSelectedEdgeId(null); setContextMenu(null);
+  }, []);
 
   // Pan with middle mouse / space+drag / right-drag
   const beginPan = e => {
@@ -759,11 +777,11 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     window.addEventListener('pointerup', up);
   };
 
-  const edgeContextMenu = (e, edgeId) => {
+  const edgeContextMenu = useCallback((e, edgeId) => {
     e.preventDefault(); e.stopPropagation();
     setSelectedEdgeId(edgeId); setSelectedNodeIds(new Set());
     setContextMenu({ x: e.clientX, y: e.clientY, type: 'edge', id: edgeId });
-  };
+  }, []);
 
   const bounds = useMemo(() => {
     if (!flow.nodes.length) return { minX: 0, minY: 0, maxX: 400, maxY: 300 };
@@ -788,12 +806,24 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   const selectedNode = (selectedNodeIds.size === 1) ? flow.nodes.find(n => selectedNodeIds.has(n.id)) : null;
   const selectedEdge = flow.edges.find(e => e.id === selectedEdgeId);
 
-  const isSelected = id => selectedNodeIds.has(id);
   const filteredNodes = useMemo(() => {
     if (!searchQuery) return flow.nodes;
     const q = searchQuery.toLowerCase();
     return flow.nodes.filter(n => n.label?.toLowerCase().includes(q) || (n.type === 'event' && trial.steps.find(s => s.step_id === n.step_id)?.name?.toLowerCase().includes(q)));
   }, [flow.nodes, searchQuery, trial.steps]);
+
+  // Derived indices so edges / node cards resolve in O(1) and stay referentially stable for memo
+  const nodeById = useMemo(() => new Map(flow.nodes.map(n => [n.id, n])), [flow.nodes]);
+  const stepsById = useMemo(() => new Map((trial.steps || []).map(s => [s.step_id, s])), [trial.steps]);
+  const filteredIds = useMemo(() => searchQuery ? new Set(filteredNodes.map(n => n.id)) : null, [searchQuery, filteredNodes]);
+
+  // Referentially stable node-card callbacks (keep NodeCard memo effective)
+  const handleNodeDoubleClick = useCallback((e, node) => { e.stopPropagation(); openPreview(node); }, [openPreview]);
+  const handleNodeContextMenu = useCallback((e, node) => { e.stopPropagation(); setSelectedNodeIds(new Set([node.id])); setSelectedEdgeId(null); }, []);
+  const handleNodeInputClick = useCallback((e, node) => { e.stopPropagation(); finishConnection(node.id); }, [finishConnection]);
+  const handleNodePreview = useCallback((e, node) => { e.stopPropagation(); openPreview(node); }, [openPreview]);
+  const handleNodeDuplicate = useCallback((e, node) => { e.stopPropagation(); duplicateNode(node); }, [duplicateNode]);
+  const handleNodeDelete = useCallback((e, node) => { e.stopPropagation(); removeNode(node.id); }, [removeNode]);
 
   const filteredPalette = useMemo(() => {
     const q = paletteSearch.trim().toLowerCase();
@@ -904,7 +934,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
           <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" /></marker></defs>
           <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
             {flow.edges.map(edge => {
-              const a = flow.nodes.find(n => n.id === edge.source), b = flow.nodes.find(n => n.id === edge.target);
+              const a = nodeById.get(edge.source), b = nodeById.get(edge.target);
               if (!a || !b) return null;
               const getPort = (node, isSource) => {
                 const noteH = node.height || 100;
@@ -945,7 +975,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
         </svg>
         {/* Drag-connection preview line */}
         {dragConnection && (() => {
-          const srcNode = flow.nodes.find(n => n.id === dragConnection.source);
+          const srcNode = nodeById.get(dragConnection.source);
           if (!srcNode) return null;
           const cr = canvasRef.current?.getBoundingClientRect();
           if (!cr) return null;
@@ -996,88 +1026,30 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
           {flow.nodes.map(node => {
             if (node.type === 'group') return null;
             if (node.group_id && flow.nodes.some(g => g.type === 'group' && g.id === node.group_id && g.collapsed)) return null;
-            const step = node.type === 'event' ? trial.steps.find(s => s.step_id === node.step_id) : null;
-            const nodeIssues = (step && !disabled) ? stepContentIssues(step, stimuli, questionnaires) : [];
-            const nodeHasError = nodeIssues.some(i => i.kind === 'error');
-            const nodeHasWarn = !nodeHasError && nodeIssues.some(i => i.kind === 'warn');
-            const sel = isSelected(node.id);
-            const isDisabled = node.enabled === false;
-            const highlightStyle = searchQuery && !filteredNodes.some(fn => fn.id === node.id) ? { opacity: 0.15 } : {};
-
-            // Note node (sticky note)
-            if (node.type === 'note') {
-              return <div className={`clean-node note ${sel ? 'selected' : ''}`} data-node-id={node.id}
-                style={{ left: node.x, top: node.y, pointerEvents: 'auto', background: node.color || '#fff9c4', width: node.width || 180, minWidth: node.width || 180, maxWidth: node.width || 180, height: node.height || 100, minHeight: node.height || 100, ...highlightStyle }}
-                key={node.id}
-                onPointerDown={e => beginDrag(e, node)}
-                onClick={e => { e.stopPropagation(); if (e.shiftKey) { setSelectedNodeIds(prev => { const next = new Set(prev); if (next.has(node.id)) next.delete(node.id); else next.add(node.id); return next; }); } else { setSelectedNodeIds(new Set([node.id])); } setSelectedEdgeId(null); setContextMenu(null); }}
-              >
-                <div className="sticky-content" style={{ padding: '8px 12px', fontSize: '13px', color: '#333', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: '"Comic Sans MS", "Marker Felt", cursive', height: '100%', overflow: 'hidden' }}>
-                  {node.content || node.label || 'Note'}
-                </div>
-              </div>;
-            }
-            // Junction node
-            if (node.type === 'junction') {
-              return <div className={`clean-node junction ${sel ? 'selected' : ''}`} data-node-id={node.id}
-                style={{ left: node.x, top: node.y, pointerEvents: 'auto', ...highlightStyle }}
-                key={node.id}
-                onPointerDown={e => beginDrag(e, node)}
-                onClick={e => { e.stopPropagation(); if (e.shiftKey) { setSelectedNodeIds(prev => { const next = new Set(prev); if (next.has(node.id)) next.delete(node.id); else next.add(node.id); return next; }); } else { setSelectedNodeIds(new Set([node.id])); } setSelectedEdgeId(null); setContextMenu(null); }}
-              >
-                <button className="node-input" title="Connect a wire to here" onClick={e => { e.stopPropagation(); finishConnection(node.id); }} />
-                <div className="junction-dot" />
-                <div className="node-outputs">{branchesFor(node).map(branch => <button key={branch} onPointerDown={e => beginConnDrag(e, node, branch)} title={`Drag from ${branch} port`}>{branch}<i /></button>)}</div>
-              </div>;
-            }
-
-            // Inline rule display for condition/loop nodes
-            const ruleText = node.type === 'condition' && node.rule?.variable
-              ? `if ${node.rule.variable} ${node.rule.operator || '='} ${node.rule.value || ''}`.trim()
-              : node.type === 'loop'
-              ? `repeat ≤ ${node.max_iterations ?? 1}×` + (node.rule?.variable ? ` while ${node.rule.variable}` : '')
-              : '';
-
-            return (
-            <div className={`clean-node ${node.type} ${sel ? 'selected' : ''} ${draggingId === node.id ? 'dragging' : ''} ${isDisabled ? 'disabled' : ''}`}
-              data-node-id={node.id}
-              style={{ left: node.x, top: node.y, pointerEvents: 'auto', ...(node.color ? { borderColor: node.color } : {}), ...highlightStyle }} key={node.id}
-              onPointerDown={e => beginDrag(e, node)}
-              onClick={e => { e.stopPropagation(); if (e.shiftKey) { setSelectedNodeIds(prev => { const next = new Set(prev); if (next.has(node.id)) next.delete(node.id); else next.add(node.id); return next; }); } else { setSelectedNodeIds(new Set([node.id])); } setSelectedEdgeId(null); setContextMenu(null); }}
-              onDoubleClick={e => { e.stopPropagation(); if (node.type === 'event' && step) openPreview(node); }}
-              onContextMenu={e => { e.stopPropagation(); setSelectedNodeIds(new Set([node.id])); setSelectedEdgeId(null); }}
-            >
-              {!['start', 'end'].includes(node.type) && <button className={`node-input ${dragConnection ? 'awaiting' : ''}`} title="Connect a wire to here" onClick={e => { e.stopPropagation(); finishConnection(node.id); }} />}
-              {!['start', 'end'].includes(node.type) && (
-                <div className="node-hover-actions" onClick={e => e.stopPropagation()}>
-                  {node.type === 'event' && step && (
-                    <button title={t('Preview (double-click)')} onClick={e => { e.stopPropagation(); openPreview(node); }}>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" /><circle cx="12" cy="12" r="3" /></svg>
-                    </button>
-                  )}
-                  <button title={t('Duplicate (⌘D)')} onClick={e => { e.stopPropagation(); duplicateNode(node); }}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
-                  </button>
-                  <button className="danger" title={t('Delete')} onClick={e => { e.stopPropagation(); removeNode(node.id); }}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12" /><path d="M18 6L6 18" /></svg>
-                  </button>
-                </div>
-              )}
-              <div className="node-title">
-                <i style={nodeBadgeStyle(node.type)}><NodeGlyph type={node.type} /></i>
-                <div><small>{node.type}</small><b>{node.label}</b></div>
-              </div>
-              {ruleText && <div className="rule-caption" title={ruleText}>{ruleText}</div>}
-              {node.type === 'event' && <span className="event-kind">
-                <span className="step-type-badge">{step?.type}</span>
-                {nodeHasError && <span className="node-issue-dot error" title={nodeIssues.filter(i => i.kind === 'error').map(i => i.message).join('; ')}>!</span>}
-                {nodeHasWarn && <span className="node-issue-dot warn" title={nodeIssues.map(i => i.message).join('; ')}>△</span>}
-              </span>}
-              {branchesFor(node).length > 0 && <div className="node-outputs">
-                {branchesFor(node).map(branch => <button className={dragConnection?.source === node.id && dragConnection.branch === branch ? 'active' : ''} key={branch} onPointerDown={e => beginConnDrag(e, node, branch)} title={`${branch} → drag to connect`}>{branch}<i className={`branch-${branch}`} /></button>)}
-              </div>}
-            </div>
-          )})}
+            return <NodeCard
+              key={node.id}
+              node={node}
+              step={stepsById.get(node.step_id) || null}
+              isSelected={selectedNodeIds.has(node.id)}
+              isDimmed={searchQuery && !filteredIds.has(node.id)}
+              isDragging={draggingId === node.id}
+              isDisabled={node.enabled === false}
+              disabled={disabled}
+              stimuli={stimuli}
+              questionnaires={questionnaires}
+              isAwaitingConnection={Boolean(dragConnection)}
+              activeBranch={dragConnection?.source === node.id ? dragConnection.branch : null}
+              onPointerDown={beginDrag}
+              onClick={handleNodeClick}
+              onDoubleClick={handleNodeDoubleClick}
+              onContextMenu={handleNodeContextMenu}
+              onPortPointerDown={beginConnDrag}
+              onInputClick={handleNodeInputClick}
+              onPreview={handleNodePreview}
+              onDuplicate={handleNodeDuplicate}
+              onDelete={handleNodeDelete}
+            />;
+          })}
         </div>
 
         {flow.nodes.filter(n => n.type === 'event').length === 0 && (
