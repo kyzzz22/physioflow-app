@@ -61,6 +61,7 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
   const samplerRef = useRef(null);
   const [started, setStarted] = useState(Boolean(data.restore?.runtime?.status && data.restore.runtime.status !== 'ready'));
   const [saved, setSaved] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const hostedSyncRef = useRef(null);
   if (data.hosted && !hostedSyncRef.current) hostedSyncRef.current = new HostedRuntimeSync(data.hosted);
   const [hostedStatus, setHostedStatus] = useState(() => hostedSyncRef.current?.status() || null);
@@ -233,10 +234,12 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
 
   return <main className="graph-runner">
     <div className="graph-operator" role="toolbar"><div><b>{protocolNameOf(protocol)}</b><span>{currentNode.label} · {currentNode.component.type}</span></div><div>{progress.current}/{progress.total} completed</div><div>
+      <button className={inspectorOpen ? 'active' : ''} onClick={() => setInspectorOpen(open => !open)} title="Live variables, outputs and flow state">⌄ Inspect</button>
       <button onClick={() => apply(runtime.status === 'paused' ? resumeRuntime(runtimeRef.current, protocol, services.current) : pauseRuntime(runtimeRef.current, protocol, services.current))}>{runtime.status === 'paused' ? 'Resume' : 'Pause'}</button>
       <button disabled={runtime.status !== 'waiting'} onClick={() => apply(retryCurrentNode(runtimeRef.current, protocol, services.current, 'operator retry'))}>Retry</button>
       <button disabled={runtime.status !== 'waiting'} onClick={() => apply(skipCurrentNode(runtimeRef.current, protocol, registry, services.current, 'operator skip'))}>Skip</button>
     </div></div>
+    {inspectorOpen && <RuntimeInspector runtime={runtime} protocol={protocol} nodes={nodes} />}
     <section className="graph-participant" aria-label="Participant view">
       {runtime.status === 'paused' && <div className="pause-overlay">Paused</div>}
       {currentNode.component.type === 'stimulus.attention-check'
@@ -263,4 +266,37 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
         }} />}
     </section>
   </main>;
+}
+
+// Live operator-facing inspector: reconstructed variables, data outputs and
+// flow state straight from the Runtime V2 state machine (W5).
+function RuntimeInspector({ runtime, protocol, nodes }) {
+  const format = value => value === null || value === undefined ? '—'
+    : typeof value === 'object' ? JSON.stringify(value) : String(value);
+  const variableRows = (protocol.variables || []).map(variable => ({ name: variable.name, type: variable.type, value: runtime.variables?.[variable.name] }));
+  const outputRows = Object.entries(runtime.outputs || {}).map(([key, value]) => ({ name: key, value }));
+  const loopRows = Object.entries(runtime.loopCounts || {}).map(([key, value]) => ({ name: key, value }));
+  return <section className="runtime-inspector" aria-label="Runtime variables, outputs and flow state">
+    <div className="ri-section">
+      <h4>Variables <small>{variableRows.length}</small></h4>
+      {variableRows.length ? <table><thead><tr><th>Name</th><th>Type</th><th>Value</th></tr></thead>
+        <tbody>{variableRows.map(row => <tr key={row.name}><td><code>{row.name}</code></td><td>{row.type}</td><td><code>{format(row.value)}</code></td></tr>)}</tbody></table>
+        : <p className="muted">No protocol variables declared.</p>}
+    </div>
+    <div className="ri-section">
+      <h4>Outputs <small>{outputRows.length}</small></h4>
+      {outputRows.length ? <table><thead><tr><th>Port</th><th>Value</th></tr></thead>
+        <tbody>{outputRows.map(row => <tr key={row.name}><td><code>{row.name}</code></td><td><code>{format(row.value)}</code></td></tr>)}</tbody></table>
+        : <p className="muted">No node outputs yet.</p>}
+    </div>
+    <div className="ri-section ri-flow">
+      <h4>Flow state</h4>
+      <p><span>Status</span><b>{runtime.status}</b></p>
+      <p><span>Current node</span><b>{runtime.currentNodeId ? nodes.get(runtime.currentNodeId)?.label || runtime.currentNodeId : '—'}</b></p>
+      <p><span>Completed</span><b>{runtime.completedNodeIds.length}</b></p>
+      <p><span>Skipped</span><b>{runtime.skippedNodeIds.length}</b></p>
+      <p><span>Attempts</span><b>{Object.keys(runtime.attempts || {}).length}</b></p>
+      {loopRows.length > 0 && <p><span>Loop counts</span><b>{loopRows.map(row => `${row.name}×${format(row.value)}`).join(', ')}</b></p>}
+    </div>
+  </section>;
 }
