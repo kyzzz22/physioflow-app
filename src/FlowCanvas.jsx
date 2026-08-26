@@ -265,6 +265,12 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     }
   }, [trial, flow, onChange, updateFlow, cloneEventNode]);
 
+  const { draggingId, guides, beginDrag, beginConnDrag, dragConnRef } = useNodeDrag({
+    disabled, pushUndo, updateNode, updateFlow, snapEnabled,
+    zoomRef, panRef, selectedIdsRef, flowRef, canvasRef,
+    setSelectedNodeIds, setDragConnection, setPan,
+  });
+
   // Direct click on input port (no drag)
   const finishConnection = useCallback(targetId => {
     const current = dragConnRef.current;
@@ -316,12 +322,6 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   }, [flow, updateFlow]);
 
   useWheelZoom({ setZoom, setPan, canvasRef });
-
-  const { draggingId, guides, beginDrag, beginConnDrag, dragConnRef } = useNodeDrag({
-    disabled, pushUndo, updateNode, updateFlow, snapEnabled,
-    zoomRef, panRef, selectedIdsRef, flowRef, canvasRef,
-    setSelectedNodeIds, setDragConnection, setPan,
-  });
 
   // Stable node click handler (multi-select with shift)
   const handleNodeClick = useCallback((e, node) => {
