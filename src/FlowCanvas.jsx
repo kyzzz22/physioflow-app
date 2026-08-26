@@ -22,6 +22,9 @@ import {
 import { useNodeDrag } from './flowCanvas/useNodeDrag.js';
 import { useWheelZoom } from './flowCanvas/useWheelZoom.js';
 import { useCanvasPan } from './flowCanvas/useCanvasPan.js';
+import { useCanvasShortcuts } from './flowCanvas/useCanvasShortcuts.js';
+import CanvasLayers from './flowCanvas/CanvasLayers.jsx';
+import CanvasToolbar from './flowCanvas/CanvasToolbar.jsx';
 
 let clipboardNode = null;
 
@@ -433,66 +436,11 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     setSelectedEdgeId(null); setContextMenu(null);
   }, [flow, updateFlow, pushUndo]);
 
-  useEffect(() => {
-    const handler = e => {
-      const tag = document.activeElement?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
-        if (e.key === 'Escape') { setContextMenu(null); setDragConnection(null); setSearchQuery(''); }
-        return;
-      }
-      const mod = e.metaKey || e.ctrlKey;
-      // Space tracking for pan mode
-      if (e.key === ' ' && !e.repeat) { spaceHeld.current = true; }
-      // Undo / Redo (visual flow editor)
-      if (mod && e.key === 'z' && !e.shiftKey) { e.preventDefault(); performUndo(); return; }
-      if (mod && ((e.key === 'z' && e.shiftKey) || e.key === 'y')) { e.preventDefault(); performRedo(); return; }
-      // Copy / Paste / Duplicate / Select all
-      if (mod && e.key === 'c') { e.preventDefault(); const primaryId = [...selectedNodeIds][0]; const n = flow.nodes.find(nd => nd.id === primaryId); if (n) copyNode(n); }
-      if (mod && e.key === 'v') { e.preventDefault(); pasteNode(); }
-      if (mod && e.key === 'd') { e.preventDefault(); [...selectedNodeIds].forEach(id => { const n = flow.nodes.find(nd => nd.id === id); if (n) duplicateNode(n); }); }
-      if (mod && e.key === 'a') { e.preventDefault(); setSelectedNodeIds(new Set(flow.nodes.map(n => n.id))); setSelectedEdgeId(null); }
-      // Search
-      if (mod && e.key === 'f') { e.preventDefault(); setSearchQuery(''); }
-      // Shortcuts help
-      if (mod && e.key === '/') { e.preventDefault(); setShortcutsOpen(prev => !prev); }
-      if (!mod && e.key === '?' && !e.shiftKey) { e.preventDefault(); setShortcutsOpen(prev => !prev); }
-      // Delete
-      if ((e.key === 'Delete' || e.key === 'Backspace') && !document.activeElement?.closest('.studio-inspector')) {
-        if (selectedEdgeId) { e.preventDefault(); deleteEdge(selectedEdgeId); }
-        else if (selectedNodeIds.size > 0) {
-          e.preventDefault();
-          const toDelete = flow.nodes.filter(n => selectedNodeIds.has(n.id) && !['start', 'end'].includes(n.type));
-          if (toDelete.length > 0) {
-            const deleteIds = new Set(toDelete.map(n => n.id));
-            const stepIdsToRemove = toDelete.filter(n => n.type === 'event').map(n => n.step_id);
-            if (stepIdsToRemove.length > 0) {
-              onChange({
-                ...trialRef.current,
-                steps: trialRef.current.steps.filter(s => !stepIdsToRemove.includes(s.step_id)),
-                flow: {
-                  nodes: flowRef.current.nodes.filter(n => !deleteIds.has(n.id)),
-                  edges: flowRef.current.edges.filter(edge => !deleteIds.has(edge.source) && !deleteIds.has(edge.target)),
-                },
-              });
-            } else {
-              updateFlow({
-                nodes: flowRef.current.nodes.filter(n => !deleteIds.has(n.id)),
-                edges: flowRef.current.edges.filter(edge => !deleteIds.has(edge.source) && !deleteIds.has(edge.target)),
-              });
-            }
-            setSelectedNodeIds(new Set());
-            setSelectedEdgeId(null);
-            setContextMenu(null);
-          }
-        }
-      }
-      if (e.key === 'Escape') { setContextMenu(null); setDragConnection(null); setSearchQuery(''); }
-    };
-    const keyup = e => { if (e.key === ' ') spaceHeld.current = false; };
-    window.addEventListener('keydown', handler);
-    window.addEventListener('keyup', keyup);
-    return () => { window.removeEventListener('keydown', handler); window.removeEventListener('keyup', keyup); };
-  }, [selectedNodeIds, selectedEdgeId, flow, copyNode, pasteNode, duplicateNode, deleteEdge, removeNode, updateFlow, onChange]); // eslint-disable-line react-hooks/exhaustive-deps
+  useCanvasShortcuts({
+    selectedNodeIds, selectedEdgeId, flow, copyNode, pasteNode, duplicateNode, deleteEdge,
+    onChange, updateFlow, trialRef, flowRef, performUndo, performRedo, spaceHeld,
+    setContextMenu, setDragConnection, setSearchQuery, setSelectedNodeIds, setSelectedEdgeId, setShortcutsOpen,
+  });
 
   const autoLayout = useCallback(() => {
     if (!flow.nodes.some(n => n.type === 'start')) return;
@@ -585,43 +533,20 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     >{paletteCollapsed ? '▸' : '◂'}</button>
 
     <section className="studio-center">
-      <div className="canvas-bar">
-        <div className="view-toggle" role="tablist" aria-label="Editor view">
-          <button type="button" role="tab" aria-selected={viewMode === 'canvas'} className={viewMode === 'canvas' ? 'active' : ''} onClick={() => setViewMode('canvas')}>Canvas</button>
-          <button type="button" role="tab" aria-selected={viewMode === 'code'} className={viewMode === 'code' ? 'active' : ''} onClick={() => setViewMode('code')}>Code</button>
-        </div>
-        <div><b>{trial.name}</b><span>{flow.nodes.length} nodes · {flow.edges.length} connections</span></div>
-        <div className={`connection-hint ${focusMessage ? 'focus-warning' : ''}`}>
-          {focusMessage ? <span>{focusMessage} {focusHighlightStepId && <button onClick={() => { setFocusHighlightStepId(null); setFocusMessage(''); }} style={{ fontSize: '.7rem', padding: '.15rem .5rem', marginLeft: '.5rem' }}>知道了</button>}</span> : dragConnection ? <>Connect <strong>{dragConnection.branch}</strong> → <button onClick={() => setDragConnection(null)}>Cancel</button></> : null}
-        </div>
-        <label className="check-row">
-          <input type="checkbox" checked={snapEnabled} onChange={e => { setSnapEnabled(e.target.checked); try { localStorage.setItem('physioflow.snap', e.target.checked ? '1' : '0'); } catch {} }} /> Snap
-        </label>
-        <button className="icon-btn" onClick={performUndo} title={t('Undo (⌘Z)')}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4L3 9l6 5" /><path d="M3 9h11a6 6 0 0 1 0 12h-3" /></svg></button>
-        <button className="icon-btn" onClick={performRedo} title={t('Redo (⌘⇧Z)')}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 4l6 5-6 5" /><path d="M21 9H10a6 6 0 0 0 0 12h3" /></svg></button>
-        <button onClick={autoLayout}>Auto layout</button>
-        <button className="icon-btn" onClick={fitView} title={t('Fit view')}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9V4h5" /><path d="M15 4h5v5" /><path d="M20 15v5h-5" /><path d="M9 20H4v-5" /></svg></button>
-        <div style={{ position: 'relative' }}>
-          <button onClick={() => setSnapshotsOpen(o => !o)} title="Flow snapshots">{snapshots.length > 0 ? `📸 ${snapshots.length}` : '📸'}</button>
-          {snapshotsOpen && <div className="snapshots-dropdown" style={{ position: 'absolute', top: '100%', right: 0, zIndex: 50, background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: 8, padding: '.5rem', minWidth: 240, maxHeight: 320, overflowY: 'auto', boxShadow: 'var(--shadow-md)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.3rem .5rem' }}>
-              <b style={{ fontSize: '.78rem' }}>Flow snapshots</b>
-              <button onClick={() => { saveSnapshot(); setSnapshotsOpen(true); }} style={{ fontSize: '.72rem', padding: '.25rem .5rem' }}>+ Save</button>
-            </div>
-            {snapshots.length === 0 && <p style={{ padding: '.5rem', color: 'var(--muted)', fontSize: '.78rem' }}>No snapshots yet. Save a snapshot to preserve your current flow layout.</p>}
-            {snapshots.map((s, _i) => (
-              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '.4rem', padding: '.35rem .5rem', borderBottom: '1px solid var(--line)' }}>
-                <span style={{ fontSize: '.72rem', flex: 1 }} title={s.created_at}>{s.name}</span>
-                <small style={{ color: 'var(--muted)', fontSize: '.65rem' }}>{s.created_at?.slice(11, 19) || ''}</small>
-                <button onClick={() => restoreSnapshot(s)} style={{ fontSize: '.68rem', padding: '.2rem .4rem' }} title="Restore">↩</button>
-                <button onClick={() => { const name = window.prompt('Snapshot name:', s.name); if (name) renameSnapshot(s.id, name); }} style={{ fontSize: '.68rem', padding: '.2rem .4rem' }} title="Rename">✎</button>
-                <button onClick={() => deleteSnapshot(s.id)} className="danger" style={{ fontSize: '.68rem', padding: '.2rem .4rem' }} title="Delete">×</button>
-              </div>
-            ))}
-          </div>}
-        </div>
-        <span className={check.valid ? 'flow-status valid' : 'flow-status invalid'} title={check.errors.concat(check.warnings).slice(0, 5).join('\n')}>{check.valid ? '✓ Ready' : `! ${check.errors.length} issues`}</span>
-      </div>
+      <CanvasToolbar
+        viewMode={viewMode} setViewMode={setViewMode}
+        trial={trial} flow={flow}
+        focusMessage={focusMessage} focusHighlightStepId={focusHighlightStepId}
+        setFocusHighlightStepId={setFocusHighlightStepId} setFocusMessage={setFocusMessage}
+        dragConnection={dragConnection} setDragConnection={setDragConnection}
+        snapEnabled={snapEnabled} setSnapEnabled={setSnapEnabled}
+        performUndo={performUndo} performRedo={performRedo}
+        autoLayout={autoLayout} fitView={fitView}
+        snapshots={snapshots} snapshotsOpen={snapshotsOpen} setSnapshotsOpen={setSnapshotsOpen}
+        saveSnapshot={saveSnapshot} restoreSnapshot={restoreSnapshot}
+        renameSnapshot={renameSnapshot} deleteSnapshot={deleteSnapshot}
+        check={check} t={t}
+      />
       {viewMode === 'code' && <FlowJsonEditor trial={trial} onChange={onChange} disabled={disabled} />}
       {viewMode === 'canvas' && searchQuery !== '' && (
         <div className="node-search-bar">
@@ -663,114 +588,47 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
         onDrop={onCanvasDrop}
         style={{ cursor: panDragRef.current ? 'grabbing' : spaceHeld.current ? 'grab' : '' }}
       >
-        <svg className="flow-bg" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
-          <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" /></marker></defs>
-          <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
-            {flow.edges.map(edge => {
-              const a = nodeById.get(edge.source), b = nodeById.get(edge.target);
-              if (!a || !b) return null;
-              const p1 = nodePortGeometry(a, true), p2 = nodePortGeometry(b, false);
-              const x1 = p1.x, y1 = p1.y, x2 = p2.x, y2 = p2.y, m = x1 + (x2 - x1) / 2;
-              const d = edgePath(x1, y1, x2, y2);
-              const bs = branchStyle(edge.branch);
-              const sel = selectedEdgeId === edge.id;
-              const stroke = sel ? 'var(--green)' : bs.stroke;
-              return <g key={edge.id}
-                onContextMenu={e => edgeContextMenu(e, edge.id)}
-                style={{ cursor: 'pointer', pointerEvents: 'auto' }}
-                onClick={e => { e.stopPropagation(); setSelectedEdgeId(edge.id); setSelectedNodeIds(new Set()); setContextMenu(null); }}
-              >
-                <path d={d} className="edge-hit" />
-                <path d={d} stroke={stroke} strokeWidth={sel ? 2.5 : 1.5} fill="none" strokeDasharray={sel ? undefined : bs.dash} markerEnd="url(#arrow)" />
-                <rect x={m - 25} y={(y1 + y2) / 2 - 13} width="50" height="20" rx="10" fill={sel ? 'var(--green)' : '#e8ebe6'} />
-                <text x={m} y={(y1 + y2) / 2 + 1} fill={sel ? 'white' : 'var(--ink)'} textAnchor="middle" fontSize="11" fontWeight={sel ? 700 : 400}>{edge.label || edge.branch}</text>
-                {sel && <g transform={`translate(${m + 28},${(y1 + y2) / 2 - 10})`} onClick={e => { e.stopPropagation(); deleteEdge(edge.id); }}>
-                  <circle r="10" fill="#a32e25" /><text y="1" fill="white" textAnchor="middle" fontSize="12" fontWeight="700">×</text>
-                </g>}
-              </g>;
-            })}
-            {/* Alignment guides */}
-            {guides.map((g, i) => <line key={`guide-${i}`} x1={g.orientation === 'v' ? g.pos : -10000} y1={g.orientation === 'h' ? g.pos : -10000} x2={g.orientation === 'v' ? g.pos : 10000} y2={g.orientation === 'h' ? g.pos : 10000} stroke="var(--green)" strokeWidth={1} strokeDasharray="4 2" opacity={0.6} />)}
-          </g>
-        </svg>
-        {/* Drag-connection preview line */}
-        {dragConnection && (() => {
-          const srcNode = nodeById.get(dragConnection.source);
-          if (!srcNode) return null;
-          const cr = canvasRef.current?.getBoundingClientRect();
-          if (!cr) return null;
-          const noteH = srcNode.height || 100;
-          const hasRule2 = (srcNode.type === 'condition' || srcNode.type === 'loop') ? 14 : 0;
-          const hasMeta2 = srcNode.type === 'event' ? 14 : 0;
-          const estH = 28 + hasRule2 + hasMeta2 + 24;
-          const nodeW = srcNode.type === 'junction' ? 10 : srcNode.type === 'note' ? (srcNode.width || 180) : 180;
-          const portY = srcNode.type === 'junction' ? 10 : srcNode.type === 'note' ? noteH / 2 : estH - 10;
-          // Convert canvas-space to viewport-space using zoom + pan + canvas offset
-          const sx = (srcNode.x + nodeW) * zoom + pan.x + cr.left;
-          const sy = (srcNode.y + portY) * zoom + pan.y + cr.top;
-          // Target is already in viewport-space (clientX/clientY)
-          const ex = dragConnection.clientX;
-          const ey = dragConnection.clientY;
-          const mx = (sx + ex) / 2;
-          return <svg style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 100, width: '100%', height: '100%', overflow: 'visible' }}>
-            <path d={`M${sx},${sy} C${mx},${sy} ${mx},${ey} ${ex},${ey}`} stroke="var(--green)" strokeWidth={2} fill="none" strokeDasharray="6 3" markerEnd="url(#arrow)" />
-          </svg>;
-        })()}
-        {/* Marquee selection box */}
-        {marquee && (() => {
-          const x = Math.min(marquee.x1, marquee.x2) * zoom + pan.x;
-          const y = Math.min(marquee.y1, marquee.y2) * zoom + pan.y;
-          const w = Math.abs(marquee.x2 - marquee.x1) * zoom;
-          const h = Math.abs(marquee.y2 - marquee.y1) * zoom;
-          return <div style={{ position: 'absolute', left: x, top: y, width: w, height: h, border: '1px dashed var(--green)', background: 'rgba(25,116,83,0.06)', pointerEvents: 'none', zIndex: 40 }} />;
-        })()}
-        <div style={{ transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})`, transformOrigin: '0 0', position: 'relative', width: worldW + 200, height: worldH + 200, pointerEvents: 'none' }}>
-          {/* Groups — drawn behind member nodes */}
-          {flow.nodes.filter(n => n.type === 'group').map(group => {
-            const memberCount = flow.nodes.filter(n => n.group_id === group.id).length;
-            return (
-              <div key={group.id} className={`clean-group${group.collapsed ? ' collapsed' : ''}`}
-                style={{ left: group.x, top: group.y, width: group.width, height: group.height, borderColor: group.color }}>
-                <div className="clean-group-header" style={{ background: tint(group.color, 0.12) }}
-                  onPointerDown={e => beginGroupDrag(e, group)}
-                  onDoubleClick={e => { e.stopPropagation(); renameGroup(group.id); }}>
-                  <span className="clean-group-dot" style={{ background: group.color }} />
-                  <span className="clean-group-title">{group.label}</span>
-                  <span className="clean-group-count">{memberCount} step{memberCount !== 1 ? 's' : ''}</span>
-                  <button className="clean-group-btn" title={group.collapsed ? t('Expand') : t('Collapse')} onClick={e => { e.stopPropagation(); toggleGroupCollapse(group.id); }}>{group.collapsed ? '▸' : '▾'}</button>
-                  <button className="clean-group-btn danger" title={t('Ungroup')} onClick={e => { e.stopPropagation(); ungroupNode(group.id); }}>✕</button>
-                </div>
-              </div>
-            );
-          })}
-          {flow.nodes.map(node => {
-            if (node.type === 'group') return null;
-            if (node.group_id && flow.nodes.some(g => g.type === 'group' && g.id === node.group_id && g.collapsed)) return null;
-            return <NodeCard
-              key={node.id}
-              node={node}
-              step={stepsById.get(node.step_id) || null}
-              isSelected={selectedNodeIds.has(node.id)}
-              isDimmed={searchQuery && !filteredIds.has(node.id)}
-              isDragging={draggingId === node.id}
-              isDisabled={node.enabled === false}
-              disabled={disabled}
-              stimuli={stimuli}
-              questionnaires={questionnaires}
-              isAwaitingConnection={Boolean(dragConnection)}
-              activeBranch={dragConnection?.source === node.id ? dragConnection.branch : null}
-              onPointerDown={beginDrag}
-              onClick={handleNodeClick}
-              onDoubleClick={handleNodeDoubleClick}
-              onContextMenu={handleNodeContextMenu}
-              onPortPointerDown={beginConnDrag}
-              onInputClick={handleNodeInputClick}
-              onPreview={handleNodePreview}
-              onDuplicate={handleNodeDuplicate}
-              onDelete={handleNodeDelete}
-            />;
-          })}
-        </div>
+        <CanvasLayers
+          flow={flow}
+          nodeById={nodeById}
+          stepsById={stepsById}
+          selectedNodeIds={selectedNodeIds}
+          searchQuery={searchQuery}
+          filteredIds={filteredIds}
+          draggingId={draggingId}
+          disabled={disabled}
+          stimuli={stimuli}
+          questionnaires={questionnaires}
+          dragConnection={dragConnection}
+          marquee={marquee}
+          pan={pan}
+          zoom={zoom}
+          guides={guides}
+          worldW={worldW}
+          worldH={worldH}
+          canvasRef={canvasRef}
+          NodeCard={NodeCard}
+          tint={tint}
+          beginDrag={beginDrag}
+          handleNodeClick={handleNodeClick}
+          handleNodeDoubleClick={handleNodeDoubleClick}
+          handleNodeContextMenu={handleNodeContextMenu}
+          beginConnDrag={beginConnDrag}
+          handleNodeInputClick={handleNodeInputClick}
+          handleNodePreview={handleNodePreview}
+          handleNodeDuplicate={handleNodeDuplicate}
+          handleNodeDelete={handleNodeDelete}
+          beginGroupDrag={beginGroupDrag}
+          toggleGroupCollapse={toggleGroupCollapse}
+          ungroupNode={ungroupNode}
+          renameGroup={renameGroup}
+          edgeContextMenu={edgeContextMenu}
+          setSelectedEdgeId={setSelectedEdgeId}
+          setSelectedNodeIds={setSelectedNodeIds}
+          setContextMenu={setContextMenu}
+          deleteEdge={deleteEdge}
+          t={t}
+        />
 
         {flow.nodes.filter(n => n.type === 'event').length === 0 && (
           <div className="canvas-empty-guide">
