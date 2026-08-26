@@ -9,6 +9,9 @@
 .composer-title { min-width: 180px; max-width: 420px; flex: 1; border: 1px solid transparent; border-radius: 7px; padding: 8px 10px; font: 600 1rem/1.2 inherit; background: transparent; color: inherit; }
 .composer-title:focus { border-color: #6c63ff; background: var(--surface, #fff); outline: none; }
 .composer-layout { height: calc(100vh - 65px); height: calc(100dvh - 65px); display: grid; grid-template-columns: 220px minmax(0, 1fr) 290px; }
+/* Panel mount transition (W5): subtle fade + rise when the editor mounts */
+.composer-palette, .composer-inspector { animation: composer-panel-in .18s ease; }
+@keyframes composer-panel-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .composer-palette, .composer-inspector { overflow: auto; padding: 16px; background: var(--surface, #fff); }
 .composer-palette { border-right: 1px solid var(--border, #dfe3e8); }
 .composer-inspector { border-left: 1px solid var(--border, #dfe3e8); }
@@ -60,6 +63,12 @@
 .composer-validation button { width: 100%; display: flex; flex-direction: column; gap: 3px; margin: 6px 0; padding: 7px; text-align: left; border: 0; border-radius: 6px; background: #a32e250b; color: inherit; font-size: .68rem; }
 .composer-validation button span { color: var(--muted, #667085); }
 .composer-validation .composer-validation-more { text-align: center !important; color: #5249d7 !important; background: #6c63ff0d !important; font-weight: 600; }
+/* Wide screens: give palette and inspector more breathing room (W5) */
+@media (min-width: 1680px) {
+  .composer-layout { grid-template-columns: 250px minmax(0, 1fr) 400px; }
+  .composer-palette, .composer-inspector { padding: 20px; }
+  .composer-palette section button { padding: 11px 12px; }
+}
 @media (max-width: 980px) {
   .composer-layout { grid-template-columns: 170px minmax(0, 1fr) 240px; }
   .composer-title { min-width: 140px; }

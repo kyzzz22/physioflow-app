@@ -1030,6 +1030,12 @@
   color: var(--green);
 }
 
+/* Release-snap feedback: nodes follow the pointer live while dragging and
+   ease into their final (snapped) position on drop (W5). */
+.clean-node:not(.dragging) {
+  transition: left .12s ease, top .12s ease, box-shadow .15s ease, border-color .15s ease, opacity .2s ease;
+}
+
 /* Sticky notes */
 .clean-node.note {
   border-radius: 2px 8px 8px 2px;
