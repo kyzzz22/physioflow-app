@@ -3,7 +3,6 @@ import { step as createStep } from './domain';
 import { normalizeFlow, validateFlow } from './flowEngine';
 import { Inspector } from './Inspector';
 import { FLOW_PRESETS, PALETTE } from './constants.js';
-import RuntimeContent from './RuntimeContent';
 import QuestionnaireWorkspace from './QuestionnaireWorkspace';
 import FlowJsonEditor from './FlowJsonEditor.jsx';
 import { NodeGlyph, nodeBadgeStyle, nodeColor, tint } from './flowIcons.jsx';
@@ -676,7 +675,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
-  }, [disabled, pushUndo, updateNode, snapVal]);
+  }, [disabled, pushUndo, updateNode, updateFlow, snapVal]);
 
   // Drag-to-connect ref to avoid React closure stale state
   const dragConnRef = useRef(null);

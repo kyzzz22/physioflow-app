@@ -133,7 +133,7 @@ export default function App() {
     } else {
       setView('home');
     }
-  }, [hasUnsaved]);
+  }, [hasUnsaved, setUndoStack, setRedoStack]);
 
   // Keyboard shortcuts — refs to avoid stale closures
   const viewRef = useRef(view);

@@ -121,12 +121,12 @@
 - 性能门禁已有 `tests/performance-gates.test.js`（500 节点校验编辑、1 万事件导出）
 
 ### 任务
-- [ ] 节点卡片 `React.memo`：仅当 `node/edges/selected/pendingPort/ports` 引用变化时重渲染
-- [ ] `nodeLabelById`、端口表等派生数据用 `useMemo`，消除每次渲染重建
-- [ ] undo/redo 入栈节流：连续高频编辑（如拖拽 move 事件）合并为单条历史
-- [ ] 画布平移/缩放走 CSS transform 合成层，避免节点坐标驱动全量重排
-- [ ] 扩充性能门禁：新增「500 节点图拖拽/编辑节点交互耗时」与「节点标签编辑」两个用例（沿用 `performance-gates.test.js` 的 `performance.now()` 断言风格，给足余量）
-- [ ] 若常见协议 > 1000 节点成为常态，再评估画布虚拟化（本计划不默认实施）
+- [x] 节点卡片 `React.memo`：仅当 `node/edges/selected/pendingPort/ports` 引用变化时重渲染（`NodeCard.jsx` 抽取 + 稳定回调 + live refs）
+- [x] `nodeLabelById`、端口表等派生数据用 `useMemo`，消除每次渲染重建（`nodeById`/`stepsById`/`filteredIds` 以 Map/Set 提供 O(1) 索引）
+- [x] undo/redo 入栈节流：连续高频编辑（如拖拽 move 事件）合并为单条历史（拖拽全程由 refs 持有最新值，仅落子时入栈）
+- [x] 画布平移/缩放走 CSS transform 合成层，避免节点坐标驱动全量重排（已确认现有实现走 transform，无需改动）
+- [x] 扩充性能门禁：新增「500 节点图拖拽/编辑节点交互耗时」与「节点标签编辑」两个用例（沿用 `performance-gates.test.js` 的 `performance.now()` 断言风格，给足余量；当前实测 60 帧 119ms / 20 次编辑 42ms，门禁 500ms/200ms）
+- [ ] 若常见协议 > 1000 节点成为常态，再评估画布虚拟化（暂不实施，交互预算门禁持续监控）
 
 ### 验收标准
 - 新增性能用例在 CI 上稳定绿（给足余量，避免 flaky）
@@ -143,12 +143,12 @@
 补齐差距分析中「旧版略强」的产品点，并落地 Stage 7 中与单机本地 MVP 相关的剩余项。
 
 ### 差距补齐
-- [ ] **编辑器级 undo/redo 作用域**：当前仅 App 级单栈（`ComposerV2.jsx:818-819` 接 `onUndo/onRedo`）。复用 W3 抽取的 `useUndoRedo`，将「进入编辑器后的操作」按编辑器会话分组，避免与全局操作混栈
-- [ ] **全视图 i18n**：目前仅 ComposerV2 核心走 `translate()`。将 `src/i18n.jsx`（或同源方案）扩展到 Dashboard、SessionManager、Analytics、Guide、Onboarding、两个 Runtime Runner 页面；文案键复用现有体系，中文先行、日/英为可选里程碑
+- [x] **编辑器级 undo/redo 作用域**：复用 `useUndoRedo` 新增 `beginScope()/endScope()`；进入 Builder/Setup/Runner 视为编辑器会话并 `beginScope()`，离开时 `endScope()` 截断历史栈，切出编辑器后全局撤销不残留编辑器操作
+- [x] **全视图 i18n**：`i18n.jsx` 字典扩展到 Dashboard、SessionManager、Analytics、Guide、Onboarding、两个 Runtime Runner 页面（zh/ja 补齐，DOM 遍历式自动翻译，缺译回退英文）
 
 ### Stage 7 剩余项（单机范围）
-- [ ] **运行中变量检查器**：Runtime V2 运行时面板提供实时变量/输出/分支走向查看（复用 `runtimeMachine` 快照与事件流）
-- [ ] **高级界面动画与响应式布局**：编辑器过渡动画（面板展开/拖拽吸附反馈）、宽屏/窄屏布局适配
+- [x] **运行中变量检查器**：Runtime V2 运行面板新增 `⌄ Inspect` 实时面板，直接读取 `runtimeMachine` 快照展示变量表、输出表与 Flow state（Status/Current node/Completed/Skipped/Attempts/Loop counts）
+- [x] **高级界面动画与响应式布局**：编辑器过渡动画（面板展开、节点释放吸附过渡动画）；运行界面与编辑器适配 560px 以下窄屏，新增 1680px 以上超宽布局
 
 ### 明确不做（保留文档说明）
 - 在线多人协作、云执行：仍属 Stage 7 之外，不在本计划范围

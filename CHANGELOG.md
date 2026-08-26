@@ -2,6 +2,23 @@
 
 All notable changes to PhysioFlow are documented in this file.
 
+## [0.5.4] — 2026-08-26
+
+### Added
+
+#### 画布渲染性能优化（W4）
+- **节点卡片 memo 化**：节点渲染抽取为独立 `NodeCard` 组件，配合 `useCallback` 稳定回调与 live refs，仅在节点/边/选择/端口等引用变化时重渲染，拖拽闭包始终持有最新值。
+- **O(1) 派生索引**：`nodeById` / `stepsById` / `filteredIds` 改用 `useMemo` + Map/Set 构建，替代 `Array.find()` 线性查找，消除每次渲染重建。
+- **性能门禁扩充**：`performance-gates.test.js` 新增「500 节点拖拽 60 帧」「500 节点标签编辑 20 次」两个交互预算用例（当前实测 119ms / 42ms，门禁 500ms / 200ms）。
+
+#### 体验补齐（W5）
+- **编辑器 undo/redo 作用域隔离**：`useUndoRedo` 新增 `beginScope()`/`endScope()`，进入 Builder/Setup/Runner 视为编辑器会话，离开时截断历史栈，切出编辑器后全局撤销不残留编辑器操作。
+- **全视图 i18n**：Dashboard、SessionManager、Analytics、Onboarding、Guide 外壳与两个 Runtime Runner 页面的文案收敛到 `i18n.jsx` 字典（zh/ja 补齐，DOM 遍历式自动翻译，缺译回退英文）。
+- **运行中变量检查器**：Runtime V2 运行面板新增 `⌄ Inspect` 实时面板，展示变量表（Name/Type/Value）、输出表（Port/Value）与 Flow state（Status/Current node/Completed/Skipped/Attempts/Loop counts）。
+- **编辑器过渡动画与响应式布局**：面板展开、节点释放吸附加入过渡动画；运行界面与编辑器适配 560px 以下窄屏，新增 1680px 以上超宽布局。
+
+---
+
 ## [0.5.3] — 2026-08-26
 
 ### Added

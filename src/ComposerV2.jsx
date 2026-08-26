@@ -28,7 +28,6 @@ import {
 } from './core/index.js';
 import ParticipantUiBuilder from './ParticipantUiBuilder.jsx';
 import ParticipantRenderer from './ParticipantRenderer.jsx';
-import QuestionnaireEditor from './QuestionnaireEditorV2.jsx';
 import { localResourceManifest, schemaForNode } from './runtime/index.js';
 import { translate, useLanguage } from './i18n.jsx';
 import { createProjectComponentRegistry, exampleReactionButtonPackage, installComponentPackage, uninstallComponentPackage } from './sdk/index.js';

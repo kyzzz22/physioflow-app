@@ -1,5 +1,3 @@
-import { protocolNameOf } from '../core/index.js';
-
 // Module-level geometry / validation helpers for the Composer V2 editor.
 // Pure functions — no React, no component state.
 
