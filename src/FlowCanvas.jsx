@@ -19,6 +19,9 @@ import {
   autoLayoutPositions, boundsOf, buildAlignmentGuides, computeMarqueeSelection, dropPosition,
   fitViewTransform, nodePortGeometry, snapToGrid,
 } from './flowCanvas/interactions.js';
+import { useNodeDrag } from './flowCanvas/useNodeDrag.js';
+import { useWheelZoom } from './flowCanvas/useWheelZoom.js';
+import { useCanvasPan } from './flowCanvas/useCanvasPan.js';
 
 let clipboardNode = null;
 
@@ -50,7 +53,6 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   const [questionnaireWorkspace, setQuestionnaireWorkspace] = useState(null);
   const handledFocus = useRef(null);
   const canvasRef = useRef(null);
-  const panDragRef = useRef(null);
   const spaceHeld = useRef(false);
   // Live refs so drag handlers stay referentially stable across renders (keeps NodeCard memo effective)
   const panRef = useRef(pan);
@@ -497,170 +499,13 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     updateFlow({ ...flow, nodes: autoLayoutPositions(flow.nodes, flow.edges) });
   }, [flow, updateFlow]);
 
-  const handleWheel = e => {
-    // Allow wheel zoom in fullscreen mode (document-level) and on the canvas
-    const target = canvasRef.current;
-    if (!target) return;
-    // In fullscreen, the canvas may fill the entire screen — use the fullscreen element's rect
-    const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
-    const refEl = fsEl || target;
-    const rect = refEl.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return;
-    e.preventDefault();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    setZoom(z => {
-      const newZoom = Math.min(2, Math.max(0.3, z + (e.deltaY > 0 ? -0.08 : 0.08)));
-      if (z !== newZoom) {
-        const ratio = newZoom / z;
-        setPan(p => ({ x: mouseX - ratio * (mouseX - p.x), y: mouseY - ratio * (mouseY - p.y) }));
-      }
-      return newZoom;
-    });
-  };
+  useWheelZoom({ setZoom, setPan, canvasRef });
 
-  // Wheel zoom: only on the canvas / center area, not in sidebars or scrollable panels
-  // In fullscreen mode, zoom works everywhere since the canvas fills the screen
-  useEffect(() => {
-    const SCROLLABLE_SELECTORS = [
-      '.studio-palette', '.studio-inspector', '.snapshots-dropdown',
-      '.node-preview-overlay', '.overflow-dropdown', '.context-menu',
-      '.unplaced-step-panel', '.canvas-bar', '.guide-panel', '.guide-content',
-      '.modal-panel', '.markers', '.node-search-bar', '.zoom-controls',
-      '.flow-minimap', '[role="complementary"]',
-    ];
-    const handler = e => {
-      // In fullscreen: always zoom
-      if (document.fullscreenElement || document.webkitFullscreenElement) {
-        handleWheel(e); return;
-      }
-      // Inside a scrollable panel: let native scroll work, don't zoom
-      if (SCROLLABLE_SELECTORS.some(sel => e.target.closest(sel))) return;
-      // Only zoom when scrolling on the canvas itself or the studio center
-      if (e.target.closest('.clean-canvas') || e.target.closest('.studio-center')) {
-        handleWheel(e);
-      }
-    };
-    document.addEventListener('wheel', handler, { passive: false });
-    return () => document.removeEventListener('wheel', handler);
-  }, []);
-
-  const dragRef = useRef(null);
-  const [draggingId, setDraggingId] = useState(null);
-  const [guides, setGuides] = useState([]);
-
-  const snapVal = useCallback((v) => snapEnabled ? Math.round(v / GRID_SIZE) * GRID_SIZE : v, [snapEnabled]);
-
-  const beginDrag = useCallback((e, node) => {
-    if (disabled || e.target.closest('button,input,select')) return;
-    pushUndo(); // capture state before drag
-    const rect = canvasRef.current.getBoundingClientRect();
-    const dx = (e.clientX - rect.left) / zoomRef.current - node.x - panRef.current.x / zoomRef.current;
-    const dy = (e.clientY - rect.top) / zoomRef.current - node.y - panRef.current.y / zoomRef.current;
-    const isMultiDrag = selectedIdsRef.current.size > 1 && selectedIdsRef.current.has(node.id);
-    if (isMultiDrag) {
-      const offsets = {};
-      selectedIdsRef.current.forEach(id => { const n = flowRef.current.nodes.find(nd => nd.id === id); if (n) offsets[id] = { dx: n.x - node.x, dy: n.y - node.y }; });
-      dragRef.current = { nodeIds: [...selectedIdsRef.current], offsets, dx, dy, startX: node.x, startY: node.y };
-    } else {
-      setSelectedNodeIds(new Set([node.id]));
-      dragRef.current = { nodeId: node.id, dx, dy, startX: node.x, startY: node.y };
-    }
-    setDraggingId(node.id);
-    let raf = null;
-    const move = ev => {
-      if (raf) return;
-      raf = requestAnimationFrame(() => {
-        raf = null;
-        if (!dragRef.current) return;
-        const shouldSnap = snapRef.current && !ev.altKey;
-        const rawX = (ev.clientX - rect.left) / zoomRef.current - dragRef.current.dx - panRef.current.x / zoomRef.current;
-        const rawY = (ev.clientY - rect.top) / zoomRef.current - dragRef.current.dy - panRef.current.y / zoomRef.current;
-        const nx = Math.max(20, shouldSnap ? snapVal(rawX) : rawX);
-        const ny = Math.max(20, shouldSnap ? snapVal(rawY) : rawY);
-        // Auto-scroll near edges
-        const cr = canvasRef.current.getBoundingClientRect();
-        const edgeThreshold = SCROLL_EDGE;
-        if (ev.clientX - cr.left < edgeThreshold) setPan(p => ({ ...p, x: p.x + SCROLL_SPEED }));
-        else if (cr.right - ev.clientX < edgeThreshold) setPan(p => ({ ...p, x: p.x - SCROLL_SPEED }));
-        if (ev.clientY - cr.top < edgeThreshold) setPan(p => ({ ...p, y: p.y + SCROLL_SPEED }));
-        else if (cr.bottom - ev.clientY < edgeThreshold) setPan(p => ({ ...p, y: p.y - SCROLL_SPEED }));
-        // Alignment guides
-        let newGuides = [];
-        if (shouldSnap) {
-          const draggedNode = flowRef.current.nodes.find(n => n.id === dragRef.current.nodeId) || flowRef.current.nodes.find(n => n.id === dragRef.current.nodeIds?.[0]);
-          if (draggedNode) newGuides = buildAlignmentGuides(nx, ny, flowRef.current.nodes, draggedNode.id);
-        }
-        setGuides(newGuides);
-        // Apply positions
-        if (dragRef.current.nodeIds) {
-          const ids = dragRef.current.nodeIds;
-          const firstId = ids[0];
-          const firstNode = flowRef.current.nodes.find(n => n.id === firstId);
-          if (firstNode) {
-            const deltaX = nx - firstNode.x;
-            const deltaY = ny - firstNode.y;
-            const updates = {};
-            ids.forEach(id => {
-              const n = flowRef.current.nodes.find(nd => nd.id === id);
-              if (n) updates[id] = { x: Math.max(20, n.x + deltaX), y: Math.max(20, n.y + deltaY) };
-            });
-            updateFlow({ ...flowRef.current, nodes: flowRef.current.nodes.map(n => updates[n.id] ? { ...n, ...updates[n.id] } : n) });
-          }
-        } else {
-          updateNode(node.id, { x: nx, y: ny });
-        }
-      });
-    };
-    const up = () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      dragRef.current = null;
-      setDraggingId(null);
-      setGuides([]);
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-  }, [disabled, pushUndo, updateNode, updateFlow, snapVal]);
-
-  // Drag-to-connect ref to avoid React closure stale state
-  const dragConnRef = useRef(null);
-  useEffect(() => { dragConnRef.current = dragConnection; }, [dragConnection]);
-
-  const beginConnDrag = useCallback((e, node, branch) => {
-    e.stopPropagation(); e.preventDefault();
-    const conn = { source: node.id, branch, clientX: e.clientX, clientY: e.clientY };
-    setDragConnection(conn);
-    dragConnRef.current = conn;
-    const move = ev => {
-      const next = { ...dragConnRef.current, clientX: ev.clientX, clientY: ev.clientY };
-      setDragConnection(next);
-      dragConnRef.current = next;
-    };
-    const up = ev => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      const current = dragConnRef.current;
-      if (!current) { setDragConnection(null); dragConnRef.current = null; return; }
-      const target = document.elementFromPoint(ev.clientX, ev.clientY);
-      const targetNode = target?.closest('[data-node-id]');
-      if (targetNode) {
-        const targetId = targetNode.getAttribute('data-node-id');
-        if (targetId && targetId !== node.id) {
-          const sourceNode = flowRef.current.nodes.find(n => n.id === current.source);
-          if (sourceNode) {
-            pushUndo();
-            const withoutSameBranch = flowRef.current.edges.filter(e => !(e.source === current.source && e.branch === current.branch));
-            updateFlow({ ...flowRef.current, edges: [...withoutSameBranch, { id: `edge_${crypto.randomUUID()}`, source: current.source, target: targetId, branch: current.branch }] });
-          }
-        }
-      }
-      setDragConnection(null);
-      dragConnRef.current = null;
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-  }, [pushUndo, updateFlow]);
+  const { draggingId, guides, beginDrag, beginConnDrag, snapVal, dragConnRef } = useNodeDrag({
+    disabled, pushUndo, updateNode, updateFlow, snapEnabled,
+    zoomRef, panRef, selectedIdsRef, flowRef, canvasRef,
+    setSelectedNodeIds, setDragConnection, setPan,
+  });
 
   // Stable node click handler (multi-select with shift)
   const handleNodeClick = useCallback((e, node) => {
@@ -670,57 +515,9 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     setSelectedEdgeId(null); setContextMenu(null);
   }, []);
 
-  // Pan with middle mouse / space+drag / right-drag
-  const beginPan = e => {
-    if (e.button !== 1 && e.button !== 2 && !spaceHeld.current) return;
-    e.preventDefault();
-    panDragRef.current = { startX: e.clientX, startY: e.clientY, startPan: { ...pan } };
-    const move = ev => {
-      if (!panDragRef.current) return;
-      setPan({ x: panDragRef.current.startPan.x + (ev.clientX - panDragRef.current.startX), y: panDragRef.current.startPan.y + (ev.clientY - panDragRef.current.startY) });
-    };
-    const up = () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      panDragRef.current = null;
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-  };
-
-  // Box/marquee selection
-  const beginMarquee = e => {
-    if (e.button !== 0 || disabled) return;
-    if (e.target !== canvasRef.current && !e.target.classList.contains('flow-bg') && e.target !== canvasRef.current.querySelector('.flow-bg')) return;
-    if (e.target.closest('[data-node-id]') || e.target.closest('button')) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x1 = (e.clientX - rect.left - pan.x) / zoom;
-    const y1 = (e.clientY - rect.top - pan.y) / zoom;
-    setMarquee({ x1, y1, x2: x1, y2: y1 });
-    const move = ev => {
-      const x2 = (ev.clientX - rect.left - pan.x) / zoom;
-      const y2 = (ev.clientY - rect.top - pan.y) / zoom;
-      setMarquee(prev => prev ? { ...prev, x2, y2 } : null);
-    };
-    const up = () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      setMarquee(prev => {
-        if (!prev) return null;
-        const minX = Math.min(prev.x1, prev.x2), maxX = Math.max(prev.x1, prev.x2);
-        const minY = Math.min(prev.y1, prev.y2), maxY = Math.max(prev.y1, prev.y2);
-        const inside = flowRef.current.nodes.filter(n => {
-          const nw = nodeWidth(n);
-          const nh = nodeHeight(n);
-          return n.x + nw > minX && n.x < maxX && n.y + nh > minY && n.y < maxY;
-        }).map(n => n.id);
-        if (inside.length > 0) setSelectedNodeIds(new Set(inside));
-        return null;
-      });
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-  };
+  const { beginPan, beginMarquee, panDragRef } = useCanvasPan({
+    disabled, zoom, pan, setPan, setMarquee, setSelectedNodeIds, flowRef, canvasRef, spaceHeld,
+  });
 
   const edgeContextMenu = useCallback((e, edgeId) => {
     e.preventDefault(); e.stopPropagation();
