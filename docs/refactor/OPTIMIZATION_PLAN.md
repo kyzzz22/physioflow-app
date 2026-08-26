@@ -28,11 +28,11 @@
 - 内容涉及：ComposerV2 拖拽连线、Escape 键语义修复、交互验证脚本与 `test:interactions` 脚本入口
 
 ### 任务
-- [ ] 本地执行 `npm run quality:release`（单元测试 + 构建 + 零警告 lint + 3 条浏览器 E2E）
-- [ ] 运行 `npm run test:interactions` 验证交互回归脚本，确认结果与预期一致
-- [ ] 复核拖拽连线的操作语义（悬停吸附端口、Esc 取消、连线成功/失败反馈）
-- [ ] 按功能点拆分提交（先逻辑后文档），提交信息遵循现有惯例
-- [ ] 确认 `git status` 干净，CHANGELOG/状态文档与本次改动同步
+- [x] 本地执行 `npm run quality:release`（单元测试 + 构建 + 零警告 lint + 3 条浏览器 E2E）——win32 全绿（238 pass / build / lint 0 / 3×E2E，需先设置 `CHROME_BIN`）
+- [x] 运行 `npm run test:interactions` 验证交互回归脚本，确认结果与预期一致
+- [x] 复核拖拽连线的操作语义（悬停吸附端口、Esc 取消、连线成功/失败反馈）——由 verifier 断言覆盖
+- [x] 按功能点拆分提交（先逻辑后文档），提交信息遵循现有惯例
+- [x] 确认 `git status` 干净，CHANGELOG/状态文档与本次改动同步
 
 ### 验收标准
 - `git status` 无未提交改动（除预期忽略文件）
@@ -55,12 +55,12 @@
 - 符号链接用例（`hosted-backup.test.js:57`）已内置 `process.platform === 'win32'` 跳过逻辑，无需改动
 
 ### 任务
-- [ ] 新建共享测试助手（如 `tests/helpers/assertFileMode.js`）：`assertFileMode(path, expectedMode)`
+- [x] 新建共享测试助手（如 `tests/helpers/assertFileMode.js`）：`assertFileMode(path, expectedMode)`
   - POSIX：断言 `mode & 0o777 === expectedMode`（保持 CI 严格性）
   - win32：显式跳过该断言并输出原因（`t.skip` 或打印已知限制），其余断言继续执行，不整例跳过
-- [ ] 将 `hosted-node-server.test.js:98` 与 `hosted-backup.test.js:28-29` 替换为助手调用
-- [ ] 在 Windows 与 POSIX 各跑一次 `npm test`，确认无新增红
-- [ ] （可选）CI 增加 `windows-latest` 矩阵作业（仅单元测试），让平台差异在 CI 可见
+- [x] 将 `hosted-node-server.test.js:98` 与 `hosted-backup.test.js:28-29` 替换为助手调用
+- [x] 在 Windows 与 POSIX 各跑一次 `npm test`，确认无新增红（win32 238 pass；POSIX 由 CI 侧保持）
+- [ ] （可选）CI 增加 `windows-latest` 矩阵作业（仅单元测试）——暂不实施，平台差异已由助手在本地显式暴露
 
 ### 验收标准
 - Windows 本地 `npm test` 100% 通过

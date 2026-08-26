@@ -97,6 +97,35 @@ test('event replay reconstructs runtime variables, outputs and final state', () 
   assert.deepEqual(replay.finalState.completedNodeIds, completed.state.completedNodeIds);
 });
 
+test('runtime snapshot feeds the live inspector with variables, outputs and flow-state counters (W5)', () => {
+  const protocol = linearProtocol();
+  protocol.variables = [{ name: 'score', type: 'number', scope: 'session', defaultValue: 0 }];
+  const registry = createCoreComponentRegistry();
+  const svc = services();
+  const started = startRuntime(runtimeFor(protocol), protocol, registry, svc);
+  const completed = completeCurrentNode(started.state, protocol, registry, svc, { outputs: { acknowledged: true }, variables: { score: 5 } });
+  const snapshot = snapshotRuntime(completed.state);
+
+  // Fields rendered by the W5 live inspector (RuntimeInspector in GraphRuntimeRunnerPage)
+  const variableRows = (protocol.variables || []).map(variable => ({ name: variable.name, type: variable.type, value: snapshot.variables?.[variable.name] }));
+  const outputRows = Object.entries(snapshot.outputs || {});
+  const flowState = {
+    status: snapshot.status,
+    completed: snapshot.completedNodeIds.length,
+    skipped: snapshot.skippedNodeIds.length,
+    attempts: Object.keys(snapshot.attempts || {}).length,
+    loopCounts: snapshot.loopCounts || {},
+  };
+
+  assert.deepEqual(variableRows[0], { name: 'score', type: 'number', value: 5 });
+  assert.ok(outputRows.some(([key, value]) => key === 'screen_1' && value.acknowledged === true));
+  assert.equal(flowState.status, 'completed');
+  assert.ok(flowState.completed >= 1);
+  assert.equal(flowState.skipped, 0);
+  assert.ok(flowState.attempts >= 1);
+  assert.deepEqual(flowState.loopCounts, {});
+});
+
 test('event replay rejects sequence gaps instead of inventing state', () => {
   const protocol = linearProtocol();
   const started = startRuntime(runtimeFor(protocol), protocol, createCoreComponentRegistry(), services());

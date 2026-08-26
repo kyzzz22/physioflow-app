@@ -7,9 +7,18 @@ import QuestionnaireWorkspace from './QuestionnaireWorkspace';
 import FlowJsonEditor from './FlowJsonEditor.jsx';
 import { NodeGlyph, nodeBadgeStyle, nodeColor, tint } from './flowIcons.jsx';
 import { useT } from './i18n.jsx';
-import { GRID_SIZE, SCROLL_EDGE, SCROLL_SPEED, SNAP_THRESHOLD, branchStyle, edgePath, nodeHeight, nodeWidth } from './flowCanvas/layout.js';
+import { GRID_SIZE, SCROLL_EDGE, SCROLL_SPEED, branchStyle, edgePath, nodeHeight, nodeWidth } from './flowCanvas/layout.js';
 import NodeCard from './flowCanvas/NodeCard.jsx';
 import { NodePreviewModal } from './flowCanvas/NodePreviewModal.jsx';
+import PalettePanel from './flowCanvas/PalettePanel.jsx';
+import Minimap from './flowCanvas/Minimap.jsx';
+import CanvasContextMenu from './flowCanvas/CanvasContextMenu.jsx';
+import ShortcutsModal from './flowCanvas/ShortcutsModal.jsx';
+import { useFlowSnapshots } from './flowCanvas/snapshots.js';
+import {
+  autoLayoutPositions, boundsOf, buildAlignmentGuides, computeMarqueeSelection, dropPosition,
+  fitViewTransform, nodePortGeometry, snapToGrid,
+} from './flowCanvas/interactions.js';
 
 let clipboardNode = null;
 
@@ -33,10 +42,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   const [viewMode, setViewMode] = useState('canvas'); // 'canvas' | 'code'
   const t = useT();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [snapshots, setSnapshots] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(`physioflow.snapshots.${trial.trial_id}`) || '[]'); }
-    catch { return []; }
-  });
+  const { snapshots, saveSnapshot, restoreSnapshot, deleteSnapshot, renameSnapshot } = useFlowSnapshots(trial, flow, disabled, onChange, setSelectedNodeIds, setSelectedEdgeId);
   const [snapshotsOpen, setSnapshotsOpen] = useState(false);
   const [paletteCollapsed, setPaletteCollapsed] = useState(() => { try { return localStorage.getItem('physioflow.paletteCollapsed') === '1'; } catch { return false; } });
   const [inspectorCollapsed, setInspectorCollapsed] = useState(() => { try { return localStorage.getItem('physioflow.inspectorCollapsed') === '1'; } catch { return false; } });
@@ -487,57 +493,9 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   }, [selectedNodeIds, selectedEdgeId, flow, copyNode, pasteNode, duplicateNode, deleteEdge, removeNode, updateFlow, onChange]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const autoLayout = useCallback(() => {
-    const start = flow.nodes.find(n => n.type === 'start');
-    const levels = new Map(start ? [[start.id, 0]] : []);
-    if (!start) return;
-    const queue = [start.id]; let qhead = 0;
-    while (qhead < queue.length) { const id = queue[qhead++], lvl = levels.get(id); flow.edges.filter(e => e.source === id).forEach(e => { if (!levels.has(e.target)) { levels.set(e.target, lvl + 1); queue.push(e.target); } }); }
-    const counts = {};
-    const nodes = flow.nodes.map((n, i) => { if (n.type === 'group' || n.group_id) return n; const lvl = levels.get(n.id) ?? i; counts[lvl] = (counts[lvl] || 0) + 1; return { ...n, x: 80 + lvl * 250, y: 90 + (counts[lvl] - 1) * 150 }; });
-    updateFlow({ ...flow, nodes });
+    if (!flow.nodes.some(n => n.type === 'start')) return;
+    updateFlow({ ...flow, nodes: autoLayoutPositions(flow.nodes, flow.edges) });
   }, [flow, updateFlow]);
-
-  // ── Flow snapshots ──
-  const saveSnapshot = useCallback(() => {
-    const snapshot = {
-      id: crypto.randomUUID(),
-      name: `Snapshot ${snapshots.length + 1}`,
-      created_at: new Date().toISOString(),
-      flow: structuredClone(flow),
-      steps: structuredClone(trial.steps),
-    };
-    const next = [...snapshots, snapshot].slice(-20); // keep last 20
-    setSnapshots(next);
-    try { localStorage.setItem(`physioflow.snapshots.${trial.trial_id}`, JSON.stringify(next)); } catch {}
-  }, [snapshots, flow, trial.steps, trial.trial_id]);
-
-  const restoreSnapshot = useCallback((snapshot) => {
-    if (disabled) return;
-    onChange({
-      ...trialRef.current,
-      steps: structuredClone(snapshot.steps),
-      flow: structuredClone(snapshot.flow),
-    });
-    setSelectedNodeIds(new Set());
-    setSelectedEdgeId(null);
-  }, [disabled, onChange]);
-
-  const deleteSnapshot = useCallback((snapshotId) => {
-    const next = snapshots.filter(s => s.id !== snapshotId);
-    setSnapshots(next);
-    try { localStorage.setItem(`physioflow.snapshots.${trial.trial_id}`, JSON.stringify(next)); } catch {}
-  }, [snapshots, trial.trial_id]);
-
-  const renameSnapshot = useCallback((snapshotId, newName) => {
-    const next = snapshots.map(s => s.id === snapshotId ? { ...s, name: newName } : s);
-    setSnapshots(next);
-    try { localStorage.setItem(`physioflow.snapshots.${trial.trial_id}`, JSON.stringify(next)); } catch {}
-  }, [snapshots, trial.trial_id]);
-
-  // Persist snapshots when trial changes
-  useEffect(() => {
-    try { localStorage.setItem(`physioflow.snapshots.${trial.trial_id}`, JSON.stringify(snapshots)); } catch {}
-  }, [snapshots, trial.trial_id]);
 
   const handleWheel = e => {
     // Allow wheel zoom in fullscreen mode (document-level) and on the canvas
@@ -628,22 +586,10 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
         if (ev.clientY - cr.top < edgeThreshold) setPan(p => ({ ...p, y: p.y + SCROLL_SPEED }));
         else if (cr.bottom - ev.clientY < edgeThreshold) setPan(p => ({ ...p, y: p.y - SCROLL_SPEED }));
         // Alignment guides
-        const newGuides = [];
+        let newGuides = [];
         if (shouldSnap) {
           const draggedNode = flowRef.current.nodes.find(n => n.id === dragRef.current.nodeId) || flowRef.current.nodes.find(n => n.id === dragRef.current.nodeIds?.[0]);
-          if (draggedNode) {
-            const dcx = nx + 92, dcy = ny + 52, dl = nx, dr = nx + 184, dt = ny, db = ny + 104;
-            flowRef.current.nodes.forEach(other => {
-              if (other.id === draggedNode.id) return;
-              const ocx = other.x + 92, ocy = other.y + 52, ol = other.x, or = other.x + 184, ot = other.y, ob = other.y + 104;
-              if (Math.abs(dcx - ocx) < SNAP_THRESHOLD) newGuides.push({ orientation: 'v', pos: ocx });
-              if (Math.abs(dcy - ocy) < SNAP_THRESHOLD) newGuides.push({ orientation: 'h', pos: ocy });
-              if (Math.abs(dl - ol) < SNAP_THRESHOLD) newGuides.push({ orientation: 'v', pos: ol });
-              if (Math.abs(dr - or) < SNAP_THRESHOLD) newGuides.push({ orientation: 'v', pos: or });
-              if (Math.abs(dt - ot) < SNAP_THRESHOLD) newGuides.push({ orientation: 'h', pos: ot });
-              if (Math.abs(db - ob) < SNAP_THRESHOLD) newGuides.push({ orientation: 'h', pos: ob });
-            });
-          }
+          if (draggedNode) newGuides = buildAlignmentGuides(nx, ny, flowRef.current.nodes, draggedNode.id);
         }
         setGuides(newGuides);
         // Apply positions
@@ -782,24 +728,16 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     setContextMenu({ x: e.clientX, y: e.clientY, type: 'edge', id: edgeId });
   }, []);
 
-  const bounds = useMemo(() => {
-    if (!flow.nodes.length) return { minX: 0, minY: 0, maxX: 400, maxY: 300 };
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    flow.nodes.forEach(n => { const w = nodeWidth(n); const h = nodeHeight(n); minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); maxX = Math.max(maxX, n.x + w); maxY = Math.max(maxY, n.y + h); });
-    return { minX: minX - 40, minY: minY - 40, maxX: maxX + 40, maxY: maxY + 40 };
-  }, [flow.nodes]);
+  const bounds = useMemo(() => boundsOf(flow.nodes), [flow.nodes]);
   const worldW = bounds.maxX - bounds.minX;
   const worldH = bounds.maxY - bounds.minY;
 
   const fitView = () => {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect || !rect.width || !rect.height || !flow.nodes.length) return;
-    const scale = Math.min(rect.width / worldW, rect.height / worldH, 1.25);
-    const newZoom = Math.max(0.3, Math.min(2, scale));
-    const cx = (bounds.minX + bounds.maxX) / 2;
-    const cy = (bounds.minY + bounds.maxY) / 2;
-    setZoom(newZoom);
-    setPan({ x: rect.width / 2 - cx * newZoom, y: rect.height / 2 - cy * newZoom });
+    const next = fitViewTransform(bounds, rect);
+    setZoom(next.zoom);
+    setPan(next.pan);
   };
 
   const selectedNode = (selectedNodeIds.size === 1) ? flow.nodes.find(n => selectedNodeIds.has(n.id)) : null;
@@ -824,25 +762,24 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
   const handleNodeDuplicate = useCallback((e, node) => { e.stopPropagation(); duplicateNode(node); }, [duplicateNode]);
   const handleNodeDelete = useCallback((e, node) => { e.stopPropagation(); removeNode(node.id); }, [removeNode]);
 
-  const filteredPalette = useMemo(() => {
-    const q = paletteSearch.trim().toLowerCase();
-    if (!q) return PALETTE;
-    return PALETTE.map(group => ({ ...group, items: group.items.filter(([type, , label]) => type.toLowerCase().includes(q) || label.toLowerCase().includes(q)) })).filter(group => group.items.length > 0);
-  }, [paletteSearch]);
-  const paletteQuery = paletteSearch.trim().toLowerCase();
-  const flowControlMatches = ['condition', 'loop'].some(t => t.includes(paletteQuery));
-  const utilControlMatches = ['note', 'junction'].some(t => t.includes(paletteQuery));
-
   return <div className="studio">
-    {!paletteCollapsed && <aside className="studio-palette">
-      <div className="studio-brand"><span>＋</span><div><b>Add to flow</b><small>Drag nodes to arrange</small></div></div>
-      <div className="palette-search"><input value={paletteSearch} placeholder={t('Search steps…')} onChange={e => setPaletteSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setPaletteSearch(''); }} /></div>
-      {!paletteQuery && <section><h4>Presets</h4><div className="palette-grid">{FLOW_PRESETS.map(p => <button key={p.id} className="palette-card" draggable={!disabled} onDragStart={e => onPalettePresetDragStart(e, p.id)} disabled={disabled} onClick={() => addPreset(p, 260, 140 + flow.nodes.length * 24)} title={t(p.description)}><i className="preset-glyph">{p.glyph}</i><span>{p.label}</span></button>)}</div></section>}
-      {filteredPalette.length === 0 && <p className="palette-empty">{t('No steps match')} “{paletteSearch}”</p>}
-      {filteredPalette.map(group => <section key={group.title}><h4>{group.title}</h4><div className="palette-grid">{group.items.map(([type, , label]) => <button key={type} className="palette-card" draggable={!disabled} onDragStart={e => onPaletteDragStart(e, type)} disabled={disabled} onClick={() => addEvent(type)} title={t('Drag to canvas, or click to add')}><i style={nodeBadgeStyle(type)}><NodeGlyph type={type} /></i><span>{label}</span></button>)}</div></section>)}
-      {(!paletteQuery || flowControlMatches) && <section><h4>Flow</h4><div className="palette-grid"><button className="palette-card" draggable={!disabled} onDragStart={e => onPaletteDragStart(e, 'condition')} disabled={disabled} onClick={() => addLogic('condition')}><i style={nodeBadgeStyle('condition')}><NodeGlyph type="condition" /></i><span>Condition</span></button><button className="palette-card" draggable={!disabled} onDragStart={e => onPaletteDragStart(e, 'loop')} disabled={disabled} onClick={() => addLogic('loop')}><i style={nodeBadgeStyle('loop')}><NodeGlyph type="loop" /></i><span>Loop</span></button></div></section>}
-      {(!paletteQuery || utilControlMatches) && <section><h4>Utils</h4><div className="palette-grid"><button className="palette-card" draggable={!disabled} onDragStart={e => onPaletteDragStart(e, 'note')} disabled={disabled} onClick={addNote}><i style={nodeBadgeStyle('note')}><NodeGlyph type="note" /></i><span>Note</span></button><button className="palette-card" draggable={!disabled} onDragStart={e => onPaletteDragStart(e, 'junction')} disabled={disabled} onClick={addJunction}><i style={nodeBadgeStyle('junction')}><NodeGlyph type="junction" /></i><span>Junction</span></button></div></section>}
-    </aside>}
+    {!paletteCollapsed && <PalettePanel
+      search={paletteSearch}
+      onSearchChange={setPaletteSearch}
+      onCloseSearch={() => setPaletteSearch('')}
+      disabled={disabled}
+      paletteSize={flow.nodes.length}
+      addPreset={addPreset}
+      addEvent={addEvent}
+      addLogic={addLogic}
+      addNote={addNote}
+      addJunction={addJunction}
+      onPalettePresetDragStart={onPalettePresetDragStart}
+      onPaletteDragStart={onPaletteDragStart}
+      t={t}
+      NodeGlyph={NodeGlyph}
+      nodeBadgeStyle={nodeBadgeStyle}
+    />}
     <button
       className="panel-toggle palette-toggle"
       onClick={() => { setPaletteCollapsed(v => { const nv = !v; try { localStorage.setItem('physioflow.paletteCollapsed', nv ? '1' : '0'); } catch {} return nv; }); }}
@@ -935,20 +872,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
             {flow.edges.map(edge => {
               const a = nodeById.get(edge.source), b = nodeById.get(edge.target);
               if (!a || !b) return null;
-              const getPort = (node, isSource) => {
-                const noteH = node.height || 100;
-                const nodeW = 180;
-                const inputPortY = 13; // matches CSS .node-input { top: 13px }
-                // Estimate node height: title(~28px) + rule/meta(~14px) + outputs(~24px) = ~66px
-                const hasRule = (node.type === 'condition' || node.type === 'loop') ? 14 : 0;
-                const hasMeta = node.type === 'event' ? 14 : 0;
-                const estimatedH = 28 + hasRule + hasMeta + 24;
-                const outputPortY = estimatedH - 10; // near bottom of card
-                return isSource
-                  ? { x: node.x + (node.type === 'junction' ? 10 : nodeW), y: node.y + (node.type === 'junction' ? 10 : node.type === 'note' ? noteH / 2 : outputPortY) }
-                  : { x: node.x + (node.type === 'junction' ? 0 : -1), y: node.y + (node.type === 'junction' ? 10 : node.type === 'note' ? noteH / 2 : inputPortY) };
-              };
-              const p1 = getPort(a, true), p2 = getPort(b, false);
+              const p1 = nodePortGeometry(a, true), p2 = nodePortGeometry(b, false);
               const x1 = p1.x, y1 = p1.y, x2 = p2.x, y2 = p2.y, m = x1 + (x2 - x1) / 2;
               const d = edgePath(x1, y1, x2, y2);
               const bs = branchStyle(edge.branch);
@@ -1059,36 +983,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
           </div>
         )}
 
-        {flow.nodes.length > 0 && (
-          <div className="flow-minimap" ref={minimapRef => { if (minimapRef) minimapRef._drag = e => {
-            if (!minimapRef) return;
-            const rect = minimapRef.getBoundingClientRect();
-            const cr = canvasRef.current.getBoundingClientRect();
-            if (!cr.width || !rect.width) return;
-            const startX = e.clientX, startY = e.clientY, startPan = { ...pan };
-            const move = ev => {
-              const scaleX = worldW / rect.width;
-              const scaleY = worldH / rect.height;
-              setPan({ x: startPan.x - (ev.clientX - startX) * scaleX, y: startPan.y - (ev.clientY - startY) * scaleY });
-            };
-            const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
-            window.addEventListener('pointermove', move);
-            window.addEventListener('pointerup', up);
-          }; }}
-            onClick={e => {
-              if (e.target.classList.contains('viewport')) return;
-              const rect = e.currentTarget.getBoundingClientRect();
-              const cr = canvasRef.current.getBoundingClientRect();
-              if (!cr.width || !rect.width) return;
-              setPan({ x: -((e.clientX - rect.left) / rect.width * worldW - cr.width / 2), y: -((e.clientY - rect.top) / rect.height * worldH - cr.height / 2) });
-            }}>
-            <svg viewBox={`${bounds.minX} ${bounds.minY} ${worldW} ${worldH}`}>
-              <rect x={bounds.minX} y={bounds.minY} width={worldW} height={worldH} fill="#1a2e2420" rx="4" />
-              {flow.nodes.map(n => <rect key={n.id} x={n.x} y={n.y} width={nodeWidth(n)} height={n.type === 'group' ? (n.height || 120) : n.type === 'note' ? (n.height || 100) : n.type === 'junction' ? 20 : 35} rx="4" fill={tint(nodeColor(n.type), 0.4)} />)}
-              <rect className="viewport" x={-(pan.x / zoom) + bounds.minX} y={-(pan.y / zoom) + bounds.minY} width={(canvasRef.current?.clientWidth || 800) / zoom} height={(canvasRef.current?.clientHeight || 600) / zoom} onPointerDown={e => { e.stopPropagation(); e.preventDefault(); const minimap = e.target.closest('.flow-minimap'); if (minimap?._drag) minimap._drag(e); }} style={{ cursor: 'grab', pointerEvents: 'auto' }} />
-            </svg>
-          </div>
-        )}
+        <Minimap nodes={flow.nodes} bounds={bounds} worldW={worldW} worldH={worldH} pan={pan} zoom={zoom} setPan={setPan} canvasRef={canvasRef} />
 
         <div className="zoom-controls">
           <button onClick={() => setZoom(z => Math.min(2, z + 0.15))} title="Zoom in">+</button>
@@ -1098,48 +993,24 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
         </div>
       </div>}
 
-      {contextMenu && contextMenu.type === 'edge' && (
-        <div className="context-menu" style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y, zIndex: 999 }}>
-          <button className="danger" onClick={() => deleteEdge(contextMenu.id)}>Delete connection</button>
-        </div>
-      )}
-      {contextMenu && contextMenu.type === 'canvas' && (
-        <div className="context-menu" style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y, zIndex: 999 }}>
-          <button onClick={() => { setContextMenu(null); }}>Add from palette →</button>
-          <div style={{ paddingLeft: '8px', borderLeft: '1px solid var(--line)' }}>
-            {PALETTE.flatMap(g => g.items).map(([type, icon, label]) => (
-              <button key={type} onClick={() => { addEvent(type); setContextMenu(null); }} style={{ fontSize: '12px', padding: '4px 8px' }}>{icon} {label}</button>
-            ))}
-            <hr style={{ margin: '4px 0', borderColor: 'var(--line)' }} />
-            <button onClick={() => { addLogic('condition'); setContextMenu(null); }} style={{ fontSize: '12px', padding: '4px 8px' }}>◇ Condition</button>
-            <button onClick={() => { addLogic('loop'); setContextMenu(null); }} style={{ fontSize: '12px', padding: '4px 8px' }}>↻ Loop</button>
-            <button onClick={() => { addNote(); setContextMenu(null); }} style={{ fontSize: '12px', padding: '4px 8px' }}>✎ Sticky note</button>
-            <button onClick={() => { addJunction(); setContextMenu(null); }} style={{ fontSize: '12px', padding: '4px 8px' }}>● Junction</button>
-          </div>
-          {clipboardNode && <button onClick={() => { pasteNode(); setContextMenu(null); }}>Paste {clipboardNode.label || clipboardNode.type}</button>}
-          {selectedNodeIds.size >= 2 && <button onClick={() => { groupSelected(); }}>{t('Group selected')} ({selectedNodeIds.size})</button>}
-          <button onClick={() => { setSelectedNodeIds(new Set(flow.nodes.map(n => n.id))); setContextMenu(null); }}>Select all</button>
-          <button onClick={() => { autoLayout(); setContextMenu(null); }}>Auto layout</button>
-        </div>
-      )}
-      {/* Keyboard shortcuts panel */}
-      {shortcutsOpen && <>
-        <div className="guide-backdrop" style={{ zIndex: 150 }} onClick={() => setShortcutsOpen(false)} />
-        <div className="guide-panel" style={{ zIndex: 151, position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', maxWidth: '440px', maxHeight: '80vh' }}>
-          <div className="guide-head"><div><span>SHORTCUTS</span></div><button onClick={() => setShortcutsOpen(false)} style={{ width: 34, height: 34, fontSize: 22 }}>×</button></div>
-          <div className="guide-content" style={{ padding: '12px 16px' }}>
-            <div className="guide-table">
-              {[
-                ['Ctrl+C/V/D', 'Copy / Paste / Duplicate'], ['Ctrl+A', 'Select all'],
-                ['Ctrl+Z / Ctrl+Shift+Z', 'Undo / Redo'], ['Ctrl+F', 'Search nodes'],
-                ['Del', 'Delete selected'], ['Shift+Click', 'Toggle selection'],
-                ['Double-click node', 'Preview step full-size'], ['Drag output port', 'Connect nodes'], ['Space/Middle+Drag', 'Pan canvas'],
-                ['Scroll', 'Zoom in/out'], ['Alt+Drag', 'Disable snap'], ['Escape', 'Cancel'],
-              ].map(([key, desc], i) => <div key={i}><code>{key}</code><span>{desc}</span></div>)}
-            </div>
-          </div>
-        </div>
-      </>}
+      <CanvasContextMenu
+        contextMenu={contextMenu}
+        setContextMenu={setContextMenu}
+        setSelectedNodeIds={setSelectedNodeIds}
+        deleteEdge={deleteEdge}
+        addEvent={addEvent}
+        addLogic={addLogic}
+        addNote={addNote}
+        addJunction={addJunction}
+        pasteNode={pasteNode}
+        clipboardNode={clipboardNode}
+        selectedNodeIds={selectedNodeIds}
+        t={t}
+        groupSelected={groupSelected}
+        flow={flow}
+        autoLayout={autoLayout}
+      />
+      <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </section>
 
     {!inspectorCollapsed && <Inspector
