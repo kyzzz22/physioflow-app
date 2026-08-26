@@ -20,6 +20,13 @@ export function useUndoRedo({ current, setCurrent, setHasUnsaved }) {
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const undoThrottle = useRef(0);
+  // Editor-session scope: frames recorded inside `beginScope()` are discarded
+  // when the editor is exited via `endScope()`, so global navigation actions
+  // never share a history stack with editor work.
+  const scopeBase = useRef(0);
+  const scopeActive = useRef(false);
+  const undoStackRef = useRef([]);
+  undoStackRef.current = undoStack;
 
   const pushUndo = useCallback((val, pushRedo = true) => {
     setUndoStack(prev => {
@@ -33,6 +40,8 @@ export function useUndoRedo({ current, setCurrent, setHasUnsaved }) {
   const undo = useCallback(() => {
     setUndoStack(prev => {
       if (!prev.length) return prev;
+      // Never undo past the editor-session boundary
+      if (scopeActive.current && prev.length <= scopeBase.current) return prev;
       const snapshot = prev[prev.length - 1];
       setRedoStack(r => [...r, clone(current)]);
       setCurrent(clone(snapshot));
@@ -53,7 +62,26 @@ export function useUndoRedo({ current, setCurrent, setHasUnsaved }) {
   }, [current, setCurrent, setHasUnsaved]);
 
   const resetUndo = useCallback(() => {
+    scopeBase.current = 0;
+    scopeActive.current = false;
     setUndoStack([]);
+    setRedoStack([]);
+  }, []);
+
+  /** Begin an editor session scope. Frames recorded after this point are
+   *  owned by the editor and are discarded when `endScope()` is called. */
+  const beginScope = useCallback(() => {
+    scopeBase.current = undoStackRef.current.length;
+    scopeActive.current = true;
+    setRedoStack([]);
+  }, []);
+
+  /** End the editor session scope, discarding editor-owned history frames so
+   *  they do not leak into global navigation history. */
+  const endScope = useCallback(() => {
+    if (!scopeActive.current) return;
+    scopeActive.current = false;
+    setUndoStack(prev => (prev.length > scopeBase.current ? prev.slice(0, scopeBase.current) : prev));
     setRedoStack([]);
   }, []);
 
@@ -67,5 +95,7 @@ export function useUndoRedo({ current, setCurrent, setHasUnsaved }) {
     undo,
     redo,
     resetUndo,
+    beginScope,
+    endScope,
   };
 }

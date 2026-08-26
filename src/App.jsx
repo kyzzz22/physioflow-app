@@ -63,7 +63,18 @@ export default function App() {
   const [hasUnsaved, setHasUnsaved] = useState(false);
   const lastSaved = useRef([]);
   const dataLoaded = useRef(false);
-  const { undoStack, setUndoStack, redoStack, setRedoStack, undoThrottle, pushUndo, undo, redo } = useUndoRedo({ current, setCurrent, setHasUnsaved });
+  const { undoStack, setUndoStack, redoStack, setRedoStack, undoThrottle, pushUndo, undo, redo, beginScope, endScope } = useUndoRedo({ current, setCurrent, setHasUnsaved });
+
+  // Editor undo/redo scope: the editor workflow (builder, test-run setup and
+  // runner) owns one undo session. Leaving it for home/analytics discards the
+  // session's history so it never leaks into global navigation history (W5).
+  const editorSessionRef = useRef(false);
+  useEffect(() => {
+    const inEditor = view === 'builder' || view === 'setup' || view === 'runner';
+    if (inEditor && !editorSessionRef.current) beginScope();
+    else if (!inEditor && editorSessionRef.current) endScope();
+    editorSessionRef.current = inEditor;
+  }, [view, beginScope, endScope]);
 
   // Onboarding
   const [onboardingOpen, setOnboardingOpen] = useState(false);
