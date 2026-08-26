@@ -12,7 +12,7 @@ import Inspector from './composer/Inspector.jsx';
 export default function ComposerV2({ protocol, onChange, onSave, onBack, onExport, onPreview, onFreeze, onCreateDraft, onHostedRun, onUndo, onRedo, canUndo, canRedo, hasUnsaved, saveAnim }) {
   const s = useComposerState({ protocol, onChange });
   const {
-    locked, t, codeView, codeText, codeError,
+    locked, codeView, codeText, codeError,
     deletePending, confirmDelete, cancelDelete,
     previewNode, previewDefinition, previewEdit, setPreviewEdit, setPreviewNodeId,
     actions, setCodeText, applyCode,

@@ -3,13 +3,13 @@ import { edgePath, groupBounds, portPosition } from './toolbox.js';
 export default function Canvas({ s }) {
   const {
     protocol, t, registry,
-    canvasRef, canvasSize, pan, setPan, zoom, setZoom, marquee, setMarquee,
+    canvasRef, canvasSize, pan, setPan, zoom, setZoom, marquee,
     snapEnabled, setSnapEnabled, autoLayout,
     snapshotsOpen, setSnapshotsOpen, snapshots, snapshotName, setSnapshotName,
     renameId, setRenameId, persistSnapshot, commitRename, restoreSnapshot, deleteSnapshot,
     searchRef, searchQuery, setSearchQuery, searchResults, focusNode,
-    pendingPort, setPendingPort, message,
-    selectedIds, setSelectedIds, selectedNodeId, setSelectedNodeId, selectedEdgeId, setSelectedEdgeId,
+    pendingPort, setPendingPort, setMessage, message,
+    selectedIds, setSelectedIds, setSelectedNodeId, selectedEdgeId, setSelectedEdgeId,
     nodeLabelById, pendingWire, guides, suppressWireClickRef,
     onCanvasWheel, onCanvasPointerDown, viewportPoint, addNodeAt,
     startDrag, dragNode, endDrag, selectNode, startWire, selectPort,

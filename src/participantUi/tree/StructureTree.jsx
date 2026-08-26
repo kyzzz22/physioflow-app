@@ -4,7 +4,7 @@ import { elementLabel, findInTree } from '../tree.js';
 import { UiIcon } from '../UiIcon.jsx';
 
 export function StructureTree({ s }) {
-  const { elements, isHidden, dragOver, setDragOver, normalized, selectedId, collapsed, toggleCollapse, selectElement, commit, setCollapsed } = s;
+  const { elements, isHidden, dragOver, setDragOver, normalized, selectedId, collapsed, toggleCollapse, selectElement, commit, setCollapsed, setSelectedId } = s;
   return <div className="ui-tree">
     {elements.filter(entry => !isHidden(entry)).map(entry => {
       const { element, depth } = entry;

@@ -193,7 +193,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     setFocusMessage('');
   };
 
-  const { addEvent, addPreset, onPaletteDragStart, onPalettePresetDragStart, onCanvasDrop, groupSelected, ungroupNode, toggleGroupCollapse, renameGroup, beginGroupDrag } = useCanvasNodes({
+  const { addEvent, addPreset, addLogic, addNote, addJunction, onPaletteDragStart, onPalettePresetDragStart, onCanvasDrop, groupSelected, ungroupNode, toggleGroupCollapse, renameGroup, beginGroupDrag } = useCanvasNodes({
     disabled, pushUndo, updateFlow, onChange, trialRef, flowRef,
     setSelectedNodeIds, setSelectedEdgeId, setContextMenu,
     pan, zoom, snapEnabled, canvasRef, createStep, nodeWidth, nodeHeight, flow, selectedNodeIds,
@@ -274,7 +274,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
     pushUndo();
     const withoutSameBranch = flowRef.current.edges.filter(e => !(e.source === current.source && e.branch === current.branch));
     updateFlow({ ...flowRef.current, edges: [...withoutSameBranch, { id: `edge_${crypto.randomUUID()}`, source: current.source, target: targetId, branch: current.branch }] });
-  }, [pushUndo, updateFlow]);
+  }, [pushUndo, updateFlow, dragConnRef]);
   const removeNode = useCallback(id => {
     pushUndo();
     const node = flow.nodes.find(n => n.id === id);
@@ -317,7 +317,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
 
   useWheelZoom({ setZoom, setPan, canvasRef });
 
-  const { draggingId, guides, beginDrag, beginConnDrag, snapVal, dragConnRef } = useNodeDrag({
+  const { draggingId, guides, beginDrag, beginConnDrag, dragConnRef } = useNodeDrag({
     disabled, pushUndo, updateNode, updateFlow, snapEnabled,
     zoomRef, panRef, selectedIdsRef, flowRef, canvasRef,
     setSelectedNodeIds, setDragConnection, setPan,
@@ -450,6 +450,7 @@ export default function FlowCanvas({ trial, onChange, disabled, stimuli = [], qu
           nodeById={nodeById}
           stepsById={stepsById}
           selectedNodeIds={selectedNodeIds}
+          selectedEdgeId={selectedEdgeId}
           searchQuery={searchQuery}
           filteredIds={filteredIds}
           draggingId={draggingId}

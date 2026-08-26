@@ -6,7 +6,6 @@ import {
   mapUiElement,
   moveUiElement,
   normalizeParticipantUi,
-  participantUiTemplate,
   removeUiElement,
   resolveTheme,
   validateParticipantUi,

@@ -4,7 +4,7 @@ import { nodePortGeometry } from './interactions.js';
 // Pure SVG render layer for FlowCanvas: edges, alignment guides, drag-connection
 // preview, marquee box, groups and node cards. Receives plain data + stable
 // callbacks, so it re-renders only when the flow actually changes.
-export default function CanvasLayers({ flow, nodeById, stepsById, selectedNodeIds, searchQuery, filteredIds, draggingId, disabled, stimuli, questionnaires, dragConnection, marquee, pan, zoom, guides, worldW, worldH, canvasRef, NodeCard, tint, beginDrag, handleNodeClick, handleNodeDoubleClick, handleNodeContextMenu, beginConnDrag, handleNodeInputClick, handleNodePreview, handleNodeDuplicate, handleNodeDelete, beginGroupDrag, toggleGroupCollapse, ungroupNode, renameGroup, edgeContextMenu, setSelectedEdgeId, setSelectedNodeIds, setContextMenu, deleteEdge, t }) {
+export default function CanvasLayers({ flow, nodeById, stepsById, selectedNodeIds, selectedEdgeId, searchQuery, filteredIds, draggingId, disabled, stimuli, questionnaires, dragConnection, marquee, pan, zoom, guides, worldW, worldH, canvasRef, NodeCard, tint, beginDrag, handleNodeClick, handleNodeDoubleClick, handleNodeContextMenu, beginConnDrag, handleNodeInputClick, handleNodePreview, handleNodeDuplicate, handleNodeDelete, beginGroupDrag, toggleGroupCollapse, ungroupNode, renameGroup, edgeContextMenu, setSelectedEdgeId, setSelectedNodeIds, setContextMenu, deleteEdge, t }) {
   return <>
     <svg className="flow-bg" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
       <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" /></marker></defs>
