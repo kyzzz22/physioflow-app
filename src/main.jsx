@@ -22,7 +22,8 @@ import './runner-extra.css';
 import './dashboard.css';
 import './analytics.css';
 import './sessions.css';
-import './composer-v2.css';
+import './composer/composer-v2.css';
+import './composer/questionnaire-v2.css';
 import './participant-ui.css';
 import './participant-launch.css';
 
