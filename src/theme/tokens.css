@@ -1,0 +1,110 @@
+/* ============================================================
+   PhysioFlow Design System v2 — 现代专业 · 双主题
+   主色保留绿色品牌基因，升级为更精致的层次：
+   - 语义色阶（green-50 → green-600）
+   - 中性色阶（灰绿 neutral）
+   - 卡片/控件/阴影 token
+   ============================================================ */
+:root {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #18251e;
+  background: #f4f8f5;
+  /* Brand green scale */
+  --green-50:  #eef7f1;
+  --green-100: #dcf0e5;
+  --green-200: #b9e2cc;
+  --green-300: #85cba8;
+  --green-400: #4fae82;
+  --green:     #1e8a5f;
+  --green-600: #16714c;
+  --green-strong: #105c3e;
+  --green-800: #0c4730;
+  --green-900: #0a3526;
+  /* Accents */
+  --lime: #b7dd55;
+  --mint: #e8f5ee;
+  --blue: #356fae;
+  --amber: #b66f15;
+  /* Neutral scale (green-tinted) */
+  --ink: #18251e;
+  --ink-soft: #2c3b33;
+  --muted: #5d6c64;
+  --muted-strong: #46564d;
+  --paper: #ffffff;
+  --paper-soft: #f7faf8;
+  --surface: #edf3ef;
+  --line: #d8e2dc;
+  --line-strong: #c2d0c8;
+  /* Semantic */
+  --danger: #b7352d;
+  --warning: #a96612;
+  --success: #2e7d54;
+  /* Shape */
+  --r-sm: 6px;
+  --r-md: 9px;
+  --r-lg: 14px;
+  --r-xl: 20px;
+  --r-card: 16px;
+  --r-control: 10px;
+  --r-pill: 999px;
+  /* Elevation */
+  --shadow-sm: 0 1px 2px #14251b0a, 0 2px 6px #14251b0d;
+  --shadow-md: 0 2px 4px #14251b0a, 0 10px 24px #14251b14;
+  --shadow-lg: 0 6px 16px #14251b12, 0 24px 56px #14251b1f;
+  --shadow-card: 0 1px 2px #14251b08, 0 4px 14px #14251b0f;
+  --shadow-card-hover: 0 4px 12px #14251b12, 0 14px 32px #14251b1c;
+  --ring: 0 0 0 3px #1e8a5f26;
+  /* Motion */
+  --transition-fast: .15s ease;
+  --transition-normal: .25s cubic-bezier(.4, 0, .2, 1);
+  --transition-slow: .4s cubic-bezier(.4, 0, .2, 1);
+  /* Responsive tokens — 统一断点与页面间距（配合各页面媒体查询） */
+  --bp-lg: 1200px;
+  --bp-md: 980px;
+  --bp-sm: 760px;
+  --bp-xs: 560px;
+  --pad-page: clamp(1rem, 3vw, 2.5rem);
+  /* Typography */
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+}
+
+/* ══ Dark-mode token overrides (moved from style.css) ══ */
+
+/* Dark mode — pure white text, clear contrast */
+.dark-mode {
+  color-scheme: dark;
+  --ink: #eef7f1;
+  --ink-soft: #d7e4dc;
+  --green: #5ed0a2;
+  --green-600: #46b585;
+  --green-strong: #7de0b8;
+  --green-800: #2a8f66;
+  --green-900: #1d6b4b;
+  --green-50:  #173227;
+  --green-100: #1e3f31;
+  --green-200: #2c5945;
+  --green-300: #3e7a5d;
+  --green-400: #4e9a76;
+  --lime: #c6e86a;
+  --mint: #173227;
+  --blue: #8bb8f0;
+  --amber: #f0bf68;
+  --paper: #18211d;
+  --paper-soft: #1e2924;
+  --surface: #101713;
+  --line: #2b3a32;
+  --line-strong: #405247;
+  --danger: #ff8a83;
+  --warning: #f0bf68;
+  --success: #5ed0a2;
+  --muted: #aab8b0;
+  --muted-strong: #cad6d0;
+  --shadow-sm: 0 1px 2px #0000002e, 0 2px 6px #00000040;
+  --shadow-md: 0 2px 4px #0000002e, 0 10px 24px #00000055;
+  --shadow-lg: 0 6px 16px #0000004d, 0 24px 56px #00000066;
+  --shadow-card: 0 1px 2px #0000002e, 0 4px 14px #00000045;
+  --shadow-card-hover: 0 4px 12px #0000004d, 0 14px 32px #00000066;
+  --ring: 0 0 0 3px #5ed0a226;
+  background: #101713;
+}
