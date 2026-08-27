@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { LanguageToggle, DarkModeToggle } from './i18n';
 import BioDBSettings from './BioDBSettings.jsx';
+import DataPanel from './DataPanel.jsx';
 import { loadSettings, saveSettings } from './fsStorage.js';
 import { createNextProtocolVersion, duplicateProtocolAsProject, hashProtocol, protocolDiff, validateProtocol } from './domain';
 import { verifyProtocolAssets } from './assetStore.js';
@@ -63,6 +64,7 @@ export default function Dashboard({ protocols, sessions, onOpen, onNew, onTempla
   const [confirmState, setConfirm] = useState(null);
   const [alertState, setAlert] = useState(null);
   const [bioDBOpen, setBioDBOpen] = useState(false);
+  const [dataOpen, setDataOpen] = useState(false);
   const [bioDBSettings, setBioDBSettings] = useState(null);
   useEffect(() => {
     if (bioDBOpen) loadSettings().then(setBioDBSettings).catch(() => setBioDBSettings({}));
@@ -154,10 +156,12 @@ export default function Dashboard({ protocols, sessions, onOpen, onNew, onTempla
         {onAnalytics && <button className="hint" onClick={onAnalytics}>Analytics</button>}
         <button className="hint" onClick={onChooseDataDirectory}>Data folder</button>
         <button className="hint" onClick={() => setBioDBOpen(true)}>BioDB</button>
+        <button className="hint" onClick={() => setDataOpen(true)}>Data</button>
         <DarkModeToggle /><LanguageToggle />
       </div>
     </header>
     {bioDBOpen && <BioDBSettings settings={bioDBSettings || {}} onSave={handleBioDBSave} onClose={() => setBioDBOpen(false)} />}
+    {dataOpen && <DataPanel settings={bioDBSettings} onClose={() => setDataOpen(false)} />}
 
     <section className={`status-bar ${statusTone}`}>
       <span className="status-dot" />
