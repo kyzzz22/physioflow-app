@@ -1,6 +1,6 @@
 import { protocolNameOf } from '../core/index.js';
 
-export default function Header({ s, onSave, onBack, onExport, onPreview, onFreeze, onCreateDraft, onUndo, onRedo, canUndo, canRedo, hasUnsaved, saveAnim }) {
+export default function Header({ s, onSave, onBack, onExport, onPreview, onFreeze, onCreateDraft, onUndo, onRedo, canUndo, canRedo, hasUnsaved, saveAnim, onBioDB }) {
   const {
     protocol, locked, t, validation, migrationReviewRequired, commit, actions,
     editorMode, setEditorMode, codeView, setCodeView, openCodeView,
@@ -18,6 +18,7 @@ export default function Header({ s, onSave, onBack, onExport, onPreview, onFreez
       <button disabled={!validation.valid} onClick={onPreview}>{t('Preview run')}</button>
       {migrationReviewRequired && !locked && <button onClick={actions.markMigrationReviewed}>Mark migration reviewed</button>}
       {locked ? <button onClick={onCreateDraft}>Create editable version</button> : <button disabled={!validation.valid || migrationReviewRequired} onClick={onFreeze}>{t('Freeze version')}</button>}
+      <button className="bio-btn" onClick={onBioDB} disabled={locked}>BioDB</button>
       <button onClick={onExport}>{t('Export')}</button>
       <button className={saveAnim ? 'saved' : ''} onClick={() => onSave(protocol)}>{saveAnim ? '✓ ' + t('Saved') : t('Save')}</button>
       <button onClick={onBack}>← {t('Projects')}</button>

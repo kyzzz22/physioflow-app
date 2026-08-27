@@ -1,5 +1,7 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { LanguageToggle, DarkModeToggle } from './i18n';
+import BioDBSettings from './BioDBSettings.jsx';
+import { loadSettings, saveSettings } from './fsStorage.js';
 import { createNextProtocolVersion, duplicateProtocolAsProject, hashProtocol, protocolDiff, validateProtocol } from './domain';
 import { verifyProtocolAssets } from './assetStore.js';
 import { ConfirmDialog, AlertDialog } from './Modal.jsx';
@@ -60,6 +62,15 @@ export default function Dashboard({ protocols, sessions, onOpen, onNew, onTempla
   const debounceRef = useRef(null);
   const [confirmState, setConfirm] = useState(null);
   const [alertState, setAlert] = useState(null);
+  const [bioDBOpen, setBioDBOpen] = useState(false);
+  const [bioDBSettings, setBioDBSettings] = useState(null);
+  useEffect(() => {
+    if (bioDBOpen) loadSettings().then(setBioDBSettings).catch(() => setBioDBSettings({}));
+  }, [bioDBOpen]);
+  const handleBioDBSave = (next) => {
+    setBioDBSettings(next);
+    saveSettings(next).catch(() => {});
+  };
 
   const handleFilterChange = value => {
     setSessionFilter(value);
@@ -142,9 +153,11 @@ export default function Dashboard({ protocols, sessions, onOpen, onNew, onTempla
         <button className="hint" onClick={() => onGuide?.('workflow')}>Help</button>
         {onAnalytics && <button className="hint" onClick={onAnalytics}>Analytics</button>}
         <button className="hint" onClick={onChooseDataDirectory}>Data folder</button>
+        <button className="hint" onClick={() => setBioDBOpen(true)}>BioDB</button>
         <DarkModeToggle /><LanguageToggle />
       </div>
     </header>
+    {bioDBOpen && <BioDBSettings settings={bioDBSettings || {}} onSave={handleBioDBSave} onClose={() => setBioDBOpen(false)} />}
 
     <section className={`status-bar ${statusTone}`}>
       <span className="status-dot" />

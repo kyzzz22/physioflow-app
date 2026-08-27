@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import ParticipantUiBuilder from './ParticipantUiBuilder.jsx';
 import ParticipantRenderer from './ParticipantRenderer.jsx';
 import { localResourceManifest, schemaForNode } from './runtime/index.js';
@@ -8,6 +9,8 @@ import Header from './composer/Header.jsx';
 import Palette from './composer/Palette.jsx';
 import Canvas from './composer/Canvas.jsx';
 import Inspector from './composer/Inspector.jsx';
+import ProtocolBioDBConfig from './ProtocolBioDBConfig.jsx';
+import { loadSettings } from './fsStorage.js';
 
 export default function ComposerV2({ protocol, onChange, onSave, onBack, onExport, onPreview, onFreeze, onCreateDraft, onHostedRun, onUndo, onRedo, canUndo, canRedo, hasUnsaved, saveAnim }) {
   const s = useComposerState({ protocol, onChange });
@@ -17,8 +20,14 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
     previewNode, previewDefinition, previewEdit, setPreviewEdit, setPreviewNodeId,
     actions, setCodeText, applyCode,
   } = s;
+  const [bioDBOpen, setBioDBOpen] = useState(false);
+  const [settings, setSettings] = useState(null);
+  useEffect(() => {
+    if (bioDBOpen) loadSettings().then(setSettings).catch(() => setSettings({}));
+  }, [bioDBOpen]);
   return <main className={`composer-v2 ${locked ? 'locked' : ''}`}>
-    <Header s={s} onSave={onSave} onBack={onBack} onExport={onExport} onPreview={onPreview} onFreeze={onFreeze} onCreateDraft={onCreateDraft} onUndo={onUndo} onRedo={onRedo} canUndo={canUndo} canRedo={canRedo} hasUnsaved={hasUnsaved} saveAnim={saveAnim} />
+    <Header s={s} onSave={onSave} onBack={onBack} onExport={onExport} onPreview={onPreview} onFreeze={onFreeze} onCreateDraft={onCreateDraft} onUndo={onUndo} onRedo={onRedo} canUndo={canUndo} canRedo={canRedo} hasUnsaved={hasUnsaved} saveAnim={saveAnim} onBioDB={() => setBioDBOpen(true)} />
+    {bioDBOpen && <ProtocolBioDBConfig protocol={protocol} settings={settings || {}} onChange={onChange} onClose={() => setBioDBOpen(false)} />}
     {deletePending && <div className="composer-delete-confirm">Delete {deletePending.ids.length} node(s)? This cannot be undone.
       <button className="danger" onClick={confirmDelete}>Delete</button>
       <button onClick={cancelDelete}>Cancel</button>

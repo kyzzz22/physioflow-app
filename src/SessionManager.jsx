@@ -3,8 +3,10 @@ import { bundle, bundleSimple, downloadBundle } from './exporter';
 import { deleteSession, loadSession, loadSessions, saveSession } from './storage';
 import { AlertDialog, PromptDialog } from './Modal.jsx';
 import { OUTPUT_FILES } from './constants.js';
-import { isGraphProtocol } from './core/protocolSelectors.js';
+import { isGraphProtocol, experimentIdOf } from './core/protocolSelectors.js';
 import { createRuntimeReplay } from './runtime/replayRuntime.js';
+import { pushSessionToBioDB } from './bioDBClient.js';
+import { loadSettings } from './fsStorage.js';
 
 const GuidePanel = lazy(() => import('./GuidePanel.jsx'));
 
@@ -76,6 +78,38 @@ export default function SessionManager() {
 
   const exportData = () => { if (detail?.protocol_snapshot) downloadBundle(bundle(detail, detail.protocol_snapshot, detail.events || [], detail.responses || []), detail.participant_id); };
   const exportSimple = () => { if (detail?.protocol_snapshot) downloadBundle(bundleSimple(detail, detail.protocol_snapshot, detail.events || [], detail.responses || []), detail.participant_id); };
+
+  const pushToBioDB = async () => {
+    if (!detail) return;
+    const settings = await loadSettings().catch(() => ({}));
+    const cfg = (settings && settings.biodb) || {};
+    if (!cfg.userId || !cfg.token) {
+      setAlert({ title: 'BioDB not configured', message: 'Open Dashboard → BioDB and enter user_id and long-term token first.' });
+      return;
+    }
+    setLoading(true);
+    try {
+      const result = await pushSessionToBioDB(cfg, {
+        participantId: detail.participant_id,
+        experimentId: experimentIdOf(detail.protocol_snapshot),
+        startedAt: detail.started_at,
+        endedAt: detail.ended_at,
+        deviceEvents: detail.device_events || detail.events || [],
+      });
+      setAlert({
+        title: 'Pushed to BioDB',
+        message: `${result.rows} sample rows (channels: ${result.channels.join(', ') || '—'}) for participant ${detail.participant_id}`
+          + (result.experimentId ? ` / experiment ${result.experimentId}` : ' (no experiment — set it in the protocol BioDB dialog)') + '.',
+      });
+    } catch (error) {
+      setAlert({
+        title: 'BioDB push failed',
+        message: error.message === 'no_device_samples' ? 'No device samples found in this session.' : (error.message || String(error)),
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const exportAll = async () => {
     setLoading(true);
@@ -161,7 +195,7 @@ export default function SessionManager() {
           {!listLoading && Boolean(summaries.length) && !filteredSummaries.length && <p>No Sessions match the current filter.</p>}
         </aside>
         <section>
-          {loading ? <p>Loading Session…</p> : detail ? <SessionDetail detail={detail} setDetail={setDetail} onSave={saveReview} onExport={exportData} onExportSimple={exportSimple} onDelete={remove} /> : <div className="session-placeholder"><b>Select a Session</b><p>The complete event history and answers are stored in the active local storage backend, separate from the lightweight dashboard index.</p></div>}
+          {loading ? <p>Loading Session…</p> : detail ? <SessionDetail detail={detail} setDetail={setDetail} onSave={saveReview} onExport={exportData} onExportSimple={exportSimple} onDelete={remove} onPushBioDB={pushToBioDB} /> : <div className="session-placeholder"><b>Select a Session</b><p>The complete event history and answers are stored in the active local storage backend, separate from the lightweight dashboard index.</p></div>}
         </section>
       </div>
       {batchProgress && <div className="batch-progress"><span>Exporting {batchProgress.done}/{batchProgress.total} sessions...</span><i style={{ flex: 1 }}><span style={{ width: `${(batchProgress.done / batchProgress.total) * 100}%`, display: 'block', height: '100%', background: 'var(--lime)', borderRadius: 2 }} /></i></div>}
@@ -172,7 +206,7 @@ export default function SessionManager() {
   </>;
 }
 
-function SessionDetail({ detail, setDetail, onSave, onExport, onExportSimple, onDelete }) {
+function SessionDetail({ detail, setDetail, onSave, onExport, onExportSimple, onDelete, onPushBioDB }) {
   const integrity = detail.integrity || {};
   const graphSession = isGraphProtocol(detail.protocol_snapshot);
   return <div className="session-detail">
@@ -184,6 +218,7 @@ function SessionDetail({ detail, setDetail, onSave, onExport, onExportSimple, on
       </div>
       <button className="primary" onClick={onExportSimple}>Export simplified data</button>
       <button onClick={onExport}>Export complete (advanced)</button>
+      <button className="bio-btn" onClick={onPushBioDB} title="Push device samples to BioDB (experiment/participant tags)">Push to BioDB</button>
     </div>
     <div className="session-metrics">
       <div><b>{detail.events?.length || 0}</b><span>events</span></div>

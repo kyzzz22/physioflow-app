@@ -81,3 +81,24 @@ export function duplicateGraphProtocolAsProject(source, options = {}) {
   next.metadata.name = `${protocolNameOf(source)} Copy`;
   return next;
 }
+
+// ---- D2: BioDB experiment mapping (protocol.biodb) ----
+// V2 Graph uses camelCase, legacy V1 uses snake_case; selectors accept both.
+
+export function bioDBConfigOf(protocol) {
+  return (protocol && protocol.biodb) || {};
+}
+
+export function experimentIdOf(protocol) {
+  const cfg = bioDBConfigOf(protocol);
+  return cfg.experimentId || cfg.experiment_id || '';
+}
+
+export function experimentLabelOf(protocol) {
+  const cfg = bioDBConfigOf(protocol);
+  return cfg.experimentLabel || cfg.experiment_label || '';
+}
+
+export function withBioDBConfig(protocol, cfg = {}) {
+  return { ...protocol, biodb: { ...bioDBConfigOf(protocol), ...cfg } };
+}

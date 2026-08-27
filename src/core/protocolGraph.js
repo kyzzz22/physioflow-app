@@ -54,6 +54,11 @@ export function createProtocolGraph(options = {}) {
       description: options.description || '',
       tags: [...(options.tags || [])],
     },
+    // D2: BioDB experiment mapping (pushed as experiment tag on write)
+    biodb: {
+      experimentId: options.experimentId || '',
+      experimentLabel: options.experimentLabel || '',
+    },
     version: {
       number: 1,
       label: 'Draft 1',

@@ -626,3 +626,32 @@
 .dark-mode .theme-preset-card { background: var(--paper-soft); border-color: var(--line); }
 .dark-mode .theme-preset-card:hover { border-color: var(--green); }
 .dark-mode .theme-preset-card.active { background: #1a3328; border-color: var(--green); }
+
+/* ── BioDB (D2) ── */
+.field-label {
+  display: flex; flex-direction: column; gap: .3rem;
+  font-size: .72rem; font-weight: 600; color: var(--ink);
+  margin-bottom: .7rem;
+}
+.field-input {
+  padding: .45rem .6rem; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--paper-soft);
+  color: var(--ink); font-size: .8rem; width: 100%;
+}
+.field-input:focus { outline: none; border-color: var(--green-strong); }
+.field-hint { font-size: .7rem; color: #7b867f; margin: .2rem 0 .6rem; line-height: 1.55; }
+.bio-warn { color: #9a6700; font-weight: 500; }
+.bio-status-ok { color: #1a7f37; font-size: .74rem; font-weight: 600; }
+.bio-status-err { color: #a32e25; font-size: .74rem; font-weight: 600; }
+.bio-btn {
+  background: var(--green); color: #04150c;
+  border: 1px solid var(--green-strong);
+  padding: .32rem .7rem; border-radius: 8px;
+  font-weight: 700; font-size: .74rem; cursor: pointer;
+}
+.bio-btn:hover { background: var(--green-strong); color: #fff; }
+.bio-btn:disabled { opacity: .5; cursor: not-allowed; }
+.dark-mode .bio-status-ok { color: #56d364; }
+.dark-mode .bio-status-err { color: #ff8a86; }
+.dark-mode .bio-warn { color: #d4a72c; }
+.dark-mode .field-input { background: var(--paper); border-color: var(--line); color: var(--ink); }
