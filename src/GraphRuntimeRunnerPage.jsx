@@ -23,7 +23,7 @@ import {
   startRuntime,
 } from './runtime/index.js';
 import { localResourceManifest, schemaForNode } from './runtime/nodeSchema.js';
-import { DeviceConnectorSession, createSimulatedDeviceAdapter } from './devices/index.js';
+import { DeviceConnectorSession, createMuseDeviceAdapter, createSimulatedDeviceAdapter } from './devices/index.js';
 import { clearCurrentRun, saveCurrentRun, saveSession } from './storage.js';
 import { buildGraphBidsBundle, buildGraphSessionFiles } from './data/index.js';
 import { downloadBundle } from './exporter.js';
@@ -36,6 +36,14 @@ function runtimeServices() {
     clock: { now: () => { const epochMs = Date.now(); return { epochMs, monotonicMs: performance.timeOrigin + performance.now(), iso: new Date(epochMs).toISOString() }; } },
     controlHandlers: createCoreControlHandlerRegistry(),
   };
+}
+
+// Pick the adapter that can drive an installed connector. Unknown transports yield
+// null so the experiment still runs, just without device sampling.
+function createDeviceAdapter(connector) {
+  if (connector.transport === 'simulated') return createSimulatedDeviceAdapter();
+  if (connector.transport === 'bluetooth' && connector.connectorId.startsWith('org.physioflow.muse')) return createMuseDeviceAdapter();
+  return null;
 }
 
 function packagePermissions(protocol, node) {
@@ -88,16 +96,17 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
       const deviceNode = protocol.graph?.nodes?.find(node => node.config?.deviceConnectorId);
       if (deviceNode) {
         const resolved = resolveDeviceConnector(protocol, deviceNode);
-        if (resolved?.connector && resolved.connector.transport === 'simulated') {
+        const adapter = resolved ? createDeviceAdapter(resolved.connector) : null;
+        if (resolved?.connector && adapter) {
           deviceSessionRef.current = new DeviceConnectorSession({
             connector: { ...resolved.connector, approvedPermissions: resolved.connector.approvedPermissions },
-            adapter: createSimulatedDeviceAdapter(),
+            adapter,
             sessionId: data.session.session_id,
             services: services.current,
             onEvent: event => { deviceEventsRef.current.push(event); },
           });
           try {
-            await deviceSessionRef.current.connect({ source: 'simulated' });
+            await deviceSessionRef.current.connect({ source: resolved.connector.transport });
             samplerRef.current = createDeviceSampler({
               session: deviceSessionRef.current,
               channels: resolved.connector.channels.filter(channel => channel.direction === 'input'),
