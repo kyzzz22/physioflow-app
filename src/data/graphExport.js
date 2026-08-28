@@ -2,6 +2,7 @@ import { createProjectComponentRegistry } from '../sdk/index.js';
 import { protocolNameOf, protocolVersionOf } from '../core/protocolSelectors.js';
 import { assessGraphSession } from './graphIntegrity.js';
 import { createEventSchemaRegistry } from './eventSchemaRegistry.js';
+import { channelDataDictionary } from './channelDictionary.js';
 
 export const GRAPH_DATA_CONTRACT_VERSION = '2.0.0-alpha.1';
 
@@ -88,6 +89,11 @@ export function graphDataDictionary() {
         description: 'Immutable external-device lifecycle, sample, marker, failure and recovery events with connector/device provenance.',
         columns: ['event_id', 'sequence', 'session_id', 'connector_id', 'connector_version', 'transport', 'device_id', 'event_type', 'timestamp_iso', 'timestamp_epoch_ms', 'elapsed_monotonic_ms', 'payload_json', 'device_json'],
       },
+      channels: {
+        primaryKey: 'channel id (per connector)',
+        description: 'Channel-level data dictionary (D4): time-series channel manifest with dataType/unit/sampleRate per device connector. Rendered in channel_dictionary.json.',
+        columns: ['channel', 'connectorId', 'connectorVersion', 'label', 'dataType', 'unit', 'sampleRateHz', 'direction'],
+      },
     },
     clocks: {
       timestamp_epoch_ms: 'Wall-clock Unix milliseconds for cross-device alignment.',
@@ -116,6 +122,19 @@ export function buildGraphSessionFiles(session, protocol, events = session.event
     protocolVersion: protocolVersionOf(protocol),
     counts: { events: events.length, responses: responses.length, deviceEvents: deviceEvents.length, nodes: protocol.graph.nodes.length, assets: (protocol.assets || []).length },
   };
+  const channelDict = channelDataDictionary(protocol);
+  const channelRows = Object.entries(channelDict.channels).map(([channel, def]) => ({
+    channel,
+    connectorId: def.connectorId,
+    connectorVersion: def.connectorVersion,
+    label: def.label,
+    dataType: def.dataType,
+    unit: def.unit ?? '',
+    sampleRateHz: def.sampleRateHz ?? '',
+    direction: def.direction,
+  }));
+  manifest.counts.channels = channelRows.length;
+  manifest.counts.connectors = Object.keys(channelDict.connectors).length;
   return {
     'manifest.json': JSON.stringify(manifest, null, 2),
     'session.json': JSON.stringify({ ...session, events: undefined, responses: undefined, device_events: undefined, protocol_snapshot: undefined }, null, 2),
@@ -127,6 +146,8 @@ export function buildGraphSessionFiles(session, protocol, events = session.event
     'events.csv': csv(eventRows, graphDataDictionary().tables.events.columns),
     'responses.csv': csv(responseRows, graphDataDictionary().tables.responses.columns),
     'device_events.csv': csv(deviceEventRows, graphDataDictionary().tables.device_events.columns),
+    'channel_dictionary.json': JSON.stringify(channelDict, null, 2),
+    'channel_dictionary.csv': csv(channelRows, graphDataDictionary().tables.channels.columns),
     'data_dictionary.json': JSON.stringify(graphDataDictionary(), null, 2),
     'event_schema_registry.json': JSON.stringify(eventRegistry.list(), null, 2),
     'component_manifest.json': JSON.stringify(components, null, 2),

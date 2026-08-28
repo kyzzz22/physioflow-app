@@ -1,5 +1,6 @@
 import { assessSession } from './integrity.js';
 import { uid } from './domain.js';
+import { channelDataDictionary } from './data/channelDictionary.js';
 
 const esc = value => `"${String(value ?? '').replaceAll('"', '""').replaceAll('\n', '\\n').replaceAll('\r', '\\r')}"`;
 const csv = (headers, rows) => '\uFEFF' + [headers, ...rows].map(row => row.map(esc).join(',')).join('\r\n') + '\r\n';
@@ -101,6 +102,7 @@ export function bundle(session, protocol, events, responses = []) {
   const report = assessSession({ session, protocol, events, responses, runtime:session.runtime_snapshot });
   const cleanSession = Object.fromEntries(Object.entries(session).filter(([key]) => !['events','responses','protocol_snapshot'].includes(key)));
   cleanSession.integrity = report;
+  const channelDict = channelDataDictionary(protocol);
   const exportManifest = {
     schema_version: '1.0.0',
     generated_at: new Date().toISOString(),
@@ -115,6 +117,8 @@ export function bundle(session, protocol, events, responses = []) {
       responses: responses.length,
       analysis_windows: analysisWindows.length,
       stimuli: manifest.length,
+      channels: channelDict.inputChannels.length,
+      connectors: Object.keys(channelDict.connectors).length,
     },
     files: {
       'README.txt': 'Human-readable description of the export package.',
@@ -125,6 +129,7 @@ export function bundle(session, protocol, events, responses = []) {
       'responses.csv': 'Questionnaire answers and Response-node choices, one row per submitted answer.',
       'analysis_windows.csv': 'Derived windows for steps marked as analysis windows.',
       'stimulus_manifest.csv': 'Media resources referenced by the protocol.',
+      'channel_dictionary.json': 'Channel-level data dictionary: time-series channels with dataType/unit/sampleRate per device connector.',
       'integrity_report.json': 'Automated validity checks and warnings.',
       'data_dictionary.csv': 'CSV field descriptions.',
     },
@@ -207,6 +212,9 @@ export function bundle(session, protocol, events, responses = []) {
     ['stimulus_manifest.csv','asset_id','Browser-local upload asset ID.'],
     ['stimulus_manifest.csv','checksum','SHA-256 checksum for locally uploaded media when available.'],
     ['stimulus_manifest.csv','metadata_json','Stimulus metadata and step playback options.'],
+    ['channel_dictionary.json','channels','Map of channel id -> { connectorId, connectorVersion, label, dataType, unit, sampleRateHz, direction }.'],
+    ['channel_dictionary.json','inputChannels','Time-series (sensor input) channel ids — the signal channels recorded during the session.'],
+    ['channel_dictionary.json','outputChannels','Output/marker channel ids, not part of the time-series stream.'],
   ];
   return {
     'README.txt': readme,
@@ -217,6 +225,7 @@ export function bundle(session, protocol, events, responses = []) {
     'analysis_windows.csv':csv(windowHeaders, analysisWindows.map(window => windowHeaders.map(header => window[header]))),
     'responses.csv':csv(responseHeaders, responses.map(response => responseHeaders.map(header => response[header]))),
     'stimulus_manifest.csv':csv(manifestHeaders, manifest.map(item => manifestHeaders.map(header => header === 'metadata_json' ? JSON.stringify(item.metadata) : item[header]))),
+    'channel_dictionary.json':JSON.stringify(channelDict, null, 2),
     'data_dictionary.csv':csv(['file','field','description'], dataDictionary),
   };
 }

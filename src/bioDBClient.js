@@ -10,6 +10,8 @@
 //   POST /sensor/data/read               {format, compression, rows, start_time, end_time} -> columnar JSON (with read JWT)
 //   POST /jwt/events                     -> event JWT (claims: participant/time window)
 //   GET  /events?role=experimenter&start_time&end_time   event list (with event JWT)
+//   GET  /experiment/<id>/dictionary     experiment channel dictionary (with read JWT)
+//   POST /experiment/<id>/dictionary     replace experiment dictionary {dictionary} (with admin JWT)
 
 export const bioDBDefaultSettings = () => ({
   baseUrl: 'http://localhost:5002',
@@ -90,7 +92,9 @@ export async function listBioDBParticipants(cfg) {
  *   1. exchange long-term token -> sensor write JWT (participant + experiment claims)
  *   2. serialize device samples to [{time, channel: value, ...}]
  *   3. POST /sensor/data/write
- * Returns {rows, channels, start, end, experimentId}.
+ *   4. when `dictionary` is provided and the experiment is registered, attach the
+ *      channel dictionary to the experiment (D4: data dictionary linkage).
+ * Returns {rows, channels, start, end, experimentId, dictionaryPushed, dictionaryError}.
  */
 export async function pushSessionToBioDB(cfg, opts) {
   const {
@@ -99,6 +103,7 @@ export async function pushSessionToBioDB(cfg, opts) {
     startedAt,
     endedAt,
     deviceEvents = [],
+    dictionary = null,
   } = opts || {};
   const start = startedAt || new Date(Date.now() - 60000).toISOString();
   const end = endedAt || new Date().toISOString();
@@ -130,7 +135,34 @@ export async function pushSessionToBioDB(cfg, opts) {
   if (res.code !== 200 && res.code !== undefined && res.code !== 0) {
     throw new Error(res.message || JSON.stringify(res));
   }
-  return { rows: rows.length, channels: channelsOf(rows), start, end, experimentId };
+  const result = { rows: rows.length, channels: channelsOf(rows), start, end, experimentId };
+  if (dictionary && experimentId) {
+    try {
+      await pushExperimentDictionary(cfg, experimentId, dictionary);
+      result.dictionaryPushed = true;
+    } catch (dictError) {
+      result.dictionaryPushed = false;
+      result.dictionaryError = dictError.message || String(dictError);
+    }
+  }
+  return result;
+}
+
+/**
+ * Attach the channel data dictionary to an experiment in the BioDB registry (D4).
+ * Exchanges the long-term token for an admin JWT, then replaces the experiment
+ * dictionary via POST /experiment/<id>/dictionary with body {dictionary}.
+ * `dictionary` is the BioDB-shaped map { channelId -> { label, unit, type, ... } }.
+ */
+export async function pushExperimentDictionary(cfg, experimentId, dictionary) {
+  if (!experimentId) throw new Error('experimentId is required');
+  const jwt = await getBioDBAdminJwt(cfg);
+  const data = await postJSON(
+    `${baseOf(cfg)}/experiment/${encodeURIComponent(experimentId)}/dictionary`,
+    { dictionary: dictionary || {} },
+    jwt,
+  );
+  return data; // { code, message, dictionary }
 }
 
 /**

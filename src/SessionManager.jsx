@@ -6,6 +6,7 @@ import { OUTPUT_FILES } from './constants.js';
 import { isGraphProtocol, experimentIdOf } from './core/protocolSelectors.js';
 import { createRuntimeReplay } from './runtime/replayRuntime.js';
 import { pushSessionToBioDB } from './bioDBClient.js';
+import { dictionaryPayload } from './data/channelDictionary.js';
 import { loadSettings } from './fsStorage.js';
 
 const GuidePanel = lazy(() => import('./GuidePanel.jsx'));
@@ -89,17 +90,24 @@ export default function SessionManager() {
     }
     setLoading(true);
     try {
+      const payload = dictionaryPayload(detail.protocol_snapshot);
       const result = await pushSessionToBioDB(cfg, {
         participantId: detail.participant_id,
         experimentId: experimentIdOf(detail.protocol_snapshot),
         startedAt: detail.started_at,
         endedAt: detail.ended_at,
         deviceEvents: detail.device_events || detail.events || [],
+        dictionary: payload ? payload.dictionary : null,
       });
+      const dictNote = result.dictionaryPushed === undefined
+        ? ''
+        : result.dictionaryPushed
+          ? ' / channel dictionary attached to experiment.'
+          : ` / channel dictionary not attached (${result.dictionaryError || 'experiment not writable'} — register the experiment as admin or set the dictionary in the BioDB console).`;
       setAlert({
         title: 'Pushed to BioDB',
         message: `${result.rows} sample rows (channels: ${result.channels.join(', ') || '—'}) for participant ${detail.participant_id}`
-          + (result.experimentId ? ` / experiment ${result.experimentId}` : ' (no experiment — set it in the protocol BioDB dialog)') + '.',
+          + (result.experimentId ? ` / experiment ${result.experimentId}` : ' (no experiment — set it in the protocol BioDB dialog)') + dictNote + '.',
       });
     } catch (error) {
       setAlert({
