@@ -4,6 +4,26 @@ function cloneProtocol(protocol) {
   return structuredClone(protocol);
 }
 
+/**
+ * Copy a protocol for a node-level edit, sharing everything the edit does not touch.
+ *
+ * A full structuredClone costs ~6 ms on a 500-node protocol, which dominated
+ * drag-move frames and label edits (both re-run per keystroke or per frame).
+ * Immutability only requires that the previous snapshot is never mutated — not
+ * that every subtree be copied — so this copies the path to `graph.nodes` and
+ * shares edges, groups, variables, assets and every node the edit does not
+ * replace.
+ *
+ * Only safe for commands that REPLACE entries (`nodes[i] = {...}`) rather than
+ * mutate them in place. Commands that push into a shared array (duplicateNode
+ * mutates a group's nodeIds) must keep using cloneProtocol.
+ */
+function cloneProtocolForNodeEdit(protocol) {
+  const next = { ...protocol };
+  next.graph = { ...protocol.graph, nodes: [...protocol.graph.nodes] };
+  return next;
+}
+
 function touch(protocol, now = new Date().toISOString()) {
   protocol.audit = { ...(protocol.audit || {}), updatedAt: now };
   return protocol;
@@ -18,12 +38,15 @@ export function addNode(protocol, componentType, options = {}) {
 }
 
 export function updateNode(protocol, nodeId, changes, options = {}) {
-  const next = cloneProtocol(protocol);
+  // Replaces one node, so sharing the untouched subtrees is safe.
+  const next = cloneProtocolForNodeEdit(protocol);
   const index = next.graph.nodes.findIndex(node => node.id === nodeId);
   if (index < 0) throw new Error(`Node ${nodeId} does not exist`);
   const original = next.graph.nodes[index];
   const patch = typeof changes === 'function' ? changes(structuredClone(original)) : changes;
   if (patch?.id && patch.id !== nodeId) throw new Error('Graph commands cannot change a node ID');
+  // The patch is still cloned: callers may keep mutating the object they passed
+  // in, and that must not reach into the stored protocol.
   next.graph.nodes[index] = { ...original, ...structuredClone(patch || {}), id: nodeId };
   return touch(next, options.now);
 }
@@ -75,7 +98,8 @@ export function replaceConnection(protocol, target, source, options = {}) {
 }
 
 export function moveNodes(protocol, positions, options = {}) {
-  const next = cloneProtocol(protocol);
+  // Replaces node entries, so sharing the untouched subtrees is safe.
+  const next = cloneProtocolForNodeEdit(protocol);
   const positionMap = positions instanceof Map ? positions : new Map(Object.entries(positions || {}));
   next.graph.nodes = next.graph.nodes.map(node => {
     const position = positionMap.get(node.id);
