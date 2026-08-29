@@ -186,6 +186,15 @@ await clickText('Start session');
 await waitFor(`document.body.textContent.includes('Begin experiment')`, 'runtime ready');
 await clickText('Begin experiment');
 await waitFor(`document.body.textContent.includes('SESSION COMPLETE')`, 'session complete', 10000);
+// The completion screen only enables "Return to projects" once the finished
+// session has been written to local storage, which happens after SESSION
+// COMPLETE appears. Clicking immediately races that save, so wait for the
+// button to become enabled — the same guard e2e-composer-v2-self-hosted uses.
+await waitFor(
+  `[...document.querySelectorAll('button')].some(button => button.textContent.includes('Return to projects') && !button.disabled)`,
+  'saved preview session',
+  10000,
+);
 await clickText('Return to projects');
 await waitFor(`document.body.textContent.includes('E2E-PREVIEW')`, 'saved preview session summary', 10000);
 
