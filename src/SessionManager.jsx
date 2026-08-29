@@ -5,8 +5,9 @@ import { AlertDialog, PromptDialog } from './Modal.jsx';
 import { OUTPUT_FILES } from './constants.js';
 import { isGraphProtocol, experimentIdOf } from './core/protocolSelectors.js';
 import { createRuntimeReplay } from './runtime/replayRuntime.js';
-import { pushSessionToBioDB } from './bioDBClient.js';
+import { exportBioDBData, pushSessionToBioDB } from './bioDBClient.js';
 import { dictionaryPayload } from './data/channelDictionary.js';
+import { buildJointExportFiles, channelsForExport } from './data/jointExport.js';
 import { loadSettings } from './fsStorage.js';
 
 const GuidePanel = lazy(() => import('./GuidePanel.jsx'));
@@ -119,6 +120,72 @@ export default function SessionManager() {
     }
   };
 
+  // D6: PF session package + BioDB envelope in one archive. The PF leg is always
+  // exported; when the BioDB leg fails the archive is still written and the
+  // manifest records why, so a network outage never blocks an export.
+  const exportJoint = async () => {
+    if (!detail?.protocol_snapshot) return;
+    const settings = await loadSettings().catch(() => ({}));
+    const cfg = (settings && settings.biodb) || {};
+    const channels = channelsForExport(detail.protocol_snapshot, detail.device_events || []);
+    if (!cfg.userId || !cfg.token) {
+      downloadBundle(buildJointExportFiles({
+        sessionFiles: bundle(detail, detail.protocol_snapshot, detail.events || [], detail.responses || []),
+        biodb: null,
+        meta: { sessionId: detail.session_id, participantId: detail.participant_id, experimentId: experimentIdOf(detail.protocol_snapshot), channels, biodbError: 'BioDB is not configured (user_id / token missing).' },
+      }).files, `${detail.participant_id}_joint`);
+      setAlert({ title: 'Exported without BioDB', message: 'BioDB credentials are missing, so only the PF session was archived. Configure Dashboard → BioDB and export again for the full joint package.' });
+      return;
+    }
+    if (!channels.length) {
+      setAlert({ title: 'Nothing to export', message: 'This session has no device channels, so there is nothing to read back from BioDB.' });
+      return;
+    }
+    setLoading(true);
+    try {
+      const sessionFiles = bundle(detail, detail.protocol_snapshot, detail.events || [], detail.responses || []);
+      const experimentId = experimentIdOf(detail.protocol_snapshot);
+      let biodb = null;
+      let biodbError = null;
+      try {
+        biodb = await exportBioDBData(cfg, {
+          participantId: detail.participant_id,
+          experimentId,
+          rows: channels,
+          startTime: detail.started_at,
+          endTime: detail.ended_at,
+        });
+      } catch (error) {
+        biodbError = error.message || String(error);
+      }
+      const { files, manifest } = buildJointExportFiles({
+        sessionFiles,
+        biodb,
+        meta: {
+          sessionId: detail.session_id,
+          participantId: detail.participant_id,
+          experimentId,
+          startTime: detail.started_at,
+          endTime: detail.ended_at,
+          baseUrl: cfg.baseUrl || null,
+          channels,
+          biodbError,
+        },
+      });
+      downloadBundle(files, `${detail.participant_id}_joint`);
+      setAlert({
+        title: biodb ? 'Joint export complete' : 'Joint export (PF only)',
+        message: biodb
+          ? (manifest.sources.biodb.sensorPoints
+            ? `${manifest.sources.biodb.sensorPoints} sensor points across ${manifest.sources.biodb.sensorColumns.length} channel(s), ${manifest.sources.biodb.events ?? 0} event(s).`
+            : 'The PF session was exported, but BioDB returned no samples for this window. If you pushed it just now, wait a few seconds and export again.')
+          : `The PF session was archived, but the BioDB leg failed: ${biodbError}`,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const exportAll = async () => {
     setLoading(true);
     try {
@@ -203,7 +270,7 @@ export default function SessionManager() {
           {!listLoading && Boolean(summaries.length) && !filteredSummaries.length && <p>No Sessions match the current filter.</p>}
         </aside>
         <section>
-          {loading ? <p>Loading Session…</p> : detail ? <SessionDetail detail={detail} setDetail={setDetail} onSave={saveReview} onExport={exportData} onExportSimple={exportSimple} onDelete={remove} onPushBioDB={pushToBioDB} /> : <div className="session-placeholder"><b>Select a Session</b><p>The complete event history and answers are stored in the active local storage backend, separate from the lightweight dashboard index.</p></div>}
+          {loading ? <p>Loading Session…</p> : detail ? <SessionDetail detail={detail} setDetail={setDetail} onSave={saveReview} onExport={exportData} onExportSimple={exportSimple} onExportJoint={exportJoint} onDelete={remove} onPushBioDB={pushToBioDB} /> : <div className="session-placeholder"><b>Select a Session</b><p>The complete event history and answers are stored in the active local storage backend, separate from the lightweight dashboard index.</p></div>}
         </section>
       </div>
       {batchProgress && <div className="batch-progress"><span>Exporting {batchProgress.done}/{batchProgress.total} sessions...</span><i style={{ flex: 1 }}><span style={{ width: `${(batchProgress.done / batchProgress.total) * 100}%`, display: 'block', height: '100%', background: 'var(--lime)', borderRadius: 2 }} /></i></div>}
@@ -214,7 +281,7 @@ export default function SessionManager() {
   </>;
 }
 
-function SessionDetail({ detail, setDetail, onSave, onExport, onExportSimple, onDelete, onPushBioDB }) {
+function SessionDetail({ detail, setDetail, onSave, onExport, onExportSimple, onExportJoint, onDelete, onPushBioDB }) {
   const integrity = detail.integrity || {};
   const graphSession = isGraphProtocol(detail.protocol_snapshot);
   return <div className="session-detail">
@@ -227,6 +294,7 @@ function SessionDetail({ detail, setDetail, onSave, onExport, onExportSimple, on
       <button className="primary" onClick={onExportSimple}>Export simplified data</button>
       <button onClick={onExport}>Export complete (advanced)</button>
       <button className="bio-btn" onClick={onPushBioDB} title="Push device samples to BioDB (experiment/participant tags)">Push to BioDB</button>
+      <button className="bio-btn" onClick={onExportJoint} title="Export the PF session together with the BioDB time series, events and experiment metadata">Joint export (BioDB)</button>
     </div>
     <div className="session-metrics">
       <div><b>{detail.events?.length || 0}</b><span>events</span></div>

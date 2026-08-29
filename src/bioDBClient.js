@@ -12,6 +12,7 @@
 //   GET  /events?role=experimenter&start_time&end_time   event list (with event JWT)
 //   GET  /experiment/<id>/dictionary     experiment channel dictionary (with read JWT)
 //   POST /experiment/<id>/dictionary     replace experiment dictionary {dictionary} (with admin JWT)
+//   POST /sensor/data/export             joint envelope -> {sensor, events, experiment} (with read JWT)
 
 export const bioDBDefaultSettings = () => ({
   baseUrl: 'http://localhost:5002',
@@ -146,6 +147,47 @@ export async function pushSessionToBioDB(cfg, opts) {
     }
   }
   return result;
+}
+
+/**
+ * Joint export envelope (D6) — POST /sensor/data/export.
+ * Reads the three BioDB legs in one call: time series (VictoriaMetrics), events
+ * (MongoDB) and experiment metadata (registry, incl. the channel dictionary).
+ * Requires sensor_read; the read JWT window must cover [startTime, endTime].
+ * Returns { sensor, events, experiment } — `events`/`experiment` are null when
+ * the corresponding include flag is off or no experiment is linked.
+ */
+export async function exportBioDBData(cfg, {
+  participantId,
+  experimentId = '',
+  rows = [],
+  startTime,
+  endTime,
+  includeEvents = true,
+  includeExperiment = true,
+  chunkSeconds,
+} = {}) {
+  if (!rows.length) throw new Error('rows (channel list) is required');
+  const start = startTime || new Date(Date.now() - 60000).toISOString();
+  const end = endTime || new Date().toISOString();
+  const jwt = await getBioDBReadJwt(cfg, participantId, { startTime: start, endTime: end });
+  const body = {
+    format: 'json',
+    compression: 'none',
+    rows,
+    start_time: start,
+    end_time: end,
+    include_events: includeEvents,
+    include_experiment: includeExperiment,
+  };
+  if (experimentId) body.experiment_id = experimentId;
+  if (chunkSeconds) body.chunk_seconds = chunkSeconds;
+  const res = await postJSON(`${baseOf(cfg)}/sensor/data/export`, body, jwt);
+  return {
+    sensor: res.sensor ?? null,
+    events: res.events ?? null,
+    experiment: res.experiment ?? null,
+  };
 }
 
 /**
