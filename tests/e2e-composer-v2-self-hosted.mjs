@@ -34,7 +34,16 @@ const waitForChildExit = child => {
 };
 const cleanup = async () => {
   await Promise.all(children.map(waitForChildExit));
-  rmSync(profileDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  // Chromium leaves helper processes that briefly hold the profile directory
+  // even after the main process exits. rmSync's force/retry does not suppress
+  // ENOTEMPTY on Linux, so wrap the call: a leftover temp directory is not
+  // worth failing the run for, and the host OS reaps /tmp on its own.
+  try {
+    rmSync(profileDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  } catch (cleanupError) {
+    if (cleanupError.code !== 'ENOTEMPTY' && cleanupError.code !== 'EBUSY') throw cleanupError;
+    console.warn(`profile directory could not be removed (${cleanupError.code}); it will be reaped by the host.`);
+  }
 };
 process.on('exit', terminateChildren);
 process.on('SIGINT', async () => { await cleanup(); process.exit(130); });

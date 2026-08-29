@@ -45,7 +45,12 @@ const cleanup = async () => {
   children.forEach(child => { if (!child.killed) child.kill('SIGKILL'); });
   await Promise.all(children.map(child => child.exitCode != null ? undefined : new Promise(resolve => { const timer = setTimeout(resolve, 5000); child.once('exit', () => { clearTimeout(timer); resolve(); }); })));
   await new Promise(resolve => apiServer.close(resolve));
-  rmSync(profileDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  try {
+    rmSync(profileDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  } catch (cleanupError) {
+    if (cleanupError.code !== 'ENOTEMPTY' && cleanupError.code !== 'EBUSY') throw cleanupError;
+    console.warn(`profile directory could not be removed (${cleanupError.code}); it will be reaped by the host.`);
+  }
 };
 process.on('exit', () => children.forEach(child => { if (!child.killed) child.kill('SIGKILL'); }));
 

@@ -34,7 +34,12 @@ const waitForChildExit = child => {
 };
 const cleanup = async () => {
   await Promise.all(children.map(waitForChildExit));
-  rmSync(profileDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  try {
+    rmSync(profileDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  } catch (cleanupError) {
+    if (cleanupError.code !== 'ENOTEMPTY' && cleanupError.code !== 'EBUSY') throw cleanupError;
+    console.warn(`profile directory could not be removed (${cleanupError.code}); it will be reaped by the host.`);
+  }
 };
 process.on('exit', terminateChildren);
 process.on('SIGINT', async () => { await cleanup(); process.exit(130); });
