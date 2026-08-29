@@ -328,3 +328,65 @@ export async function deleteBioDBEvent(cfg, { participantId, eventId, startTime,
   if (!resp.ok) throw new Error(data.message || data.detail || `HTTP ${resp.status}`);
   return data;
 }
+
+/* ── D7: server-side analysis (features + models) ─────────────────── */
+
+/**
+ * Per-channel time/frequency features computed by BioDB (D7).
+ * This is the server-side counterpart of the local pipeline in src/analysis/signal:
+ * use it when the data already lives in BioDB and you want the same numbers
+ * without shipping the raw series back to the client.
+ * Returns { total_points, columns: { channel: {...} }, sample_rate_hz }.
+ */
+export async function fetchBioDBFeatures(cfg, { participantId, rows, startTime, endTime, chunkSeconds } = {}) {
+  if (!rows?.length) throw new Error('rows (channel list) is required');
+  const start = startTime || new Date(Date.now() - 60000).toISOString();
+  const end = endTime || new Date().toISOString();
+  const jwt = await getBioDBReadJwt(cfg, participantId, { startTime: start, endTime: end });
+  const body = { format: 'json', compression: 'none', rows, start_time: start, end_time: end };
+  if (chunkSeconds) body.chunk_seconds = chunkSeconds;
+  const res = await postJSON(`${baseOf(cfg)}/sensor/data/features`, body, jwt);
+  if (!res.features) throw new Error(res.message || 'features request returned no features');
+  return res.features;
+}
+
+/**
+ * Train a model in BioDB (D7). `kind` is 'kmeans' or 'regression'.
+ * For regression the LAST entry of `rows` is the target; the rest are features.
+ * Training is recorded as an analysis, so it also appears in listBioDBAnalyses.
+ */
+export async function trainBioDBModel(cfg, kind, { participantId, rows, startTime, endTime, ...params } = {}) {
+  if (!rows?.length) throw new Error('rows (channel list) is required');
+  if (!['kmeans', 'regression'].includes(kind)) throw new Error(`unknown model kind: ${kind}`);
+  if (kind === 'regression' && rows.length < 2) throw new Error('regression needs at least 2 rows (features + target)');
+  const start = startTime || new Date(Date.now() - 60000).toISOString();
+  const end = endTime || new Date().toISOString();
+  const jwt = await getBioDBReadJwt(cfg, participantId, { startTime: start, endTime: end });
+  const body = { rows, start_time: start, end_time: end, ...params };
+  const res = await postJSON(`${baseOf(cfg)}/sensor/analysis/train/${kind}`, body, jwt);
+  return res; // { code, message, model_id, analysis_id, metrics, parameters }
+}
+
+/**
+ * Run a previously trained model over a window (D7).
+ * `rows` must match the training rows in order and count.
+ */
+export async function predictBioDB(cfg, { participantId, modelId, rows, startTime, endTime, chunkSeconds } = {}) {
+  if (!modelId) throw new Error('modelId is required');
+  const start = startTime || new Date(Date.now() - 60000).toISOString();
+  const end = endTime || new Date().toISOString();
+  const jwt = await getBioDBReadJwt(cfg, participantId, { startTime: start, endTime: end });
+  const body = { model_id: modelId, rows, start_time: start, end_time: end };
+  if (chunkSeconds) body.chunk_seconds = chunkSeconds;
+  return postJSON(`${baseOf(cfg)}/sensor/analysis/predict`, body, jwt);
+}
+
+/** Analysis records stored by BioDB (train and predict runs). */
+export async function listBioDBAnalyses(cfg, { participantId, startTime, endTime, limit = 50 } = {}) {
+  const start = startTime || new Date(Date.now() - 86400000).toISOString();
+  const end = endTime || new Date().toISOString();
+  const jwt = await getBioDBReadJwt(cfg, participantId, { startTime: start, endTime: end });
+  const params = new URLSearchParams({ start_time: start, end_time: end, limit: String(limit) });
+  const data = await getJSON(`${baseOf(cfg)}/sensor/analysis/results?${params.toString()}`, jwt);
+  return data.analysis_list || data.results || data.analyses || [];
+}

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildJointExportFiles, channelsForExport, jointDataDictionary, sensorColumns, sensorRowsToObjects, sensorToCsv } from '../src/data/jointExport.js';
+import { runAnalysisPipeline } from '../src/analysis/signal/pipeline.js';
 import { exampleSimulatedConnector, installDeviceConnector } from '../src/devices/index.js';
 import { createProtocolGraph, createSequentialIdFactory } from '../src/core/index.js';
 import { bundle } from '../src/exporter.js';
@@ -114,4 +115,28 @@ test('joint data dictionary describes the added files', () => {
   const dict = jointDataDictionary();
   assert.ok(dict.tables['biodb/sensor_data']);
   assert.ok(dict.notes.some(note => note.includes('UTC')));
+});
+
+test('joint export carries the D7 analysis and lifts its warnings', () => {
+  const sine = Array.from({ length: 101 }, (_, i) => Math.sin(2 * Math.PI * 5 * i / 10));
+  sine[10] = null;
+  const { analysis } = runAnalysisPipeline({ time: Array.from({ length: 101 }, (_, i) => new Date(Date.parse('2026-08-29T10:00:00Z') + i * 100).toISOString()), signal: sine }, { sampleRateHz: 10 });
+  const { files, manifest } = buildJointExportFiles({
+    sessionFiles: sessionFiles(),
+    biodb: { sensor: { time: ['2026-08-29T10:00:00Z'], signal: [0.1] }, events: [], experiment: { experiment_id: 'exp_1' } },
+    analysis,
+    meta: { participantId: 'P', channels: ['signal'] },
+  });
+  assert.equal(manifest.sources.analysis.included, true);
+  assert.equal(manifest.sources.analysis.channels, 1);
+  assert.ok(files['analysis/analysis.json']);
+  assert.ok(files['analysis/analysis.csv'].startsWith('channel,'));
+  // The pipeline's own warning must reach the top-level manifest.
+  assert.ok(manifest.warnings.some(w => w.startsWith('Analysis:') && w.includes('missing sample')));
+});
+
+test('joint export without analysis reports it as absent', () => {
+  const { files, manifest } = buildJointExportFiles({ sessionFiles: sessionFiles(), meta: { participantId: 'P' } });
+  assert.equal(manifest.sources.analysis.included, false);
+  assert.equal(files['analysis/analysis.json'], undefined);
 });

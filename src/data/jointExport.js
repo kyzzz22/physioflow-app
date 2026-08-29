@@ -13,6 +13,7 @@
 //   joint_data_dictionary.json  field descriptions for the merged package
 
 import { channelDataDictionary } from './channelDictionary.js';
+import { analysisColumns, analysisRows } from '../analysis/signal/pipeline.js';
 
 export const JOINT_EXPORT_CONTRACT_VERSION = '1.0.0';
 
@@ -69,10 +70,11 @@ export function channelsForExport(protocol, deviceEvents = []) {
  * biodb:        { sensor, events, experiment } from exportBioDBData; may be null
  *               when the BioDB leg failed, in which case the PF leg is still archived
  *               and the manifest records why.
+ * analysis:     optional { analysis.json, analysis.csv } from runAnalysisPipeline (D7).
  * meta:         { sessionId, participantId, experimentId, startTime, endTime,
  *                 baseUrl, protocol, channels, generatedAt, biodbError }
  */
-export function buildJointExportFiles({ sessionFiles = {}, biodb = null, meta = {} }) {
+export function buildJointExportFiles({ sessionFiles = {}, biodb = null, analysis = null, meta = {} }) {
   const sensor = biodb?.sensor || null;
   const events = biodb?.events || null;
   const experiment = biodb?.experiment || null;
@@ -109,6 +111,11 @@ export function buildJointExportFiles({ sessionFiles = {}, biodb = null, meta = 
         experiment: experiment ? (experiment.experiment_id || experiment.id || null) : null,
         dictionaryIncluded: Boolean(experiment?.dictionary),
       },
+      analysis: {
+        included: Boolean(analysis),
+        channels: analysis ? Object.keys(analysis.channels || {}).length : 0,
+        sampleRateHz: analysis?.sampleRateHz ?? null,
+      },
     },
     warnings: [],
   };
@@ -126,12 +133,19 @@ export function buildJointExportFiles({ sessionFiles = {}, biodb = null, meta = 
   if (biodb && !experiment) {
     manifest.warnings.push('No experiment metadata was returned; the session may not be linked to a registered experiment.');
   }
+  // Surface the analysis pipeline's own warnings (missing samples, unknown rate)
+  // instead of letting them stay buried in analysis.json.
+  for (const warning of analysis?.warnings || []) manifest.warnings.push(`Analysis: ${warning}`);
 
   const files = {
     'joint_manifest.json': JSON.stringify(manifest, null, 2),
     'joint_data_dictionary.json': JSON.stringify(jointDataDictionary(), null, 2),
     ...sessionFiles,
   };
+  if (analysis) {
+    files['analysis/analysis.json'] = JSON.stringify(analysis, null, 2);
+    files['analysis/analysis.csv'] = csv(analysisRows(analysis), analysisColumns(analysisRows(analysis)));
+  }
   if (biodb) {
     files['biodb/sensor_data.csv'] = sensorToCsv(sensor);
     files['biodb/sensor_data.json'] = JSON.stringify(sensor ?? { time: [] }, null, 2);
@@ -163,6 +177,11 @@ export function jointDataDictionary() {
       'biodb/experiment': {
         primaryKey: 'experiment_id',
         description: 'Experiment registry entry, including the channel dictionary attached by D4.',
+      },
+      'analysis/analysis': {
+        primaryKey: 'channel',
+        description: 'D7 pipeline output: per-channel time-domain statistics, band powers, and HRV/EDA features when the channel is recognised as cardiac or electrodermal.',
+        columns: ['channel', 'kind', 'n', 'mean', 'sd', 'min', 'max', 'rms', 'median', 'dominant_frequency_hz', 'missing_samples', 'rejected_samples', 'band_*_relative', 'hrv_*', 'eda_*'],
       },
     },
     notes: [
