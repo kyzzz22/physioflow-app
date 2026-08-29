@@ -60,6 +60,13 @@ export default defineConfig([
         Math: 'readonly',
         Date: 'readonly',
         Error: 'readonly',
+        // Base64 helpers used by the BioDB client. The app targets the browser,
+        // the Tauri webview and Node (tests and CLI), so both spellings exist:
+        // btoa/atob are browser and modern-Node globals, Buffer is the Node
+        // fallback in the same expressions.
+        btoa: 'readonly',
+        atob: 'readonly',
+        Buffer: 'readonly',
         HTMLElement: 'readonly',
         Event: 'readonly',
         PointerEvent: 'readonly',

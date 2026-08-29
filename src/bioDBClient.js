@@ -29,7 +29,7 @@ async function postJSON(url, body, token) {
   if (token) headers.Authorization = `Bearer ${token}`;
   const resp = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
   let data = {};
-  try { data = await resp.json(); } catch (e) { /* keep {} */ }
+  try { data = await resp.json(); } catch { /* keep {} */ }
   if (!resp.ok) throw new Error(data.message || data.detail || `HTTP ${resp.status}`);
   return data;
 }
@@ -39,7 +39,7 @@ async function getJSON(url, token) {
   if (token) headers.Authorization = `Bearer ${token}`;
   const resp = await fetch(url, { method: 'GET', headers });
   let data = {};
-  try { data = await resp.json(); } catch (e) { /* keep {} */ }
+  try { data = await resp.json(); } catch { /* keep {} */ }
   if (!resp.ok) throw new Error(data.message || data.detail || `HTTP ${resp.status}`);
   return data;
 }
@@ -283,7 +283,9 @@ export async function readBioDBData(cfg, { participantId, startTime, endTime, ro
   let parsed;
   try {
     parsed = JSON.parse(b64DecodeUtf8(res.data));
-  } catch (e) {
+  } catch {
+    // The original decode error is intentionally not re-thrown: it can echo back
+    // base64 fragments of participant data.
     throw new Error('failed to decode read payload');
   }
   return parsed && typeof parsed === 'object' ? parsed : { time: [] };
@@ -324,7 +326,7 @@ export async function deleteBioDBEvent(cfg, { participantId, eventId, startTime,
     headers: { Authorization: `Bearer ${jwt}` },
   });
   let data = {};
-  try { data = await resp.json(); } catch (e) { /* keep {} */ }
+  try { data = await resp.json(); } catch { /* keep {} */ }
   if (!resp.ok) throw new Error(data.message || data.detail || `HTTP ${resp.status}`);
   return data;
 }

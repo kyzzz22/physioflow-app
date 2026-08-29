@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from './i18n';
 import { loadSettings } from './fsStorage.js';
 import { listBioDBParticipants, readBioDBData, listBioDBEvents, createBioDBEvent, deleteBioDBEvent } from './bioDBClient.js';
@@ -6,7 +6,6 @@ import MultiChannelChart from './analysis/MultiChannelChart.jsx';
 import FeaturePanel from './analysis/FeaturePanel.jsx';
 import AffectMap from './analysis/AffectMap.jsx';
 import { runAnalysisPipeline } from './analysis/signal/pipeline.js';
-import { affectPoints } from './analysis/chartGeometry.js';
 
 // D8 view switcher for the read-back panel.
 const VIEWS = [
@@ -46,6 +45,12 @@ export default function DataPanel({ settings: propSettings, onClose }) {
   const [maxRows, setMaxRows] = useState(500);
   const [view, setView] = useState('multi');
 
+  // useT() returns a fresh function on every render, so listing `t` as an effect
+  // dependency would refetch participants on each render. Keep it in a ref and
+  // read the latest translator without making the effect depend on it.
+  const tRef = useRef(t);
+  useEffect(() => { tRef.current = t; }, [t]);
+
   useEffect(() => {
     if (settings) return;
     loadSettings()
@@ -64,7 +69,7 @@ export default function DataPanel({ settings: propSettings, onClose }) {
           .filter(Boolean);
         setParticipants(names);
         if (names.length) setParticipantId(prev => prev || names[0]);
-        else setError(t('No participants found'));
+        else setError(tRef.current('No participants found'));
       })
       .catch(err => setError(err.message || String(err)))
       .finally(() => setBusy(false));
