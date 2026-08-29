@@ -2,6 +2,19 @@ import { useEffect, useMemo, useState } from 'react';
 import { useT } from './i18n';
 import { loadSettings } from './fsStorage.js';
 import { listBioDBParticipants, readBioDBData, listBioDBEvents, createBioDBEvent, deleteBioDBEvent } from './bioDBClient.js';
+import MultiChannelChart from './analysis/MultiChannelChart.jsx';
+import FeaturePanel from './analysis/FeaturePanel.jsx';
+import AffectMap from './analysis/AffectMap.jsx';
+import { runAnalysisPipeline } from './analysis/signal/pipeline.js';
+import { affectPoints } from './analysis/chartGeometry.js';
+
+// D8 view switcher for the read-back panel.
+const VIEWS = [
+  { id: 'series', label: 'Single series' },
+  { id: 'multi', label: 'All channels' },
+  { id: 'features', label: 'Features' },
+  { id: 'affect', label: 'Affect map' },
+];
 
 // D3 data management panel: pick a participant + time window, read back sensor
 // data from BioDB into a table / SVG series, and browse the event list.
@@ -31,6 +44,7 @@ export default function DataPanel({ settings: propSettings, onClose }) {
   const [newEventName, setNewEventName] = useState('');
   const [activeChannel, setActiveChannel] = useState('');
   const [maxRows, setMaxRows] = useState(500);
+  const [view, setView] = useState('multi');
 
   useEffect(() => {
     if (settings) return;
@@ -60,6 +74,45 @@ export default function DataPanel({ settings: propSettings, onClose }) {
     if (!data || !data.time || !data.time.length) return [];
     return Object.keys(data).filter(k => k !== 'time');
   }, [data]);
+
+  // Units drive both the channel dispatch in the D7 pipeline and the axis labels
+  // here. Unknown channels simply get no unit suffix.
+  const channelUnits = useMemo(() => {
+    const units = {};
+    for (const ch of channelKeys) {
+      const id = ch.toLowerCase();
+      if (/(eeg|tp9|af7|af8|tp10|aux)/.test(id)) units[ch] = 'uV';
+      else if (/(eda|gsr|electrodermal)/.test(id)) units[ch] = 'uS';
+      else if (/(hr|heart_rate)/.test(id)) units[ch] = 'bpm';
+      else units[ch] = '';
+    }
+    return units;
+  }, [channelKeys]);
+
+  // D8: run the D7 pipeline over the read-back window. Recomputed only when the
+  // data or channel set changes; a failure must not take the panel down.
+  const analysis = useMemo(() => {
+    if (!data || !data.time || !channelKeys.length) return null;
+    try {
+      return runAnalysisPipeline(data, { units: channelUnits }).analysis;
+    } catch {
+      return null;
+    }
+  }, [data, channelKeys, channelUnits]);
+
+  // D8: affect map input. BioDB events carry valence/arousal only when the study
+  // recorded them, so an empty event list legitimately yields an empty map.
+  const affectResponses = useMemo(() => {
+    if (!Array.isArray(events)) return [];
+    return events
+      .map(ev => ({
+        valence: ev.valence ?? ev.v,
+        arousal: ev.arousal ?? ev.a,
+        label: ev.event || ev.event_name || '',
+        start_time: ev.start_time || ev.time,
+      }))
+      .filter(r => r.valence !== undefined || r.arousal !== undefined);
+  }, [events]);
 
   const applyShortcut = ms => {
     const endDt = new Date();
@@ -222,14 +275,48 @@ export default function DataPanel({ settings: propSettings, onClose }) {
 
               {rowCount > 0 && channelKeys.length > 0 && (
                 <div className="d3-chart-block">
-                  <label className="field-label d3-channel-pick">
-                    {t('Series')}
-                    <select className="field-input" value={activeChannel}
-                      onChange={e => setActiveChannel(e.target.value)}>
-                      {channelKeys.map(ch => <option key={ch} value={ch}>{ch}</option>)}
-                    </select>
-                  </label>
-                  <SeriesChart time={data.time} series={data[activeChannel]} channel={activeChannel} />
+                  <div className="d3-shortcuts">
+                    {VIEWS.map(v => (
+                      <button key={v.id} type="button"
+                        className={`qbtn ${view === v.id ? 'qbtn-primary' : ''}`}
+                        onClick={() => setView(v.id)}>{v.label}</button>
+                    ))}
+                  </div>
+
+                  {view === 'series' && (
+                    <>
+                      <label className="field-label d3-channel-pick">
+                        {t('Series')}
+                        <select className="field-input" value={activeChannel}
+                          onChange={e => setActiveChannel(e.target.value)}>
+                          {channelKeys.map(ch => <option key={ch} value={ch}>{ch}</option>)}
+                        </select>
+                      </label>
+                      <SeriesChart time={data.time} series={data[activeChannel]} channel={activeChannel} />
+                    </>
+                  )}
+
+                  {/* D8: all channels overlaid with event markers, hover readout and zoom. */}
+                  {view === 'multi' && (
+                    <MultiChannelChart
+                      times={data.time}
+                      series={Object.fromEntries(channelKeys.map(ch => [ch, data[ch] || []]))}
+                      events={events || []}
+                      units={channelUnits}
+                    />
+                  )}
+
+                  {/* D8: D7 pipeline output for the same window. */}
+                  {view === 'features' && (
+                    analysis
+                      ? <FeaturePanel analysis={analysis} title={t('Channel analysis')} />
+                      : <div className="viz-empty">{t('No analysis results')}</div>
+                  )}
+
+                  {/* D8: valence/arousal circumplex, fed from the event list. */}
+                  {view === 'affect' && (
+                    <AffectMap responses={affectResponses} scale="sam" />
+                  )}
                 </div>
               )}
 

@@ -679,3 +679,67 @@
 .dark-mode .d3-del { color: #ff8a86; border-color: #7a3b34; }
 .dark-mode .d3-chart { background: var(--paper); }
 .dark-mode .d3-table th { background: var(--paper); }
+
+/* ── Visualisation (D8) ── */
+.viz-chart, .viz-live, .viz-affect, .viz-features { margin: .6rem 0 1rem; }
+.viz-svg { width: 100%; height: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--paper-soft); }
+.viz-plot-bg { fill: transparent; }
+.viz-grid { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 4; }
+.viz-axis { stroke: #9aa4a0; stroke-width: 1; }
+.viz-axis-text { font-size: 9px; fill: #7b867f; }
+.viz-line { stroke-linejoin: round; stroke-linecap: round; }
+.viz-area { opacity: .1; }
+.viz-brush { fill: rgba(59, 130, 246, .16); stroke: #3b82f6; stroke-dasharray: 3 3; }
+.viz-cursor line { stroke: #f97316; stroke-width: 1; stroke-dasharray: 2 3; }
+.viz-marker line { stroke: #8b5cf6; stroke-width: 1; stroke-dasharray: 2 4; }
+.viz-marker text { font-size: 8px; fill: #8b5cf6; }
+.viz-legend { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin-bottom: .35rem; font-size: .74rem; }
+.viz-legend-item { display: inline-flex; align-items: center; gap: .3rem; }
+.viz-legend-item i, .viz-readout-item i, .viz-band-legend i, .viz-swatch {
+  width: 9px; height: 9px; border-radius: 2px; display: inline-block;
+}
+.viz-zoom-reset { padding: .15rem .5rem; font-size: .7rem; }
+.viz-readout {
+  display: flex; flex-wrap: wrap; gap: .7rem; margin-top: .35rem;
+  font-size: .72rem; font-variant-numeric: tabular-nums; color: #55605b;
+}
+.viz-readout-item { display: inline-flex; align-items: center; gap: .25rem; }
+.viz-readout-time { color: #7b867f; }
+.viz-empty { padding: 1rem; font-size: .78rem; color: #7b867f; text-align: center; border: 1px dashed var(--line); border-radius: 10px; }
+
+.viz-live-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: .35rem; }
+.viz-live-title { font-size: .78rem; font-weight: 700; }
+
+/* ── Feature panel (D8) ── */
+.viz-features-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: .4rem; }
+.viz-features-head h4 { margin: 0; font-size: .85rem; }
+.viz-muted { font-size: .72rem; color: #7b867f; }
+.viz-feature-card { border: 1px solid var(--line); border-radius: 10px; padding: .6rem .7rem; margin-bottom: .6rem; }
+.viz-feature-card header { display: flex; align-items: center; gap: .4rem; margin-bottom: .4rem; }
+.viz-feature-card header b { font-size: .8rem; }
+.viz-kind { font-size: .68rem; color: #7b867f; border: 1px solid var(--line); border-radius: 999px; padding: .05rem .4rem; }
+.viz-metric-row { display: flex; flex-wrap: wrap; gap: .5rem .9rem; }
+.viz-metric { display: inline-flex; align-items: baseline; gap: .25rem; font-size: .72rem; font-variant-numeric: tabular-nums; }
+.viz-metric em { font-style: normal; color: #7b867f; }
+.viz-metric small { color: #7b867f; }
+.viz-block { margin-top: .5rem; }
+.viz-block h5 { margin: 0 0 .3rem; font-size: .74rem; color: #55605b; }
+.viz-note { margin: .35rem 0 0; font-size: .7rem; color: #7b867f; }
+.viz-warnings { margin: .3rem 0 .5rem; padding-left: 1.1rem; font-size: .7rem; color: #9a6700; }
+.viz-bandbar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--line); }
+.viz-band { height: 100%; }
+.viz-band-legend { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .25rem; font-size: .68rem; color: #55605b; }
+.viz-band-legend span { display: inline-flex; align-items: center; gap: .25rem; }
+
+/* ── Affect map (D8) ── */
+.viz-quadrant { fill: rgba(59, 130, 246, .05); }
+.viz-quadrant-label { font-size: 9px; fill: #9aa4a0; text-anchor: middle; }
+.viz-trajectory { stroke: #94a3b8; stroke-width: 1; stroke-dasharray: 3 3; }
+.viz-affect-point { cursor: pointer; stroke: #fff; stroke-width: 1; }
+.viz-affect-foot { display: flex; flex-wrap: wrap; gap: .8rem; margin-top: .35rem; font-size: .72rem; color: #55605b; }
+
+.dark-mode .viz-svg { background: var(--paper); }
+.dark-mode .viz-axis-text, .dark-mode .viz-readout-time, .dark-mode .viz-note,
+.dark-mode .viz-muted, .dark-mode .viz-kind { color: #93a39a; fill: #93a39a; }
+.dark-mode .viz-axis { stroke: #5b675f; }
+.dark-mode .viz-warnings { color: #e3b341; }
