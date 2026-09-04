@@ -3,9 +3,9 @@
 > 适用范围：排除「正式可用性研究（真人被试）」之外的工程化与产品化优化。
 > 目标分支：`demo` · 关联文档：`IMPLEMENTATION_STATUS.md`、`COMPOSER_V2_GAP_ANALYSIS.md`、`RELEASE_CHECKLIST.md`
 
-## 0. 状态快照（2026-09-04 · v0.6.0-beta.3 发布候选已构建）
+## 0. 状态快照（2026-09-04 · v0.6.0-beta.3 已发布）
 
-- 已发布 research-test 构建 `v0.6.0-beta.1` / `v0.6.0-beta.2`；`v0.6.0-beta.3`（current-user、EN/JA/zh-Hans 多语言 NSIS）发布候选已构建，等待 tag 与 GitHub Release 同步。
+- 已发布 research-test 构建 `v0.6.0-beta.1` / `v0.6.0-beta.2` / `v0.6.0-beta.3`；beta.3 的 `demo`、tag 与 GitHub prerelease 已同步，包含 current-user、EN/JA/zh-Hans 多语言 NSIS、`SHA256SUMS.txt` 与 `RELEASE_NOTES_ja.md`。
 - `npm test`：**332 项合计 / 331 通过 / 1 跳过（win32 symlink 助手）**；`npm run lint` 0 警告；`npm run build` 通过。
 - 浏览器门：`.playwright-cli/verify-interactions.cjs` 与 `tests/e2e-composer-v2-self-hosted.mjs` 本地全绿（Windows 需设置 `CHROME_BIN`）。
 - 工作包状态：**W1 ✓ · W2 ✓ · W3 ⏳（拆分仍遗留，见 §9-P1）· W4 ✓ · W5 ✓**；各小节 `[x]` 均已合并到 `demo`。
