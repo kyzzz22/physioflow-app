@@ -9,7 +9,7 @@ Download the desktop app — no browser, no terminal, just double-click:
 | Platform | Download | Version |
 |----------|----------|---------|
 | **Windows** | [PhysioFlow-Setup.exe](https://github.com/kyzzz22/physioflow-app/releases/latest/download/PhysioFlow_0.6.0-beta.1_x64-setup.exe) | v0.6.0-beta.1 |
-| **macOS** | [PhysioFlow.dmg](https://github.com/kyzzz22/physioflow-app/releases/latest) | v0.4.0 |
+| **macOS** | [PhysioFlow.dmg](https://github.com/kyzzz22/physioflow-app/releases/latest) | v0.6.0-beta.1 *(macOS build pending)* |
 
 The desktop app stores data directly in `~/Documents/PhysioFlow Data` (macOS) or `Documents\PhysioFlow Data` (Windows). Click **Open folder** on the dashboard to reveal it in Finder/File Explorer.
 
@@ -129,7 +129,7 @@ npm run desktop:dev  # Tauri hot-reload
 npm run desktop:build  # → src-tauri/target/release/bundle/
 
 # Tests & lint
-npm test             # 153 automated tests
+npm test             # 325 automated tests (1 skipped on Windows: symlink helper)
 npm run lint         # ESLint
 npm run quality:release  # build + lint + all tests and browser gates
 ```

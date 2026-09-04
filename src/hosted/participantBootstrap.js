@@ -32,13 +32,32 @@ function safeDeliveryUrl(value) {
   return null;
 }
 
+// Render-time acceptability for a participant-facing media source. This is deliberately
+// wider than `safeDeliveryUrl` (which still guards hosted bootstrap delivery): besides
+// https/localhost it admits `blob:` object URLs the app itself creates for uploaded local
+// media (origin-scoped, cannot be forged cross-origin) and `data:` URIs (inert as an
+// <img>/<video>/<audio> src). These match the URL set the composer validator already
+// accepts (composer/toolbox.js `isValidMediaUrl`).
+function isRenderableMediaUrl(value) {
+  if (typeof value !== 'string') return false;
+  if (safeDeliveryUrl(value) !== null) return true;
+  const colon = value.indexOf(':');
+  if (colon < 0) return false;
+  const scheme = value.slice(0, colon).toLowerCase();
+  return scheme === 'blob' || scheme === 'data';
+}
+
 export function resolveParticipantResourceUrl(resources, { assetId = null, nodeId = null, fallbackUrl = '' } = {}) {
-  if (!Array.isArray(resources)) return fallbackUrl;
+  if (!Array.isArray(resources)) return isRenderableMediaUrl(fallbackUrl) ? fallbackUrl : '';
   const resource = assetId
     ? resources.find(item => item.assetId === assetId)
     : resources.find(item => item.nodeId === nodeId);
-  if (!resource || resource.status !== 'ready') return '';
-  return safeDeliveryUrl(resource.delivery?.url) || '';
+  const delivered = resource?.status === 'ready' ? resource.delivery?.url : null;
+  if (isRenderableMediaUrl(delivered)) return delivered;
+  // No usable delivered resource (missing / not ready / unsafe URL): fall back to the
+  // node's typed source URL when it is renderable, so a directly-typed https URL or a
+  // blob object URL still previews and runs locally without a hosted resource entry.
+  return isRenderableMediaUrl(fallbackUrl) ? fallbackUrl : '';
 }
 
 function protocolResources(protocol) {

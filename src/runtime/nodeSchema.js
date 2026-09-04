@@ -37,16 +37,34 @@ export function configFromParticipantUi(node, ui) {
   const config = { ...node.config, ui };
   if (node.component.type === 'display.media') {
     const media = findUiElement(ui.root, 'Media');
-    if (media) Object.assign(config, { mediaType: media.props?.mediaType || 'image', sourceUrl: media.props?.sourceUrl || '', assetId: media.props?.assetId || config.assetId || null });
+    // Keep existing config values when the UI element does not carry them, so a builder
+    // commit never blanks a typed/pooled source the element isn't currently showing.
+    if (media) Object.assign(config, {
+      mediaType: media.props?.mediaType || config.mediaType || 'image',
+      sourceUrl: media.props?.sourceUrl || config.sourceUrl || '',
+      assetId: media.props?.assetId || config.assetId || null,
+    });
+  } else if (node.component.type === 'display.screen') {
+    // The builder's heading Text and the inspector "Screen content" field are one value.
+    const heading = findUiElement(ui.root, 'Text');
+    if (heading?.props?.variant === 'heading') config.content = heading.props?.text || '';
   } else if (node.component.type === 'input.rating') {
     const input = findUiElement(ui.root, 'Input');
-    if (input) Object.assign(config, { min: Number(input.props?.min ?? 1), max: Number(input.props?.max ?? 7), required: input.props?.required !== false });
+    if (input) Object.assign(config, {
+      min: Number(input.props?.min ?? config.min ?? 1),
+      max: Number(input.props?.max ?? config.max ?? 7),
+      required: input.props?.required === undefined ? config.required !== false : input.props.required !== false,
+    });
   } else if (node.component.type === 'input.text') {
     const input = findUiElement(ui.root, 'Input');
-    if (input) Object.assign(config, { placeholder: input.props?.placeholder || '', required: Boolean(input.props?.required), multiline: input.props?.inputType === 'textarea' });
+    if (input) Object.assign(config, {
+      placeholder: input.props?.placeholder ?? config.placeholder ?? '',
+      required: input.props?.required === undefined ? Boolean(config.required) : Boolean(input.props.required),
+      multiline: input.props?.inputType === undefined ? Boolean(config.multiline) : input.props.inputType === 'textarea',
+    });
   } else if (node.component.type === 'stimulus.custom-html') {
     const html = findUiElement(ui.root, 'Html');
-    if (html) config.html = html.props?.html || '';
+    if (html) config.html = html.props?.html || config.html || '';
   }
   return config;
 }
@@ -124,6 +142,16 @@ export function schemaForNode(node, definition, resources) {
     const schema = structuredClone(node.config?.ui || participantUiTemplate('html'));
     const htmlElement = findUiElement(schema.root, 'Html');
     if (htmlElement && node.config?.html) htmlElement.props = { ...htmlElement.props, html: node.config.html };
+    return schema;
+  }
+  if (node.component.type === 'display.screen' && node.config?.content) {
+    // The inspector "Screen content" field is the source of the participant-facing
+    // heading. Mirror the attention-check branch: project content onto the stored UI
+    // clone (the designer's other authored children are preserved), but only when
+    // content is set so an empty default never clobbers custom heading text.
+    const schema = structuredClone(node.config?.ui || participantUiTemplate('instruction'));
+    const heading = findUiElement(schema.root, 'Text');
+    if (heading?.props?.variant === 'heading') heading.props = { ...heading.props, text: node.config.content };
     return schema;
   }
   if (adapter === 'screen' || adapter === 'schema') return structuredClone(node.config?.ui || participantUiTemplate('instruction'));

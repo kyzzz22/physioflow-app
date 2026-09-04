@@ -2,6 +2,20 @@
 
 All notable changes to PhysioFlow are documented in this file.
 
+## Unreleased — code fixes before the researcher test round
+
+### Changed
+
+- 刺激随机分配改为按「已完成的呈现次数」推进：操作员 Retry 会重新呈现同一个刺激（不推进），循环再次进入节点时才抽下一张；单节点循环按整池顺序不重复抽取，耗尽后按同一顺序循环。`stimulus_assigned` 的 `attempt` 现在表示该节点「第几次呈现」（presentation ordinal）；原始进入/重试次数仍记录在 `component_entered` / `component_retried` / `component_completed` 事件中。
+
+### Fixed
+
+- 修复本地上传媒体与直接填写的 URL 在 Runtime V2 与 Composer V2 预览中显示 “Media source not configured”：渲染期解析现在接受应用自身生成的 `blob:` 对象 URL 与 `data:` URI，并在没有资源条目时回退到节点上直接填写的 `sourceUrl`；托管交付校验（`safeDeliveryUrl`）保持严格不变。
+- 修复 `display.screen` 节点 Inspector 的「Screen content」字段修改后不生效的问题（现在与参与者界面的标题 Text 双向同步）。
+- 修复 Participant UI 提交会清空已填写的媒体 URL/类型/范围等配置的问题（现在在 UI 元素未携带该值时保留节点原有配置）。
+
+---
+
 ## [0.6.0-beta.1] — 2026-09-04
 
 ### Added

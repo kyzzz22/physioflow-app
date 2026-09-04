@@ -338,6 +338,37 @@ test('participant UI edits synchronize specialized runtime configuration', () =>
   assert.deepEqual({ min: ratingConfig.min, max: ratingConfig.max, required: ratingConfig.required }, { min: 2, max: 9, required: false });
 });
 
+test('builder commit keeps a typed media source when the UI element omits it', () => {
+  const mediaUi = participantUiTemplate('media');
+  const mediaElement = mediaUi.root.children.find(element => element.type === 'Media');
+  mediaElement.props = { ...mediaElement.props, mediaType: undefined, sourceUrl: undefined, assetId: 'asset_9' };
+  const mediaConfig = configFromParticipantUi({ component: { type: 'display.media' }, config: { sourceUrl: 'https://example.com/typed.png', mediaType: 'image', assetId: null } }, mediaUi);
+  assert.equal(mediaConfig.sourceUrl, 'https://example.com/typed.png', 'a typed source URL must survive a builder commit');
+  assert.equal(mediaConfig.mediaType, 'image', 'a typed media type must survive a builder commit');
+  assert.equal(mediaConfig.assetId, 'asset_9');
+});
+
+test('display.screen maps the inspector content field into the rendered heading', () => {
+  const registry = createCoreComponentRegistry();
+  const definition = registry.get('display.screen');
+  const node = { id: 's_1', component: { type: 'display.screen', version: '1.0.0' }, label: 'Screen', config: { content: 'Instructions here', ui: participantUiTemplate('instruction'), completion: { mode: 'manual' } } };
+  const schema = schemaForNode(node, definition, null);
+  const heading = schema.root.children.find(child => child.type === 'Text' && child.props?.variant === 'heading');
+  assert.equal(heading.props.text, 'Instructions here', 'Screen content must be visible to the participant');
+});
+
+test('display.screen builder heading syncs back into content and stays visible', () => {
+  const definition = createCoreComponentRegistry().get('display.screen');
+  const ui = participantUiTemplate('instruction');
+  const heading = ui.root.children.find(child => child.type === 'Text' && child.props?.variant === 'heading');
+  heading.props = { ...heading.props, text: 'Thank you for participating' };
+  const config = configFromParticipantUi({ component: { type: 'display.screen' }, config: {} }, ui);
+  assert.equal(config.content, 'Thank you for participating', 'the builder heading must round-trip into content');
+  const schema = schemaForNode({ id: 's_1', component: { type: 'display.screen', version: '1.0.0' }, label: 'Screen', config: { ...config, completion: { mode: 'manual' } } }, definition, null);
+  const rendered = schema.root.children.find(child => child.type === 'Text' && child.props?.variant === 'heading');
+  assert.equal(rendered.props.text, 'Thank you for participating', 'content must render after the round-trip');
+});
+
 test('fixation inspector exposes manual/fixed completion modes', () => {
   const registry = createCoreComponentRegistry();
   const definition = registry.get('stimulus.fixation');

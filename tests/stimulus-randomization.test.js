@@ -41,8 +41,36 @@ test('stimulus pools keep fixed slots and assign assets reproducibly without rep
 
   const repeatedSlotProtocol = fixture();
   repeatedSlotProtocol.graph.nodes = repeatedSlotProtocol.graph.nodes.filter(node => node.id === 'slot-1' || node.component.type !== 'display.media');
-  const draws = [1, 2, 3].map(attempt => resolveStimulusAssignments(repeatedSlotProtocol, 'session-seed', { 'slot-1': attempt }).get('slot-1').assetId);
-  assert.equal(new Set(draws).size, 3, 'a looped media node draws without replacement before the pool repeats');
+  const draws = [0, 1, 2].map(prior => resolveStimulusAssignments(repeatedSlotProtocol, 'session-seed', { 'slot-1': prior }).get('slot-1').assetId);
+  assert.equal(new Set(draws).size, 3, 'a looped media node draws the whole pool without replacement before it repeats');
+  const recycled = resolveStimulusAssignments(repeatedSlotProtocol, 'session-seed', { 'slot-1': 3 }).get('slot-1').assetId;
+  assert.equal(recycled, draws[0], 'the pool cycles again in the same order after exhaustion');
+});
+
+test('a retry re-presents the same stimulus; a completed forward re-entry draws the next', () => {
+  // A single media node repeated by a loop: its k-th forward presentation is the k-th
+  // pool item, and a retry of an un-completed occurrence must not advance to another.
+  const protocol = fixture();
+  protocol.graph.nodes = protocol.graph.nodes.filter(node => node.id === 'slot-1' || node.component.type !== 'display.media');
+  const slot = 'slot-1';
+  const first = resolveStimulusAssignments(protocol, 'seed', { [slot]: 0 }).get(slot);
+  const retried = resolveStimulusAssignments(protocol, 'seed', { [slot]: 0 }).get(slot);
+  assert.equal(retried.assetId, first.assetId, 'an operator retry (un-completed occurrence) keeps the same stimulus');
+  assert.equal(retried.attempt, 1, 'the presentation ordinal does not advance on retry');
+  const advanced = resolveStimulusAssignments(protocol, 'seed', { [slot]: 1 }).get(slot);
+  assert.notEqual(advanced.assetId, first.assetId, 'completing and re-entering draws the next stimulus');
+  assert.equal(advanced.attempt, 2, 'the completed re-entry is the second presentation');
+});
+
+test('session preview equals the runtime first-pass assignment (all occurrences ordinal 1)', () => {
+  const protocol = fixture();
+  const preview = resolveStimulusAssignments(protocol, 'session-seed');
+  const firstPass = resolveStimulusAssignments(protocol, 'session-seed', { 'slot-1': 0, 'slot-2': 0, 'slot-3': 0 });
+  assert.deepEqual(
+    [...preview.entries()].map(([nodeId, assignment]) => [nodeId, assignment.assetId]),
+    [...firstPass.entries()].map(([nodeId, assignment]) => [nodeId, assignment.assetId]),
+    'the setup preview shows exactly what the runtime will present on the first pass',
+  );
 });
 
 test('assigned media schema renders the selected asset and validation rejects undersized pools', () => {

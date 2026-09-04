@@ -55,6 +55,16 @@ test('participant bootstrap verifies the frozen protocol and exposes only safe r
   assert.match((await validateParticipantBootstrap(tampered)).errors.join('\n'), /protocol hash|bootstrap content/i);
 });
 
+test('render resolver serves blob object URLs and falls back to a directly typed source URL', () => {
+  const resources = [
+    { resourceId: 'r_local', kind: 'asset', assetId: 'asset_local', nodeId: null, name: 'Local upload', mediaType: 'image', checksum: null, status: 'ready', delivery: { url: 'blob:https://app.example/uuid' } },
+  ];
+  assert.equal(resolveParticipantResourceUrl(resources, { assetId: 'asset_local', fallbackUrl: '' }), 'blob:https://app.example/uuid', 'an uploaded asset delivered as a blob object URL must render');
+  assert.equal(resolveParticipantResourceUrl(resources, { assetId: 'asset_missing', fallbackUrl: 'https://example.com/typed.png' }), 'https://example.com/typed.png', 'a directly typed URL must fall back when no resource entry exists');
+  assert.equal(resolveParticipantResourceUrl(resources, { assetId: 'asset_missing', fallbackUrl: 'data:image/png;base64,AAAA' }), 'data:image/png;base64,AAAA', 'data URIs are renderable media sources');
+  assert.equal(resolveParticipantResourceUrl(resources, { assetId: 'asset_missing', fallbackUrl: 'javascript:alert(1)' }), '', 'an unsafe fallback stays blocked');
+});
+
 test('anonymous HTTP launch redemption yields a scoped client that downloads a valid bootstrap', async () => {
   const { bundle } = await fixture();
   const service = new LocalHostedExecutionService(serviceOptions());

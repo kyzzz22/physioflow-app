@@ -80,7 +80,15 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
   const nodeEnteredAt = useRef(performance.now());
   const nodes = useMemo(() => new Map(protocol.graph.nodes.map(node => [node.id, node])), [protocol]);
   const currentNode = runtime.currentNodeId ? nodes.get(runtime.currentNodeId) : null;
-  const stimulusAssignments = useMemo(() => resolveStimulusAssignments(protocol, runtime.randomSeed, runtime.attempts), [protocol, runtime.randomSeed, runtime.attempts]);
+  // A node's draw is keyed to how many of its occurrences already completed (a retry does
+  // not complete the node, so it re-presents the same stimulus; a loop re-entry follows a
+  // completion and advances to the next item).
+  const priorPresentations = useMemo(() => {
+    const counts = {};
+    for (const nodeId of runtime.completedNodeIds || []) counts[nodeId] = (counts[nodeId] || 0) + 1;
+    return counts;
+  }, [runtime.completedNodeIds]);
+  const stimulusAssignments = useMemo(() => resolveStimulusAssignments(protocol, runtime.randomSeed, priorPresentations), [protocol, runtime.randomSeed, priorPresentations]);
   const currentStimulusAssignment = currentNode ? stimulusAssignments.get(currentNode.id) : null;
   const presentedNode = currentNode ? withStimulusAssignment(currentNode, currentStimulusAssignment) : null;
   const currentDefinition = currentNode ? registry.get(currentNode.component.type, currentNode.component.version) : null;

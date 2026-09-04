@@ -31,8 +31,19 @@ export function stimulusPoolOf(node, protocol) {
   };
 }
 
-/** Assign pool assets to fixed media nodes for one session. */
-export function resolveStimulusAssignments(protocol, randomSeed, attempts = {}) {
+/**
+ * Assign pool assets to fixed media nodes for one session.
+ *
+ * @param protocol          frozen/draft protocol graph
+ * @param randomSeed        session seed (protocolId:version:sessionId)
+ * @param priorPresentations per-node count of already-completed forward presentations.
+ *   A node's draw is keyed to its *presentation ordinal* (prior + 1), NOT to raw entry
+ *   attempts: an operator retry re-presents the same un-completed occurrence (prior
+ *   count unchanged) so it keeps the same stimulus, while a loop re-entry follows a
+ *   completion and advances to the next item. drawIndex keeps sibling slots distinct
+ *   (index + (ordinal - 1) * entries.length) and cycles the pool after exhaustion.
+ */
+export function resolveStimulusAssignments(protocol, randomSeed, priorPresentations = {}) {
   const assets = new Map((protocol?.assets || []).map(asset => [asset.id || asset.assetId, asset]));
   const groups = new Map();
   for (const node of protocol?.graph?.nodes || []) {
@@ -47,14 +58,14 @@ export function resolveStimulusAssignments(protocol, randomSeed, attempts = {}) 
   for (const [group, entries] of groups) {
     const assetIds = shuffle(entries[0].pool.assetIds, `${randomSeed}:${group}`);
     entries.forEach(({ node }, index) => {
-      const attempt = Math.max(1, Number(attempts[node.id] || 1));
-      const drawIndex = index + (attempt - 1) * entries.length;
+      const ordinal = (Number(priorPresentations[node.id] || 0)) + 1;
+      const drawIndex = index + (ordinal - 1) * entries.length;
       const assetId = assetIds[drawIndex % assetIds.length];
       const asset = assets.get(assetId);
       if (!asset) return;
       assignments.set(node.id, {
         group,
-        attempt,
+        attempt: ordinal,
         drawIndex,
         assetId,
         sourceUrl: asset.sourceUrl || asset.url || '',
