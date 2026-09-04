@@ -3,7 +3,7 @@
 // Fallback mode: browser localStorage + IndexedDB when a folder is not selected.
 
 import { loadSessionDetail, saveSessionDetail, deleteSessionDetail, saveCurrentDetail, loadCurrentDetail, clearCurrentDetail } from './dataStore.js';
-import { loadAsset, saveAsset as idbSaveAsset, verifyProtocolAssets as verifyAssets } from './assetStore.js';
+import { loadAsset, saveAsset as idbSaveAsset, verifyGraphProtocolAssets, verifyProtocolAssets as verifyAssets } from './assetStore.js';
 import { bundle as exporterBundle } from './exporter.js';
 import { withSessionIntegrity } from './sessionReview.js';
 import { isGraphProtocol, projectIdOf, protocolCreatedAtOf, protocolIdOf } from './core/protocolSelectors.js';
@@ -163,14 +163,20 @@ export async function saveSession(session) {
     return;
   }
 
+  let summarySaved = false;
+  let detailSaved = false;
+  let summaryError = null;
+  let detailError = null;
   try {
     const summaries = JSON.parse(localStorage.getItem('physioflow.sessions.v2') || '[]')
       .filter(s => s.session_id !== prepared.session_id);
     summaries.push(sessionSummary(prepared, folder));
     localStorage.setItem('physioflow.sessions.v2', JSON.stringify(summaries));
-  } catch (err) { console.warn('Failed to sync session summary:', err); }
+    summarySaved = true;
+  } catch (err) { summaryError = err; console.warn('Failed to sync session summary:', err); }
 
-  try { await saveSessionDetail(prepared); } catch (err) { console.warn('IndexedDB session save failed:', err); }
+  try { await saveSessionDetail(prepared); detailSaved = true; } catch (err) { detailError = err; console.warn('IndexedDB session save failed:', err); }
+  if (!summarySaved || !detailSaved) throw new Error(`Session save is incomplete: ${detailError?.message || summaryError?.message || 'browser storage unavailable'}`);
 }
 
 export async function loadSessions() {
@@ -297,6 +303,7 @@ export async function loadAssetFile(id) {
 }
 
 export async function verifyProtocolAssets(protocol) {
+  if (isGraphProtocol(protocol)) return verifyGraphProtocolAssets(protocol, loadAssetFile);
   if (!(await hasWorkspace())) return verifyAssets(protocol);
   const issues = [];
   const resources = [

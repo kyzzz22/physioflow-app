@@ -68,7 +68,7 @@ export default function ParticipantRenderer({ schema, context = {}, onSubmit, on
     if (element.type === 'Html') {
       const html = boundProp(element, 'html', context) || '';
       if (!html) return <div key={element.id} className="participant-ui-html missing" style={positioned}>No HTML content</div>;
-      return <iframe key={element.id} className="participant-ui-html" title="Custom HTML" srcDoc={html} style={positioned} sandbox="allow-same-origin" />;
+      return <iframe key={element.id} className="participant-ui-html" title="Custom HTML" srcDoc={html} style={positioned} sandbox="" />;
     }
     if (element.type === 'Divider') {
       const orientation = props.orientation || 'horizontal';

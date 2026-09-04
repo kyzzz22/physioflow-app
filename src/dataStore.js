@@ -56,10 +56,10 @@ async function remove(store, key) {
   });
 }
 
-export const saveSessionDetail = async (session) => { try { await put(SESSIONS, session); } catch (err) { console.warn('Failed to save session detail:', err); } };
+export const saveSessionDetail = async (session) => put(SESSIONS, session);
 export const loadSessionDetail = async (sessionId) => { try { return await get(SESSIONS, sessionId); } catch (err) { console.warn('Failed to load session detail:', err); return null; } };
 export const deleteSessionDetail = async (sessionId) => { try { await remove(SESSIONS, sessionId); } catch (err) { console.warn('Failed to delete session detail:', err); } };
-export const saveCurrentDetail = async (snapshot) => { try { await put(CURRENT, { ...snapshot, id: 'active' }); } catch (err) { console.warn('Failed to save current run:', err); } };
+export const saveCurrentDetail = async (snapshot) => put(CURRENT, { ...snapshot, id: 'active' });
 export const loadCurrentDetail = async () => {
   try {
     const value = await get(CURRENT, 'active');

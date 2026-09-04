@@ -3,10 +3,10 @@
 > 适用范围：排除「正式可用性研究（真人被试）」之外的工程化与产品化优化。
 > 目标分支：`demo` · 关联文档：`IMPLEMENTATION_STATUS.md`、`COMPOSER_V2_GAP_ANALYSIS.md`、`RELEASE_CHECKLIST.md`
 
-## 0. 状态快照（2026-09-04 · v0.6.0-beta.2 已发布）
+## 0. 状态快照（2026-09-04 · v0.6.0-beta.3 发布候选已构建）
 
-- 已发布 research-test 构建 `v0.6.0-beta.1` / `v0.6.0-beta.2`（current-user、EN/JA/zh-Hans 多语言 NSIS）。`v0.6.0-beta.2` tag 与 GitHub Release 已同步，附安装包 + `SHA256SUMS.txt` + `RELEASE_NOTES_ja.md`。
-- `npm test`：**330 通过 / 1 跳过（win32 symlink 助手）**；`npm run lint` 0 警告；`npm run build` 通过。
+- 已发布 research-test 构建 `v0.6.0-beta.1` / `v0.6.0-beta.2`；`v0.6.0-beta.3`（current-user、EN/JA/zh-Hans 多语言 NSIS）发布候选已构建，等待 tag 与 GitHub Release 同步。
+- `npm test`：**332 项合计 / 331 通过 / 1 跳过（win32 symlink 助手）**；`npm run lint` 0 警告；`npm run build` 通过。
 - 浏览器门：`.playwright-cli/verify-interactions.cjs` 与 `tests/e2e-composer-v2-self-hosted.mjs` 本地全绿（Windows 需设置 `CHROME_BIN`）。
 - 工作包状态：**W1 ✓ · W2 ✓ · W3 ⏳（拆分仍遗留，见 §9-P1）· W4 ✓ · W5 ✓**；各小节 `[x]` 均已合并到 `demo`。
 - 0.6.0-beta.2 关键体验修复（已合入）：Participant UI 拖动“自动整齐转自由”+ Auto arrange；缩放坐标换算统一；Inspector 去杂（首组默认展开、Records/刺激池仅非 Quick、Wait/Questionnaire 全屏仅预览）。
@@ -14,7 +14,7 @@
 
 ## 1. 背景与总体目标
 
-重构阶段 0–6 已全部落地，CI 质量门保持绿色，330 项自动化测试通过，本地性能目标达标（500 节点校验/编辑 ~36ms、1 万事件导出 ~39ms）。本计划聚焦于剩余工程化短板与产品化差距；原始 5 个工作包（W1–W5）见下，2026-09 之后的后续优化见「§9」。下述各小节保留原始勾选状态作为历史，当前以 §0 / §9 为准。
+重构阶段 0–6 已全部落地，CI 质量门保持绿色，332 项自动化测试中 331 项通过、1 项跳过，本地性能目标达标（500 节点校验/编辑 ~36ms、1 万事件导出 ~39ms）。本计划聚焦于剩余工程化短板与产品化差距；原始 5 个工作包（W1–W5）见下，2026-09 之后的后续优化见「§9」。下述各小节保留原始勾选状态作为历史，当前以 §0 / §9 为准。
 
 | 编号 | 工作包 | 类型 | 优先级 |
 |------|--------|------|--------|
@@ -37,7 +37,7 @@
 - 内容涉及：ComposerV2 拖拽连线、Escape 键语义修复、交互验证脚本与 `test:interactions` 脚本入口
 
 ### 任务
-- [x] 本地执行 `npm run quality:release`（单元测试 + 构建 + 零警告 lint + 3 条浏览器 E2E）——win32 全绿（330 pass + 1 symlink 跳过 / build / lint 0 / 3×E2E，需先设置 `CHROME_BIN`）
+- [x] 本地执行 `npm run quality:release`（单元测试 + 构建 + 零警告 lint + 3 条浏览器 E2E）——win32 全绿（332 total / 331 pass / 1 symlink 跳过 / build / lint 0 / 3×E2E，需先设置 `CHROME_BIN`）
 - [x] 运行 `npm run test:interactions` 验证交互回归脚本，确认结果与预期一致
 - [x] 复核拖拽连线的操作语义（悬停吸附端口、Esc 取消、连线成功/失败反馈）——由 verifier 断言覆盖
 - [x] 按功能点拆分提交（先逻辑后文档），提交信息遵循现有惯例
@@ -68,7 +68,7 @@
   - POSIX：断言 `mode & 0o777 === expectedMode`（保持 CI 严格性）
   - win32：显式跳过该断言并输出原因（`t.skip` 或打印已知限制），其余断言继续执行，不整例跳过
 - [x] 将 `hosted-node-server.test.js:98` 与 `hosted-backup.test.js:28-29` 替换为助手调用
-- [x] 在 Windows 与 POSIX 各跑一次 `npm test`，确认无新增红（win32 330 pass，1 项 symlink 跳过；POSIX 由 CI 侧保持）
+- [x] 在 Windows 与 POSIX 各跑一次 `npm test`，确认无新增红（win32 332 total / 331 pass / 1 项 symlink 跳过；POSIX 由 CI 侧保持）
 - [ ] （可选）CI 增加 `windows-latest` 矩阵作业（仅单元测试）——暂不实施，平台差异已由助手在本地显式暴露
 
 ### 验收标准

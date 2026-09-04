@@ -2,7 +2,7 @@
 
 The planned MVP refactor phases 0–6 are implemented on the `demo` branch.
 
-> 2026-09-04 · **v0.6.0-beta.2 已发布**（research-test，`demo` + tag + GitHub Release 同步，含 NSIS 安装包 / SHA256SUMS / RELEASE_NOTES_ja.md）。当前 `npm test` = **330 通过 / 1 跳过**（win32 symlink 助手）、lint 0 警告、build 通过；浏览器交互门与 V2 全流程 e2e 本地全绿（需 `CHROME_BIN`）。
+> 2026-09-04 · **v0.6.0-beta.3 发布候选已构建**（research-test；等待 `demo` + tag + GitHub Release 同步）。当前 `npm test` = **332 项合计 / 331 通过 / 1 跳过**（win32 symlink 助手）、lint 0 警告、build、Rust 测试与浏览器 E2E 通过。
 > 本文件正文中的历史测试数（226 / 222 等）以 `OPTIMIZATION_PLAN.md` §0 为准。正式 1.0 仍被「真人可用性研究 `verify:usability-study` → `passed:true`」门禁阻塞。
 
 | Phase | Delivered |

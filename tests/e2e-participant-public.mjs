@@ -94,10 +94,10 @@ const evaluate = async expression => {
 const waitFor = async (expression, label, timeout = 10000) => {
   const started = Date.now();
   while (Date.now() - started < timeout) {
-    if (await evaluate(expression)) return;
+    try { if (await evaluate(expression)) return; } catch { /* navigation can briefly replace the document */ }
     await new Promise(resolve => setTimeout(resolve, 60));
   }
-  const diagnostic = await evaluate(`({ text: document.body.innerText, url: location.href })`);
+  const diagnostic = await evaluate(`({ text: document.body?.innerText || '', url: location.href })`);
   throw new Error(`Timed out waiting for ${label}: ${JSON.stringify(diagnostic)}`);
 };
 const clickText = async text => {

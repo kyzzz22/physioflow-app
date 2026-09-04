@@ -39,6 +39,7 @@ export default function RuntimeRunnerPage({ data, onDone }) {
   const [done, setDone] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
   const [saveFlash, setSaveFlash] = useState(false);
+  const [recoverySaveError, setRecoverySaveError] = useState('');
   const [finalSave, setFinalSave] = useState({ status: 'idle', message: '' });
   const [confirmAbort, setConfirmAbort] = useState(null);
   const [promptMarker, setPromptMarker] = useState(null);
@@ -57,6 +58,7 @@ export default function RuntimeRunnerPage({ data, onDone }) {
   const runtimeRef = useRef(runtime);
   const responsesRef = useRef(responses);
   const sessionRef = useRef(session);
+  const saveQueueRef = useRef(Promise.resolve());
   useEffect(() => { runtimeRef.current = runtime; }, [runtime]);
   useEffect(() => { responsesRef.current = responses; }, [responses]);
   useEffect(() => { sessionRef.current = session; }, [session]);
@@ -101,13 +103,16 @@ export default function RuntimeRunnerPage({ data, onDone }) {
     const rsp = nextResponses ?? responsesRef.current;
     const ses = nextSession ?? sessionRef.current;
     const rs = captureRunnerState(timing.current, { paused, awaiting_start: awaitingStart, timed_out: timedOut, media_ended: mediaEnded, active_marker: activeMarker, current_step_entered: true, ...runnerOverrides }, performance.now());
-    saveCurrentRun({ session: ses, protocol, runtime: rt, runner_state: rs, events: logger.current.snapshot(), responses: rsp, saved_at: new Date().toISOString() });
-    markSaved();
+    const snapshot = { session: ses, protocol, runtime: rt, runner_state: rs, events: logger.current.snapshot(), responses: rsp, saved_at: new Date().toISOString() };
+    const queued = saveQueueRef.current.catch(() => {}).then(() => saveCurrentRun(snapshot));
+    saveQueueRef.current = queued;
+    queued.then(() => { setRecoverySaveError(''); markSaved(); }).catch(error => setRecoverySaveError(error.message || String(error)));
   }, [protocol, paused, awaitingStart, timedOut, mediaEnded, activeMarker, markSaved]);
 
   const persistFinishedSession = useCallback(async (finished) => {
     setFinalSave({ status: 'saving', message: 'Saving the completed session to local storage...' });
     try {
+      await saveQueueRef.current.catch(() => {});
       await saveSession(finished);
       await clearCurrentRun();
       setFinalSave({ status: 'saved', message: 'Saved to local storage. The export bundle is ready.' });
@@ -455,8 +460,10 @@ export default function RuntimeRunnerPage({ data, onDone }) {
         Trial {progress.current_unit}/{progress.total_units} · {runtime.completed_steps.length} steps done
         {remainingEstimate && <span style={{ display: 'block', fontSize: '.7rem', color: '#a9b4ae' }}>{remainingEstimate}</span>}
         <div className={`save-indicator ${saveFlash ? 'saved' : ''}`}>{lastSaved ? `Saved ${lastSaved}` : ''}</div>
+        {recoverySaveError && <div className="save-indicator" role="alert">Recovery save failed: {recoverySaveError}</div>}
       </div>
       <div className="operator-actions">
+        {recoverySaveError && <button onClick={() => persist()}>Retry save</button>}
         <button onClick={() => { document.querySelector('.participant')?.requestFullscreen?.().catch(() => { }); }} title="Participant fullscreen (F)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9V4h5" /><path d="M15 4h5v5" /><path d="M20 15v5h-5" /><path d="M9 20H4v-5" /></svg>Fullscreen</button>
         <button onClick={togglePause} aria-label={paused ? 'Resume' : 'Pause'}>{paused ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5l11 7-11 7V5z" /></svg>Resume</> : <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M9 5v14" /><path d="M15 5v14" /></svg>Pause</>}</button>
         <button onClick={retry} disabled={!step.allow_retry} aria-label="Retry step"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66" /><path d="M20 4v4h-4" /></svg>Retry</button>

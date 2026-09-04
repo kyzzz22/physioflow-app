@@ -1,11 +1,15 @@
 use serde::Serialize;
 use std::{
     env, fs,
+    fs::OpenOptions,
+    io::Write,
     path::{Component, Path, PathBuf},
     process::Command,
+    sync::atomic::{AtomicU64, Ordering},
 };
 
 const APP_DIR_NAME: &str = "PhysioFlow Data";
+static WRITE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Serialize)]
 struct StorageInfo {
@@ -52,6 +56,43 @@ fn safe_join(relative: &str) -> Result<PathBuf, String> {
         }
     }
     Ok(out)
+}
+
+fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+    let sequence = WRITE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let name = path.file_name().and_then(|name| name.to_str()).unwrap_or("data");
+    let temporary = path.with_file_name(format!(".{name}.{}.{}.tmp", std::process::id(), sequence));
+    let write_result = (|| -> Result<(), String> {
+        let mut file = OpenOptions::new().write(true).create_new(true).open(&temporary).map_err(|err| err.to_string())?;
+        file.write_all(bytes).map_err(|err| err.to_string())?;
+        file.sync_all().map_err(|err| err.to_string())?;
+        Ok(())
+    })();
+    if let Err(error) = write_result {
+        let _ = fs::remove_file(&temporary);
+        return Err(error);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        fs::rename(&temporary, path).map_err(|err| { let _ = fs::remove_file(&temporary); err.to_string() })?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let backup = path.with_file_name(format!(".{name}.{}.{}.bak", std::process::id(), sequence));
+        let had_original = path.exists();
+        if had_original { fs::rename(path, &backup).map_err(|err| { let _ = fs::remove_file(&temporary); err.to_string() })?; }
+        if let Err(error) = fs::rename(&temporary, path) {
+            if had_original { let _ = fs::rename(&backup, path); }
+            let _ = fs::remove_file(&temporary);
+            return Err(error.to_string());
+        }
+        if had_original { let _ = fs::remove_file(backup); }
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -102,10 +143,7 @@ fn read_text(path: String) -> Result<Option<String>, String> {
 #[tauri::command]
 fn write_text(path: String, text: String) -> Result<bool, String> {
     let file = safe_join(&path)?;
-    if let Some(parent) = file.parent() {
-        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
-    }
-    fs::write(file, text).map_err(|err| err.to_string())?;
+    atomic_write(&file, text.as_bytes())?;
     Ok(true)
 }
 
@@ -121,10 +159,7 @@ fn read_binary(path: String) -> Result<Option<Vec<u8>>, String> {
 #[tauri::command]
 fn write_binary(path: String, bytes: Vec<u8>) -> Result<bool, String> {
     let file = safe_join(&path)?;
-    if let Some(parent) = file.parent() {
-        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
-    }
-    fs::write(file, bytes).map_err(|err| err.to_string())?;
+    atomic_write(&file, &bytes)?;
     Ok(true)
 }
 
@@ -192,4 +227,20 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running PhysioFlow");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::atomic_write;
+    use std::fs;
+
+    #[test]
+    fn atomic_write_creates_and_replaces_complete_content() {
+        let path = std::env::temp_dir().join(format!("physioflow-atomic-write-{}.txt", std::process::id()));
+        let _ = fs::remove_file(&path);
+        atomic_write(&path, b"first complete value").unwrap();
+        atomic_write(&path, b"replacement").unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"replacement");
+        fs::remove_file(path).unwrap();
+    }
 }

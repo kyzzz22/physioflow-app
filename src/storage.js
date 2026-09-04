@@ -68,7 +68,7 @@ export const deleteSession = async (sessionId) => {
 // ── Current run (recovery) ──
 export const saveCurrentRun = async (snapshot) => {
   try { await _saveCurrentRun(snapshot); }
-  catch (err) { console.warn('Failed to save current run:', err); }
+  catch (err) { console.warn('Failed to save current run:', err); throw err; }
 };
 
 export const loadCurrentRun = () => null; // sync fallback — always use async

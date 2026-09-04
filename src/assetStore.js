@@ -77,6 +77,59 @@ export function protocolAssetReferences(protocol) {
   } catch { return []; }
 }
 
+function collectUiAssetIds(element, target) {
+  if (!element || typeof element !== 'object') return;
+  if (element.props?.assetId) target.add(element.props.assetId);
+  for (const child of element.children || []) collectUiAssetIds(child, target);
+}
+
+// Graph protocols keep asset metadata separately from the nodes that consume it.
+// Return only assets reachable from a node or a pool used by a node, so an old,
+// unused library entry cannot prevent an otherwise valid experiment from running.
+export function graphProtocolAssetReferences(protocol) {
+  const assets = new Map((protocol?.assets || []).map(asset => [asset.id || asset.assetId, asset]));
+  const pools = new Map((protocol?.stimulusPools || []).map(pool => [pool.id, pool]));
+  const ids = new Set();
+  for (const node of protocol?.graph?.nodes || []) {
+    if (node.config?.assetId) ids.add(node.config.assetId);
+    collectUiAssetIds(node.config?.ui?.root, ids);
+    const pool = node.config?.stimulusPoolId
+      ? pools.get(node.config.stimulusPoolId)
+      : node.config?.stimulusPool?.enabled ? node.config.stimulusPool : null;
+    for (const assetId of pool?.assetIds || []) if (assetId) ids.add(assetId);
+  }
+  return [...ids].map(assetId => {
+    const asset = assets.get(assetId);
+    return asset
+      ? { asset_id: assetId, file_name: asset.name || asset.fileName || '', checksum: asset.checksum || asset.hash || '', source_url: asset.sourceUrl || asset.url || '' }
+      : { asset_id: assetId, file_name: '', checksum: '', source_url: '', metadata_missing: true };
+  });
+}
+
+export async function verifyGraphProtocolAssets(protocol, loader = loadAsset) {
+  const issues = [];
+  for (const reference of graphProtocolAssetReferences(protocol)) {
+    if (reference.metadata_missing) {
+      issues.push({ asset_id: reference.asset_id, type: 'metadata_missing', message: `Asset ${reference.asset_id} is referenced but missing from the media library` });
+      continue;
+    }
+    if (reference.source_url) continue;
+    try {
+      const asset = await loader(reference.asset_id);
+      if (!asset?.file) {
+        issues.push({ asset_id: reference.asset_id, type: 'missing', message: `Missing local asset ${reference.file_name || reference.asset_id}` });
+        continue;
+      }
+      if (reference.checksum && asset.checksum && asset.checksum !== reference.checksum) {
+        issues.push({ asset_id: reference.asset_id, type: 'checksum_mismatch', message: `Checksum mismatch for ${reference.file_name || reference.asset_id}` });
+      }
+    } catch (err) {
+      issues.push({ asset_id: reference.asset_id, type: 'load_error', message: `Failed to load ${reference.file_name || reference.asset_id}: ${err.message}` });
+    }
+  }
+  return { valid: issues.length === 0, issues };
+}
+
 export async function verifyProtocolAssets(protocol, loader = loadAsset) {
   const issues = [];
   try {

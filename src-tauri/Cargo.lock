@@ -2125,7 +2125,7 @@ dependencies = [
 
 [[package]]
 name = "physioflow"
-version = "0.6.0-beta.2"
+version = "0.6.0-beta.3"
 dependencies = [
  "serde",
  "serde_json",

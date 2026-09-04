@@ -8,14 +8,21 @@ Download the desktop app — no browser, no terminal, just double-click:
 
 | Platform | Download | Version |
 |----------|----------|---------|
-| **Windows** | [PhysioFlow-Setup.exe](https://github.com/kyzzz22/physioflow-app/releases/latest/download/PhysioFlow_0.6.0-beta.2_x64-setup.exe) | v0.6.0-beta.2 |
-| **macOS** | [PhysioFlow.dmg](https://github.com/kyzzz22/physioflow-app/releases/latest) | v0.6.0-beta.2 *(macOS build pending)* |
+| **Windows** | [PhysioFlow-Setup.exe](https://github.com/kyzzz22/physioflow-app/releases/download/v0.6.0-beta.3/PhysioFlow_0.6.0-beta.3_x64-setup.exe) | v0.6.0-beta.3 |
+| **macOS** | [PhysioFlow.dmg](https://github.com/kyzzz22/physioflow-app/releases/latest) | v0.6.0-beta.3 *(macOS build pending)* |
 
 The desktop app stores data directly in `~/Documents/PhysioFlow Data` (macOS) or `Documents\PhysioFlow Data` (Windows). Click **Open folder** on the dashboard to reveal it in Finder/File Explorer.
 
 > **Why the desktop app?** It handles file storage natively — no browser permissions needed. Data stays in a folder you control, ready to back up or move.
 
-## What's new in v0.6.0-beta.2
+## What's new in v0.6.0-beta.3
+
+- **Pre-run media gate**: referenced local media and checksums are verified before a Graph session can start; missing files now produce an actionable error instead of a blank stimulus.
+- **Visible recovery failures**: both runtimes serialize recovery writes and show a retry control when a checkpoint cannot be saved.
+- **Required-device preflight**: device-backed runs block on connection or adapter errors by default, with an explicit opt-out in the node inspector.
+- **Safer desktop writes and Custom HTML**: desktop files use replace-safe temporary writes, and legacy/V2 Custom HTML now share a script-disabled sandbox.
+
+### Included from v0.6.0-beta.2
 
 - **Drag that stays tidy**: in the participant-screen editor, dragging an element auto-switches its container to a free layout and aligns the other elements to the 8px grid — no more elements jumping to (0,0) or scattering. An **Auto arrange** button re-tidies any screen in one click.
 - **Cleaner node inspector**: primary settings are open by default, dev telemetry stays out of Quick mode, and Questionnaire/Wait nodes open preview-only (their screens are generated at run time).
@@ -133,7 +140,7 @@ npm run desktop:dev  # Tauri hot-reload
 npm run desktop:build  # → src-tauri/target/release/bundle/
 
 # Tests & lint
-npm test             # 330 automated tests (1 skipped on Windows: symlink helper)
+npm test             # 332 total (331 passed, 1 skipped on Windows: symlink helper)
 npm run lint         # ESLint
 npm run quality:release  # build + lint + all tests and browser gates
 ```

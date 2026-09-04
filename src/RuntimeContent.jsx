@@ -250,7 +250,8 @@ function ResponsePrompt({ step, language, onSubmit, preview, fontSize }) {
   </div>;
 }
 
-// ── Custom HTML step ── renders the author's HTML/CSS/JS in a sandboxed iframe
+// ── Custom HTML step ── renders authored HTML/CSS in a sandboxed iframe.
+// Scripts stay disabled so legacy protocols follow the same safety model as V2.
 function CustomHtml({ step, preview }) {
   const html = step.html || '';
   if (!html) {
@@ -265,7 +266,7 @@ function CustomHtml({ step, preview }) {
     title="Custom HTML"
     className="custom-html-frame"
     srcDoc={html}
-    sandbox="allow-scripts"
+    sandbox=""
     style={{ width: '100%', height: preview ? '360px' : 'min(70vh, 640px)', border: '1px solid var(--line)', borderRadius: 10, background: '#fff' }}
   />;
 }
