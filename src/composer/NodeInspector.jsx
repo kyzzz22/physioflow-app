@@ -142,13 +142,13 @@ export function NodeInspector({ node, definition, variables, groups, mode, onUpd
     <label>{t('Label')}<input value={node.label} onChange={event => onUpdate({ label: event.target.value })} /></label>
     <small>{node.component.type}@{node.component.version}</small>
     {emptyHint && <div className="node-empty-hint">▶ {emptyHint}</div>}
-    {node.config?.ui && !['core.start', 'core.end', 'input.questionnaire'].includes(node.component.type) && <><div className="node-inline-preview"><ParticipantRenderer key={node.id} schema={schemaForNode(node, definition, resources || localResourceManifest(assets || []))} preview /></div><button type="button" className="edit-participant-ui" onClick={onEditParticipantUi}>Edit participant screen</button></>}
-    {contentSpec && <div className="content-fields"><b>Content</b>{usesStimulusPool && <small className="field-help">The selected pool supplies the media type and source at session start. Choose “fixed stimulus” below to edit one media item.</small>}{visibleContentFields.map(field => <ContentField key={field.key} field={field} value={node.config?.[field.key]} assets={assets} onChange={value => updateContentField(field.key, value)} invalid={field.key === 'sourceUrl' && Boolean(node.config?.sourceUrl) && !isValidMediaUrl(node.config.sourceUrl)} hint={field.key === 'sourceUrl' && Boolean(node.config?.sourceUrl) && !isValidMediaUrl(node.config.sourceUrl) ? 'Invalid URL — fix it or pick an asset instead.' : undefined} />)}</div>}
-    {node.component.type === 'display.media' && <div className="content-fields stimulus-pool-fields">
+    {node.config?.ui && !['core.start', 'core.end', 'input.questionnaire', 'timing.wait'].includes(node.component.type) && <><div className="node-inline-preview"><ParticipantRenderer key={node.id} schema={schemaForNode(node, definition, resources || localResourceManifest(assets || []))} preview /></div><button type="button" className="edit-participant-ui" onClick={onEditParticipantUi}>Edit participant screen</button></>}
+    {contentSpec && visibleContentFields.length > 0 && <div className="content-fields"><b>Content</b>{visibleContentFields.map(field => <ContentField key={field.key} field={field} value={node.config?.[field.key]} assets={assets} onChange={value => updateContentField(field.key, value)} invalid={field.key === 'sourceUrl' && Boolean(node.config?.sourceUrl) && !isValidMediaUrl(node.config.sourceUrl)} hint={field.key === 'sourceUrl' && Boolean(node.config?.sourceUrl) && !isValidMediaUrl(node.config.sourceUrl) ? 'Invalid URL — fix it or pick an asset instead.' : undefined} />)}</div>}
+    {node.component.type === 'display.media' && mode !== 'quick' && <div className="content-fields stimulus-pool-fields">
       <b>Stimulus randomization</b>
       <label>Stimulus pool<select value={node.config?.stimulusPoolId || ''} onChange={event => { const pool = stimulusPools.find(item => item.id === event.target.value); onUpdate({ config: { ...node.config, stimulusPoolId: pool?.id || null, ...(pool?.mediaType ? { mediaType: pool.mediaType } : {}) } }); }}><option value="">— fixed stimulus —</option>{stimulusPools.map(pool => <option key={pool.id} value={pool.id}>{pool.name} ({pool.assetIds?.length || 0})</option>)}</select><small className="field-help">Choose a shared pool created in Design mode. Every session reshuffles its assets without changing the flow.</small></label>
     </div>}
-    {fieldGroups.map(([group, fields]) => <details key={group} className="field-group" open={group === 'General' || fieldGroups.length === 1}><summary>{group}</summary>{fields.map(renderField)}</details>)}
+    {fieldGroups.map(([group, fields], groupIndex) => <details key={group} className="field-group" open={group === 'General' || groupIndex === 0 || fieldGroups.length === 1}><summary>{group}</summary>{fields.map(renderField)}</details>)}
     {node.component.type === 'logic.condition' && <label>Input variable<select aria-label="Condition input variable" value={bindingValue(node.bindings?.value)} onChange={event => { const binding = parseBindingValue(event.target.value); onUpdate({ bindings: binding ? { ...node.bindings, value: binding } : Object.fromEntries(Object.entries(node.bindings || {}).filter(([key]) => key !== 'value')) }); }}>
       <option value="">Choose a variable…</option>
       <optgroup label="Protocol variables">{renderVariableOptions(true)}</optgroup>
@@ -181,11 +181,11 @@ export function NodeInspector({ node, definition, variables, groups, mode, onUpd
     </details>}
     {mode !== 'quick' && !['core.start', 'core.end'].includes(node.component.type) && <label>{t('Node group')}<select aria-label={t('Node group')} value={currentGroup?.id || ''} onChange={event => onAssignGroup(event.target.value || null)}><option value="">{t('No group')}</option>{groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>}
     {mode !== 'quick' && !currentGroup && !['core.start', 'core.end'].includes(node.component.type) && <button onClick={onCreateGroup}>{t('Create group from node')}</button>}
-    {definition?.events?.length > 0 && <details className="node-data-note"><summary>Records</summary>
+    {mode !== 'quick' && definition?.events?.length > 0 && <details className="node-data-note"><summary>Records</summary>
       <small>Events: {definition.events.join(', ')}</small>
       {definition.dataFields?.length > 0 && <small>Data columns: {definition.dataFields.join(', ')}</small>}
     </details>}
-    {mode === 'advanced' && <><details><summary>Node ID</summary><code>{node.id}</code></details><details><summary>Node JSON</summary><pre>{JSON.stringify(node, null, 2)}</pre></details></>}
+    {mode === 'advanced' && <details className="field-group"><summary>Node raw data</summary><small>Node ID: <code>{node.id}</code></small><pre>{JSON.stringify(node, null, 2)}</pre></details>}
   </div>;
 }
 

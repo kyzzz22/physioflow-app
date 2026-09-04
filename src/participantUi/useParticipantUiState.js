@@ -12,6 +12,7 @@ import {
 import { useParticipantUiHistory } from './useParticipantUiHistory.js';
 import { CONTAINERS, defaults, DEVICES } from './constants.js';
 import { duplicateElementTree, findInTree, findParentAndIndex, flatten, mapTree, pathTo } from './tree.js';
+import { contentXOf, elementHeight, nextFreeSlot, snap, tidyStack } from './arrange.js';
 
 export function useParticipantUiState({ schema, onChange, defaultTemplate = 'instruction' }) {
   const normalized = useMemo(() => normalizeParticipantUi(schema), [schema]);
@@ -47,23 +48,63 @@ export function useParticipantUiState({ schema, onChange, defaultTemplate = 'ins
 
   const updateProps = patch => commit(mapUiElement(normalized, selected.id, element => ({ ...element, props: { ...element.props, ...patch } })));
 
-  // Toggle free layout on a container. Turning it on immediately staggers the direct
-  // children into draggable x/y positions so the change is visible; turning it off
-  // clears coordinates so children flow normally again.
+  // Build a free-layout container whose direct children are laid out as a tidy column
+  // on the 8px grid. When `keep` is given that element is pinned first (at its x/y)
+  // and the remaining children stack underneath it so nothing overlaps the dragged
+  // item. This replaces the old hard-coded stagger that scattered siblings.
+  const buildFreeLayout = (container, keep = null) => {
+    const x = contentXOf(container);
+    const top = x;
+    const baseChildren = (container.children || []).map(child => (
+      child.id === keep?.id ? { ...child, props: { ...child.props, x: keep.x, y: keep.y } } : child
+    ));
+    const kept = keep ? baseChildren.find(child => child.id === keep.id) : null;
+    const startY = kept ? Math.max(0, keep.y + elementHeight(kept) + 16) : top;
+    const placements = new Map(
+      tidyStack(baseChildren.filter(child => child.id !== keep?.id), { x, startY, gap: 16 }).map(position => [position.id, position]),
+    );
+    const children = baseChildren.map(child => {
+      const position = placements.get(child.id);
+      if (!position) return child;
+      return { ...child, props: { ...child.props, x: position.x, y: position.y } };
+    });
+    return { ...container, props: { ...container.props, free: true }, children };
+  };
+
+  // Convert a container to free layout when the designer starts dragging one of its
+  // flow children: pin that element where it visually is and arrange the rest tidily
+  // underneath (direct drag → auto-convert, chosen interaction model).
+  const convertContainerToFreeArrange = (containerId, keepId, x, y) => {
+    const container = findInTree(normalized.root, containerId);
+    if (!container || !keepId) return;
+    commit(mapUiElement(normalized, containerId, element => buildFreeLayout(element, { id: keepId, x: snap(Math.max(0, Number(x) || 0)), y: snap(Math.max(0, Number(y) || 0)) })));
+    selectElement(keepId);
+  };
+
+  // Re-tidy a container that is already free (Auto-arrange button).
+  const arrangeContainer = containerId => {
+    const container = findInTree(normalized.root, containerId);
+    if (!container) return;
+    commit(mapUiElement(normalized, containerId, element => buildFreeLayout(element, null)));
+    selectElement(containerId);
+  };
+
+  // Toggle free layout on a container. Turning it on arranges the direct children
+  // into a tidy column (no scatter); turning it off clears coordinates so children
+  // flow normally again.
   const toggleFree = containerElement => {
     const free = !containerElement.props?.free;
-    const children = (containerElement.children || []).map((child, index) => {
-      if (free) {
-        if (child.props?.x != null && child.props?.y != null) return child;
-        const props = { ...child.props, x: 32 + (index % 2) * 140, y: 36 + index * 72 };
+    if (!free) {
+      const children = (containerElement.children || []).map(child => {
+        const props = { ...child.props };
+        delete props.x;
+        delete props.y;
         return { ...child, props };
-      }
-      const props = { ...child.props };
-      delete props.x;
-      delete props.y;
-      return { ...child, props };
-    });
-    commit(mapUiElement(normalized, containerElement.id, element => ({ ...element, props: { ...element.props, free }, children })));
+      });
+      commit(mapUiElement(normalized, containerElement.id, element => ({ ...element, props: { ...element.props, free }, children })));
+      return;
+    }
+    commit(mapUiElement(normalized, containerElement.id, element => buildFreeLayout(element, null)));
   };
   const setStyle = next => commit(mapUiElement(normalized, selected.id, element => {
     const copy = { ...element };
@@ -79,7 +120,8 @@ export function useParticipantUiState({ schema, onChange, defaultTemplate = 'ins
     const parentId = selectedParent?.id || selectedLocation?.parentId || normalized.root.id;
     const parent = elements.find(item => item.element.id === parentId)?.element || normalized.root;
     const index = selectedParent ? (selectedParent.children || []).length : selectedLocation ? selectedLocation.index + 1 : (parent.children || []).length;
-    const props = parent.props?.free ? { ...defaults[type], x: 32 + (index % 2) * 140, y: 36 + index * 72 } : defaults[type];
+    const placement = parent.props?.free ? nextFreeSlot(parent.children || [], { x: contentXOf(parent), first: contentXOf(parent) }) : null;
+    const props = parent.props?.free ? { ...defaults[type], ...(placement || {}) } : defaults[type];
     const element = createUiElement(type, { props, actions: type === 'Button' ? [{ event: 'click', action: 'submit' }] : [] });
     commit(insertUiElement(normalized, parentId, index, element));
     selectElement(element.id);
@@ -88,11 +130,16 @@ export function useParticipantUiState({ schema, onChange, defaultTemplate = 'ins
   const dropElement = (type, targetElementId, x, y) => {
     const target = elements.find(item => item.element.id === targetElementId)?.element;
     if (!target) return;
-    const props = { ...defaults[type], ...(x != null && y != null ? { x, y } : {}) };
+    const parentId = CONTAINERS.has(target.type) ? target.id : findParentAndIndex(normalized.root, target.id)?.parentId;
+    if (!parentId) return;
+    const parentEl = findInTree(normalized.root, parentId);
+    const hasPoint = x != null && y != null;
+    const slot = hasPoint
+      ? { x: snap(Math.max(0, Number(x))), y: snap(Math.max(0, Number(y))) }
+      : parentEl?.props?.free ? nextFreeSlot(parentEl.children || [], { x: contentXOf(parentEl), first: contentXOf(parentEl) }) : null;
+    const props = { ...defaults[type], ...(slot || {}) };
     const element = createUiElement(type, { props, actions: type === 'Button' ? [{ event: 'click', action: 'submit' }] : [] });
     try {
-      const parentId = CONTAINERS.has(target.type) ? target.id : findParentAndIndex(normalized.root, target.id)?.parentId;
-      if (!parentId) return;
       const index = CONTAINERS.has(target.type) ? (target.children || []).length : (findParentAndIndex(normalized.root, target.id)?.index || 0) + 1;
       commit(insertUiElement(normalized, parentId, index, element));
       selectElement(element.id);
@@ -112,17 +159,14 @@ export function useParticipantUiState({ schema, onChange, defaultTemplate = 'ins
     // Free-layout drag: reposition in place instead of reordering the flex tree.
     if (x != null && y != null) {
       try {
-        // Position the dragged element, then make sure its container is a free-layout
-        // container (auto-enables free editing when the designer drags without
-        // toggling first) and staggers the remaining children so nothing overlaps.
+        // The canvas converts a flow container to free at drag start
+        // (convertContainerToFreeArrange), so by drop time the container is normally
+        // already free. This branch is a safety net: if it is not, arrange the other
+        // children tidily underneath the dragged element instead of scattering them.
         let tree = mapUiElement(normalized, elementId, element => ({ ...element, props: { ...element.props, x, y } }));
         const container = containerInTree(tree.root, targetElementId);
         if (container && !container.props?.free) {
-          const children = (container.children || []).map((child, index) => {
-            if (child.props?.x != null && child.props?.y != null) return child; // the dragged element keeps its position
-            return { ...child, props: { ...child.props, x: 32 + (index % 2) * 140, y: 36 + index * 72 } };
-          });
-          tree = mapUiElement(tree, targetElementId, element => ({ ...element, props: { ...element.props, free: true }, children }));
+          tree = mapUiElement(tree, targetElementId, element => buildFreeLayout(element, { id: elementId, x, y }));
         }
         commit(tree);
         selectElement(elementId);
@@ -257,35 +301,15 @@ export function useParticipantUiState({ schema, onChange, defaultTemplate = 'ins
     }
   };
 
-  // Alignment / distribution for multi-selected free-layout elements. Operates on
-  // the bounding box of the selection (Figma-style): align snaps edges or centers
-  // to the selection bounds; distribute spreads elements evenly along an axis.
-  const alignSelected = alignment => {
-    const ids = [...selectedIds].filter(id => id !== normalized.root.id);
-    const panNode = panRef.current;
-    const items = ids
-      .map(id => findInTree(normalized.root, id))
-      .filter(el => el && el.props?.x != null && el.props?.y != null)
-      .map(el => {
-        const props = el.props;
-        const node = panNode?.querySelector(`[data-ui-id="${el.id}"]`);
-        const rect = node?.getBoundingClientRect();
-        return {
-          id: el.id,
-          x: props.x,
-          y: props.y,
-          w: props.width ?? (rect ? Math.round(rect.width / zoom) : 0),
-          h: props.height ?? (rect ? Math.round(rect.height / zoom) : 0),
-        };
-      });
-    if (items.length < 2) return;
+  // Figma-style alignment for one parent group: snap edges/centers to the group's
+  // own bounds, or distribute the middle items evenly across the outer ones.
+  const alignGroup = (items, alignment, nextPos) => {
     const left = Math.min(...items.map(i => i.x));
     const right = Math.max(...items.map(i => i.x + i.w));
     const top = Math.min(...items.map(i => i.y));
     const bottom = Math.max(...items.map(i => i.y + i.h));
     const cx = left + (right - left) / 2;
     const cy = top + (bottom - top) / 2;
-    const nextPos = {};
     if (alignment === 'left') items.forEach(i => { nextPos[i.id] = { x: left }; });
     else if (alignment === 'centerX') items.forEach(i => { nextPos[i.id] = { x: cx - i.w / 2 }; });
     else if (alignment === 'right') items.forEach(i => { nextPos[i.id] = { x: right - i.w }; });
@@ -306,6 +330,44 @@ export function useParticipantUiState({ schema, onChange, defaultTemplate = 'ins
         nextPos[item.id] = vertical ? { y: cursor } : { x: cursor };
         cursor += (vertical ? item.h : item.w) + gap;
       }
+    }
+  };
+
+  // Alignment / distribution for multi-selected elements. x/y are relative to the
+  // element's own container, so we only ever compare elements that share the same
+  // immediate parent (and only when that parent is free). Each parent group is
+  // aligned independently against its own bounds.
+  const alignSelected = alignment => {
+    const ids = [...selectedIds].filter(id => id !== normalized.root.id);
+    const panNode = panRef.current;
+    const items = [];
+    for (const id of ids) {
+      const el = findInTree(normalized.root, id);
+      if (!el || el.props?.x == null || el.props?.y == null) continue;
+      const parent = findParentAndIndex(normalized.root, id);
+      const parentEl = parent?.parentId ? findInTree(normalized.root, parent.parentId) : null;
+      if (!parent?.parentId || !parentEl?.props?.free) continue;
+      const props = el.props;
+      const node = panNode?.querySelector(`[data-ui-id="${el.id}"]`);
+      const rect = node?.getBoundingClientRect();
+      items.push({
+        id: el.id,
+        parentId: parent.parentId,
+        x: props.x,
+        y: props.y,
+        w: props.width ?? (rect ? Math.round(rect.width / zoom) : 0),
+        h: props.height ?? (rect ? Math.round(rect.height / zoom) : 0),
+      });
+    }
+    const groups = new Map();
+    for (const item of items) {
+      if (!groups.has(item.parentId)) groups.set(item.parentId, []);
+      groups.get(item.parentId).push(item);
+    }
+    const nextPos = {};
+    for (const group of groups.values()) {
+      if (group.length < 2) continue;
+      alignGroup(group, alignment, nextPos);
     }
     if (!Object.keys(nextPos).length) return;
     commit({
@@ -549,8 +611,9 @@ export function useParticipantUiState({ schema, onChange, defaultTemplate = 'ins
     selectedIds, setSelectedIds, zoom, setZoom, pan, setPan, marquee, setMarquee,
     snapEnabled, setSnapEnabled, contextMenu, setContextMenu, styleForceOpen, setStyleForceOpen,
     templateKind, setTemplateKind, viewportRef, panRef, marqueeRef,
-    elements, selected, validation, showPosition, deviceWidth, crumbs,
+    elements, selected, selectedParent, selectedParentElement, validation, showPosition, deviceWidth, crumbs,
     mapUiElement, updateProps, toggleFree, setStyle, bindingTarget,
+    convertContainerToFreeArrange, arrangeContainer,
     addToRoot, dropElement, moveElement, moveStep, removeElement, duplicateElementById,
     clipboardRef, copySelected, pasteClipboard, resizeElement,
     selectElement, selectMany, removeSelected, duplicateSelected, alignSelected,

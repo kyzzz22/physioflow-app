@@ -52,7 +52,7 @@ function AlignIcon({ name }) {
 export default function ParticipantUiCanvas({
   schema, selectedId, selectedIds, onSelect, onDropElement, onMoveElement, onMoveElements,
   onRemoveElement, onDuplicateElement, onMoveStep, onResizeElement, onUpdateText, onUpdateProp,
-  onContextMenu, onRemoveSelected, onDuplicateSelected, onAlignSelected, zoom = 1, snapEnabled = true, context = {},
+  onContextMenu, onRemoveSelected, onDuplicateSelected, onAlignSelected, onConvertFree, zoom = 1, snapEnabled = true, context = {},
 }) {
   const normalized = useMemo(() => normalizeParticipantUi(schema), [schema]);
   const theme = useMemo(() => resolveTheme(normalized), [normalized]);
@@ -79,6 +79,8 @@ export default function ParticipantUiCanvas({
   onDuplicateSelectedRef.current = onDuplicateSelected;
   const onAlignSelectedRef = useRef(onAlignSelected);
   onAlignSelectedRef.current = onAlignSelected;
+  const onConvertFreeRef = useRef(onConvertFree);
+  onConvertFreeRef.current = onConvertFree;
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
   const snapRef = useRef(snapEnabled);
@@ -88,6 +90,9 @@ export default function ParticipantUiCanvas({
   const nodeRefs = useRef(new Map());
   const dragStartRef = useRef(null);
   const resizeStartRef = useRef(null);
+  // While a flow container is being converted to free mid-drag, keep it a containing
+  // block so the dragged element renders at its live position even before the commit.
+  const freePendingRef = useRef(null);
   const [livePos, setLivePos] = useState(null); // { elementId, x, y } or { multi, ids, offsetX, offsetY }
   const [liveSize, setLiveSize] = useState(null); // { elementId, w, h } during an active resize
   const [editingId, setEditingId] = useState(null); // element id currently edited inline (double-click)
@@ -115,17 +120,18 @@ export default function ParticipantUiCanvas({
     const parent = parentElementOf(normalized.root, draggedId);
     if (!containerNode || !parent?.props?.free) return [];
     const cRect = containerNode.getBoundingClientRect();
+    const z = zoomRef.current || 1;
     const rects = [];
     for (const [id, node] of nodeRefs.current) {
       if (id === draggedId || node === containerNode || node.parentElement !== containerNode) continue;
       const r = node.getBoundingClientRect();
       rects.push({
-        l: r.left - cRect.left,
-        r: r.right - cRect.left,
-        t: r.top - cRect.top,
-        b: r.bottom - cRect.top,
-        cx: (r.left + r.right) / 2 - cRect.left,
-        cy: (r.top + r.bottom) / 2 - cRect.top,
+        l: (r.left - cRect.left) / z,
+        r: (r.right - cRect.left) / z,
+        t: (r.top - cRect.top) / z,
+        b: (r.bottom - cRect.top) / z,
+        cx: ((r.left + r.right) / 2 - cRect.left) / z,
+        cy: ((r.top + r.bottom) / 2 - cRect.top) / z,
       });
     }
     return rects;
@@ -150,8 +156,20 @@ export default function ParticipantUiCanvas({
       setLivePos({ multi: true, ids: start.ids, offsetX: ox, offsetY: oy });
       return;
     }
-    let x = start.startX + dx;
-    let y = start.startY + dy;
+    if (start.flow) {
+      // First real movement on a flow (non-free) child: convert its container to free
+      // once, pinning this element where it currently sits and arranging the siblings
+      // neatly underneath (see convertContainerToFreeArrange). Restart measuring from
+      // the current pointer so the drag continues smoothly without a jump to (0,0).
+      onConvertFreeRef.current?.(start.containerId, start.elementId, start.startX, start.startY);
+      freePendingRef.current = start.containerId;
+      start.flow = false;
+      start.siblingRects = [];
+      start.startClientX = event.clientX;
+      start.startClientY = event.clientY;
+    }
+    let x = start.startX + (event.clientX - start.startClientX) / zoomRef.current;
+    let y = start.startY + (event.clientY - start.startClientY) / zoomRef.current;
     if (start.snap) {
       x = Math.round(x / SNAP) * SNAP;
       y = Math.round(y / SNAP) * SNAP;
@@ -184,6 +202,7 @@ export default function ParticipantUiCanvas({
   const pointerUp = () => {
     const start = dragStartRef.current;
     dragStartRef.current = null;
+    freePendingRef.current = null;
     window.removeEventListener('mousemove', pointerMove);
     window.removeEventListener('mouseup', pointerUp);
     if (start?.moved) {
@@ -196,6 +215,9 @@ export default function ParticipantUiCanvas({
 
   // Free repositioning via pointer events. Dragging one of several selected
   // elements moves the whole selection together; otherwise it is a single drag.
+  // A flow (non-free) child is never live-rendered at an absolute position until
+  // pointerMove converts its container to free layout, so a plain click selects
+  // without flashing the element to (0,0) and a real drag never scatters siblings.
   const beginPointerDrag = (event, element) => {
     if (element.type === 'Screen') return;
     if (editingId === element.id || event.target?.isContentEditable) return;
@@ -209,6 +231,7 @@ export default function ParticipantUiCanvas({
     // is inserted exactly where the source sits, so the drag continues from the
     // source's coordinates and targets the new id.
     const positioned = element.props?.x != null || element.props?.y != null;
+    const flow = !parent.props?.free && !positioned;
     let dragId = element.id;
     if (event.altKey && positioned) {
       const newId = onDuplicateRef.current?.(element.id);
@@ -226,17 +249,31 @@ export default function ParticipantUiCanvas({
     const ids = multi ? [...selectedIdsRef.current].filter(id => id !== normalized.root.id) : [dragId];
     const node = nodeRefs.current.get(element.id);
     const rect = node?.getBoundingClientRect();
-    const w = element.props?.width ?? (rect ? rect.width : 0);
-    const h = element.props?.height ?? (rect ? rect.height : 0);
+    const z = zoomRef.current || 1;
+    let startX;
+    let startY;
+    if (element.props?.x != null && element.props?.y != null) {
+      startX = element.props.x;
+      startY = element.props.y;
+    } else {
+      // A flow child has no committed coordinates yet; use its real visual offset
+      // within the container so converting to free does not move it.
+      const containerNode = nodeRefs.current.get(parent.id);
+      const cRect = containerNode?.getBoundingClientRect();
+      startX = rect && cRect ? Math.round(((rect.left - cRect.left) / z) * 100) / 100 : 0;
+      startY = rect && cRect ? Math.round(((rect.top - cRect.top) / z) * 100) / 100 : 0;
+    }
+    const w = element.props?.width ?? (rect ? Math.round(rect.width / z) : 0);
+    const h = element.props?.height ?? (rect ? Math.round(rect.height / z) : 0);
     dragStartRef.current = {
       elementId: dragId,
       containerId: parent.id,
-      startX: element.props?.x ?? 0,
-      startY: element.props?.y ?? 0,
+      startX,
+      startY,
       startClientX: event.clientX,
       startClientY: event.clientY,
-      x: element.props?.x ?? 0,
-      y: element.props?.y ?? 0,
+      x: startX,
+      y: startY,
       w,
       h,
       moved: false,
@@ -245,10 +282,13 @@ export default function ParticipantUiCanvas({
       offsetX: 0,
       offsetY: 0,
       snap: snapRef.current,
-      siblingRects: multi ? [] : collectSiblingRects(parent.id, element.id),
+      flow,
+      siblingRects: multi || flow ? [] : collectSiblingRects(parent.id, element.id),
     };
-    if (multi) setLivePos({ multi: true, ids, offsetX: 0, offsetY: 0 });
-    else setLivePos({ elementId: dragId, x: element.props?.x ?? 0, y: element.props?.y ?? 0 });
+    if (!flow) {
+      if (multi) setLivePos({ multi: true, ids, offsetX: 0, offsetY: 0 });
+      else setLivePos({ elementId: dragId, x: startX, y: startY });
+    }
     window.addEventListener('mousemove', pointerMove);
     window.addEventListener('mouseup', pointerUp);
   };
@@ -276,8 +316,9 @@ export default function ParticipantUiCanvas({
     event.stopPropagation();
     onSelect(element.id, event.shiftKey);
     const rect = event.currentTarget.getBoundingClientRect();
-    const w = element.props?.width ?? Math.round(rect.width);
-    const h = element.props?.height ?? Math.round(rect.height);
+    const z = zoomRef.current || 1;
+    const w = element.props?.width ?? Math.round(rect.width / z);
+    const h = element.props?.height ?? Math.round(rect.height / z);
     resizeStartRef.current = { elementId: element.id, startClientX: event.clientX, startClientY: event.clientY, startW: w, startH: h, w, h };
     setLiveSize({ elementId: element.id, w, h });
     window.addEventListener('mousemove', resizeMove);
@@ -293,11 +334,15 @@ export default function ParticipantUiCanvas({
       if (!raw) return;
       try {
         const payload = JSON.parse(raw);
-        // Free-layout containers position the dropped element at the drop point.
+        // Free-layout containers position the dropped element at the drop point,
+        // snapped to the same 8px grid the drag uses.
         const free = Boolean(element.props?.free);
         const rect = free ? event.currentTarget.getBoundingClientRect() : null;
-        const x = rect ? Math.max(0, Math.round((event.clientX - rect.left) / zoomRef.current)) : undefined;
-        const y = rect ? Math.max(0, Math.round((event.clientY - rect.top) / zoomRef.current)) : undefined;
+        const rawX = rect ? (event.clientX - rect.left) / zoomRef.current : null;
+        const rawY = rect ? (event.clientY - rect.top) / zoomRef.current : null;
+        const grid = snapRef.current;
+        const x = rawX == null ? undefined : Math.max(0, grid ? Math.round(rawX / SNAP) * SNAP : Math.round(rawX));
+        const y = rawY == null ? undefined : Math.max(0, grid ? Math.round(rawY / SNAP) * SNAP : Math.round(rawY));
         if (payload.action === 'add' && payload.type) onDropElement(payload.type, element.id, x, y);
       } catch { /* ignore malformed payload */ }
     },
@@ -368,8 +413,10 @@ export default function ParticipantUiCanvas({
     const showResize = Boolean(positioned.position) && selectedId === element.id && selectedIds?.size <= 1 && element.type !== 'Layout' && element.type !== 'Screen';
     const resizeHandle = showResize ? <span className="ui-resize-handle" title="Drag to resize" onMouseDown={event => beginResize(event, element)} /> : null;
     const freeClass = props.free ? ' ui-free' : '';
-    if (element.type === 'Screen') return <div key={element.id} data-ui-id={element.id} className={`participant-ui-screen ui-slot${freeClass}${selectedClass(element)}`} style={{ ...style, ...(props.free ? { position: 'relative', minHeight: 'min(72vh, 560px)' } : {}) }} ref={registerRef(element.id)} {...a11yProps(element)} {...clickProps(element)} {...dropProps(element)}>{props.free && <span className="ui-free-hint">FREE · drag elements anywhere</span>}{guideLayer(element)}{element.children.map(render)}</div>;
-    if (element.type === 'Layout') return <div key={element.id} data-ui-id={element.id} className={`participant-ui-layout ${props.direction || 'column'} ui-slot${freeClass}${selectedClass(element)}`} style={{ ...style, gap: style.gap ?? 16, ...(props.free ? { position: 'relative', minHeight: 'min(72vh, 560px)' } : {}) }} ref={registerRef(element.id)} onMouseDown={event => beginPointerDrag(event, element)} {...a11yProps(element)} {...clickProps(element)} {...dropProps(element)}>{floatBar(element)}{props.free && <span className="ui-free-hint">FREE · drag anywhere</span>}{guideLayer(element)}{element.children.map(render)}</div>;
+    const pendingFree = freePendingRef.current === element.id;
+    const freeBlock = props.free || pendingFree;
+    if (element.type === 'Screen') return <div key={element.id} data-ui-id={element.id} className={`participant-ui-screen ui-slot${freeClass}${selectedClass(element)}`} style={{ ...style, ...(freeBlock ? { position: 'relative', minHeight: 'min(72vh, 560px)' } : {}) }} ref={registerRef(element.id)} {...a11yProps(element)} {...clickProps(element)} {...dropProps(element)}>{freeBlock && <span className="ui-free-hint">FREE · drag elements anywhere</span>}{guideLayer(element)}{element.children.map(render)}</div>;
+    if (element.type === 'Layout') return <div key={element.id} data-ui-id={element.id} className={`participant-ui-layout ${props.direction || 'column'} ui-slot${freeClass}${selectedClass(element)}`} style={{ ...style, gap: style.gap ?? 16, ...(freeBlock ? { position: 'relative', minHeight: 'min(72vh, 560px)' } : {}) }} ref={registerRef(element.id)} onMouseDown={event => beginPointerDrag(event, element)} {...a11yProps(element)} {...clickProps(element)} {...dropProps(element)}>{floatBar(element)}{freeBlock && <span className="ui-free-hint">FREE · drag anywhere</span>}{guideLayer(element)}{element.children.map(render)}</div>;
     if (element.type === 'Text') {
       const text = boundProp(element, 'text', context) ?? '';
       const editing = editingId === element.id;

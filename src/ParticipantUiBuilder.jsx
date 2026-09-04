@@ -24,6 +24,7 @@ export default function ParticipantUiBuilder({ schema, onChange, defaultTemplate
     marquee, contextMenu, elements, copySelected, pasteClipboard, clipboardRef,
     zOrderSelected, focusStyle, selected, crumbs, updateProps, toggleFree,
     showPosition, setStyle, styleForceOpen, bindingTarget, validation,
+    convertContainerToFreeArrange, arrangeContainer, selectedParentElement,
   } = s;
   const replaceTemplate = kind => {
     if (!window.confirm('Replace the current participant screen with this template? You can still undo this change.')) return;
@@ -88,7 +89,7 @@ export default function ParticipantUiBuilder({ schema, onChange, defaultTemplate
               <ParticipantUiCanvas schema={normalized} selectedId={selectedId} selectedIds={selectedIds} zoom={zoom} snapEnabled={snapEnabled}
                 onSelect={selectElement} onDropElement={dropElement} onMoveElement={moveElement} onMoveElements={moveElements}
                 onRemoveElement={removeElement} onDuplicateElement={duplicateElementById} onMoveStep={moveStep} onResizeElement={resizeElement}
-                onUpdateText={updateText} onUpdateProp={updateProp} onContextMenu={openContextMenu} onRemoveSelected={removeSelected} onDuplicateSelected={duplicateSelected} onAlignSelected={alignSelected} />
+                onUpdateText={updateText} onUpdateProp={updateProp} onContextMenu={openContextMenu} onRemoveSelected={removeSelected} onDuplicateSelected={duplicateSelected} onAlignSelected={alignSelected} onConvertFree={convertContainerToFreeArrange} />
             </div>
           </div>
           {marquee && <div className="ui-marquee" style={{ left: Math.min(marquee.x0, marquee.x1) * zoom + pan.x, top: Math.min(marquee.y0, marquee.y1) * zoom + pan.y, width: Math.abs(marquee.x1 - marquee.x0) * zoom, height: Math.abs(marquee.y1 - marquee.y0) * zoom }} />}
@@ -120,6 +121,13 @@ export default function ParticipantUiBuilder({ schema, onChange, defaultTemplate
               <button className="danger" title="Delete (Del)" onClick={removeSelected}>×</button>
             </div>}
           </div>
+          {(() => {
+            const isContainer = selected.type === 'Screen' || selected.type === 'Layout';
+            const inFreeContainer = selectedParentElement && (selectedParentElement.type === 'Screen' || selectedParentElement.type === 'Layout') && selectedParentElement.props?.free;
+            const arrangeTarget = (isContainer && selected.props?.free) ? selected.id : inFreeContainer ? selectedParentElement.id : null;
+            if (!arrangeTarget) return null;
+            return <button type="button" className="ui-arrange-btn" onClick={() => arrangeContainer(arrangeTarget)} title="Re-lay this screen's elements as a tidy, aligned column on the 8px grid">Auto arrange</button>;
+          })()}
           <UiPropertyEditor element={selected} onUpdate={updateProps} onToggleFree={toggleFree} />
           {showPosition && <div className="ui-property-grid"><b>Position</b>
             <label>X<input type="number" value={selected.props?.x ?? 0} onChange={event => updateProps({ x: Number(event.target.value) })} /></label>
