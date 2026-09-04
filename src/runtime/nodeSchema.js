@@ -30,6 +30,27 @@ export function findUiElement(element, type) {
   return null;
 }
 
+// Keep specialized node settings and their visual element in one model. Without
+// this synchronization the builder could show an edit that schemaForNode later
+// replaced with stale node.config values at run time.
+export function configFromParticipantUi(node, ui) {
+  const config = { ...node.config, ui };
+  if (node.component.type === 'display.media') {
+    const media = findUiElement(ui.root, 'Media');
+    if (media) Object.assign(config, { mediaType: media.props?.mediaType || 'image', sourceUrl: media.props?.sourceUrl || '', assetId: media.props?.assetId || config.assetId || null });
+  } else if (node.component.type === 'input.rating') {
+    const input = findUiElement(ui.root, 'Input');
+    if (input) Object.assign(config, { min: Number(input.props?.min ?? 1), max: Number(input.props?.max ?? 7), required: input.props?.required !== false });
+  } else if (node.component.type === 'input.text') {
+    const input = findUiElement(ui.root, 'Input');
+    if (input) Object.assign(config, { placeholder: input.props?.placeholder || '', required: Boolean(input.props?.required), multiline: input.props?.inputType === 'textarea' });
+  } else if (node.component.type === 'stimulus.custom-html') {
+    const html = findUiElement(ui.root, 'Html');
+    if (html) config.html = html.props?.html || '';
+  }
+  return config;
+}
+
 export function schemaForNode(node, definition, resources) {
   const adapter = definition?.runtime?.uiAdapter || 'schema';
   if (node.component.type === 'input.questionnaire' && node.config?.questionnaire?.questions?.length) {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { questionnaireScore, seededShuffle } from './core/index.js';
+import SamFigure from './SamFigure.jsx';
 
 const MSG = { en: 'Responses recorded', zh: '回答已记录', ja: '回答が記録されました' };
 const REQUIRED = { en: 'Required', zh: '必填', ja: '必須' };
@@ -106,9 +107,14 @@ export default function QuestionnaireFormV2({ questionnaire, language = 'en', ra
   };
 
   const renderQuestion = question => {
-    if (['likert', 'sam_valence', 'sam_arousal'].includes(question.type)) {
+    if (['sam_valence', 'sam_arousal'].includes(question.type)) {
       const min = question.scale_min ?? 1;
-      const max = question.scale_max ?? (question.type.startsWith('sam_') ? 9 : 5);
+      const max = question.scale_max ?? 9;
+      return <div className="qf-scale sam-scale" role="radiogroup" aria-label={msg(question.prompt_i18n)}>{Array.from({ length: max - min + 1 }, (_, index) => min + index).map(value => <button key={value} type="button" role="radio" aria-checked={answers[question.question_id] === value} aria-label={`${value} of ${max}`} title={`${value}`} className={`qf-scale-btn${answers[question.question_id] === value ? ' selected' : ''}`} onClick={() => setAnswer(question, value)}><SamFigure type={question.type} value={value} min={min} max={max} /></button>)}</div>;
+    }
+    if (question.type === 'likert') {
+      const min = question.scale_min ?? 1;
+      const max = question.scale_max ?? 5;
       return <div className="qf-scale">{Array.from({ length: max - min + 1 }, (_, index) => min + index).map(value => <button key={value} type="button" className={`qf-scale-btn${answers[question.question_id] === value ? ' selected' : ''}`} onClick={() => setAnswer(question, value)}>{value}</button>)}</div>;
     }
     if (question.type === 'number') return <input className="qf-text" type="number" min={question.scale_min} max={question.scale_max} value={answers[question.question_id] ?? ''} onChange={event => setAnswer(question, event.target.value === '' ? '' : Number(event.target.value))} />;

@@ -13,11 +13,12 @@ import {
 } from '../core/index.js';
 import { exampleReactionButtonPackage, installComponentPackage, uninstallComponentPackage } from '../sdk/index.js';
 import { exampleSimulatedConnector, installDeviceConnector, uninstallDeviceConnector } from '../devices/index.js';
+import { configFromParticipantUi } from '../runtime/index.js';
 
 // Catalog / inspector callbacks, pre-wired to commit so the view components
 // stay presentational. Kept adjacent to the state they mutate.
 export function useCatalogActions({ protocol, commit, setMessage, setSelectedNodeId, selectedNode, previewNode, setCollaborationBaseline }) {
-  const updatePreviewUi = ui => { if (previewNode) commit(updateNode(protocol, previewNode.id, { config: { ...previewNode.config, ui } })); };
+  const updatePreviewUi = ui => { if (previewNode) commit(updateNode(protocol, previewNode.id, { config: configFromParticipantUi(previewNode, ui) })); };
   return {
     updatePreviewUi,
     markMigrationReviewed: () => commit({ ...protocol, legacy: { ...protocol.legacy, migrationReport: { ...protocol.legacy.migrationReport, formalRunAllowed: true, reviewedAt: new Date().toISOString() } } }),
@@ -40,6 +41,7 @@ export function useCatalogActions({ protocol, commit, setMessage, setSelectedNod
     assignNodeToGroup: groupId => commit(assignNodeToGroup(protocol, selectedNode.id, groupId)),
     createGroupFromSelection: () => { try { const result = createNodeGroup(protocol, [selectedNode.id], { name: `${selectedNode.label} group` }); commit(result.protocol); setMessage(`Created group ${result.group.name}`); } catch (error) { setMessage(error.message); } },
     updateAssets: assets => commit({ ...protocol, assets }),
+    updateStimulusPools: stimulusPools => commit({ ...protocol, stimulusPools }),
     updateLibrary: library => commit({ ...protocol, questionnaireLibrary: library }),
   };
 }

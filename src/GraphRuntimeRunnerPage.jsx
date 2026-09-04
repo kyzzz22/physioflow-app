@@ -5,7 +5,7 @@ import CognitiveTaskRunner from './CognitiveTaskRunner.jsx';
 import AttentionCheckRunner from './AttentionCheckRunner.jsx';
 import ResponseRunner from './ResponseRunner.jsx';
 import CalibrationRunner from './CalibrationRunner.jsx';
-import { protocolNameOf, protocolStatusOf, protocolVersionOf } from './core/index.js';
+import { protocolNameOf, protocolStatusOf, protocolVersionOf, resolveStimulusAssignments, withStimulusAssignment } from './core/index.js';
 import {
   completeCurrentNode,
   createCoreControlHandlerRegistry,
@@ -29,6 +29,7 @@ import { buildGraphBidsBundle, buildGraphSessionFiles } from './data/index.js';
 import { downloadBundle } from './exporter.js';
 import { createProjectComponentRegistry } from './sdk/index.js';
 import { HostedRuntimeSync } from './hosted/index.js';
+import { loadAsset } from './assetStore.js';
 
 function runtimeServices() {
   return {
@@ -70,6 +71,7 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
   const [started, setStarted] = useState(Boolean(data.restore?.runtime?.status && data.restore.runtime.status !== 'ready'));
   const [saved, setSaved] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [localResources, setLocalResources] = useState(() => localResourceManifest(protocol.assets || []));
   const hostedSyncRef = useRef(null);
   if (data.hosted && !hostedSyncRef.current) hostedSyncRef.current = new HostedRuntimeSync(data.hosted);
   const [hostedStatus, setHostedStatus] = useState(() => hostedSyncRef.current?.status() || null);
@@ -78,11 +80,16 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
   const nodeEnteredAt = useRef(performance.now());
   const nodes = useMemo(() => new Map(protocol.graph.nodes.map(node => [node.id, node])), [protocol]);
   const currentNode = runtime.currentNodeId ? nodes.get(runtime.currentNodeId) : null;
+  const stimulusAssignments = useMemo(() => resolveStimulusAssignments(protocol, runtime.randomSeed, runtime.attempts), [protocol, runtime.randomSeed, runtime.attempts]);
+  const currentStimulusAssignment = currentNode ? stimulusAssignments.get(currentNode.id) : null;
+  const presentedNode = currentNode ? withStimulusAssignment(currentNode, currentStimulusAssignment) : null;
   const currentDefinition = currentNode ? registry.get(currentNode.component.type, currentNode.component.version) : null;
   const currentPermissions = currentNode ? packagePermissions(protocol, currentNode) : null;
   const executableCount = protocol.graph.nodes.filter(node => registry.get(node.component.type, node.component.version)?.runtime?.kind === 'participant').length;
   const progress = { current: runtime.completedNodeIds.length, total: executableCount, percent: executableCount ? Math.round((runtime.completedNodeIds.length / executableCount) * 100) : 100 };
   const exportFiles = runtime.status === 'completed' ? { ...buildGraphSessionFiles({ ...data.session, status: 'completed', runtime_snapshot: runtime, events, responses, device_events: deviceEventsRef.current }, protocol, events, responses), ...buildGraphBidsBundle({ ...data.session, status: 'completed' }, protocol, events, responses) } : null;
+  const participantResources = data.hosted?.resources || localResources;
+  const assignmentLoggedRef = useRef(new Set((data.restore?.events || []).filter(event => event.eventType === 'stimulus_assigned').map(event => `${event.nodeId}:${event.payload?.attempt || 1}`)));
 
   const apply = result => {
     runtimeRef.current = result.state;
@@ -173,6 +180,30 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
   useEffect(() => {
     if (currentNode?.id) nodeEnteredAt.current = performance.now();
   }, [currentNode?.id]);
+
+  useEffect(() => {
+    if (data.hosted) return undefined;
+    let active = true;
+    const objectUrls = [];
+    Promise.all((protocol.assets || []).map(async asset => {
+      if (asset.sourceUrl || asset.url) return null;
+      const assetId = asset.id || asset.assetId;
+      const stored = await loadAsset(assetId);
+      if (!stored?.file) return null;
+      const url = URL.createObjectURL(stored.file);
+      objectUrls.push(url);
+      return { assetId, nodeId: null, name: asset.name || stored.name || assetId, mediaType: asset.mediaType || stored.type?.split('/')[0] || null, checksum: asset.checksum || stored.checksum || null, status: 'ready', delivery: { url } };
+    })).then(loaded => { if (active) setLocalResources([...localResourceManifest(protocol.assets || []), ...loaded.filter(Boolean)]); }).catch(() => {});
+    return () => { active = false; objectUrls.forEach(url => URL.revokeObjectURL(url)); };
+  }, [data.hosted, protocol.assets]);
+
+  useEffect(() => {
+    if (!started || runtime.status !== 'waiting' || !currentStimulusAssignment || !currentNode) return;
+    const key = `${currentNode.id}:${currentStimulusAssignment.attempt}`;
+    if (assignmentLoggedRef.current.has(key)) return;
+    assignmentLoggedRef.current.add(key);
+    apply(recordRuntimeEvent(runtimeRef.current, protocol, services.current, 'stimulus_assigned', { node: currentNode, payload: currentStimulusAssignment }));
+  }, [currentNode, currentStimulusAssignment, protocol, started, runtime.status]);
 
   useEffect(() => {
     if (!started || !['completed', 'failed'].includes(runtime.status)) return undefined;
@@ -269,8 +300,8 @@ export default function GraphRuntimeRunnerPage({ data, onDone }) {
             const values = { ...answers, ...scoreValues, questionnaire_timed_out_question_ids: metadata?.timedOutQuestionIds || [] };
             complete({ values, outputs: values, variables: scoreValues, metadata: { questionnaire: metadata } });
           }} />
-        : <ParticipantRenderer key={currentNode.id} schema={schemaForNode(currentNode, currentDefinition, data.hosted?.resources || localResourceManifest(protocol.assets || []))} disabled={runtime.status === 'paused'} context={{ participant: data.session, variables: currentPermissions && !currentPermissions.has('session.variables.read') ? {} : runtime.variables, outputs: runtime.outputs, progress, timer: { elapsedMs: 0 } }} onSubmit={complete} onValueChange={payload => record('value_changed', payload)} onAction={action => record('ui_action', action)} onMediaEvent={(eventType, payload) => {
-          record(eventType, payload);
+        : <ParticipantRenderer key={`${currentNode.id}:${currentStimulusAssignment?.assetId || ''}`} schema={schemaForNode(presentedNode, currentDefinition, participantResources)} disabled={runtime.status === 'paused'} context={{ participant: data.session, variables: currentPermissions && !currentPermissions.has('session.variables.read') ? {} : runtime.variables, outputs: runtime.outputs, progress, timer: { elapsedMs: 0 } }} onSubmit={complete} onValueChange={payload => record('value_changed', payload)} onAction={action => record('ui_action', action)} onMediaEvent={(eventType, payload) => {
+          record(eventType, currentStimulusAssignment ? { ...payload, assetId: currentStimulusAssignment.assetId, stimulusPoolGroup: currentStimulusAssignment.group } : payload);
           if (eventType === 'media_ended' && currentNode.config?.completion?.mode === 'media-ended') complete({});
         }} />}
     </section>

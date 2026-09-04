@@ -20,7 +20,7 @@ import {
   protocolStatusOf,
   protocolVersionLabelOf,
   protocolVersionOf,
-  validateProtocolGraph,
+  validateProtocolGraphConfiguration,
 } from './core/index.js';
 import { createProjectComponentRegistry } from './sdk/index.js';
 
@@ -92,7 +92,7 @@ export default function Dashboard({ protocols, sessions, onOpen, onNew, onTempla
       const candidate = JSON.parse(await file.text());
       const graphCandidate = isGraphProtocol(candidate);
       const check = graphCandidate
-        ? validateProtocolGraph(candidate, createProjectComponentRegistry(candidate))
+        ? validateProtocolGraphConfiguration(candidate, createProjectComponentRegistry(candidate))
         : validateProtocol(candidate);
       if (!check.valid) throw new Error(check.errors.slice(0, 8).map(error => error.message || error).join('\n'));
       if (!graphCandidate && candidate.status === 'frozen') {
@@ -264,7 +264,7 @@ function ProjectCard({ versions, sessions, storageInfo, onOpen, onRun, onNextVer
   const questionnaireCount = graphProtocol ? 0 : latest.blocks.reduce((c, b) => c + b.trials.reduce((tc, t) => tc + t.steps.filter(s => s.type === 'questionnaire').length, 0), 0);
   const totalMs = estimateDuration(latest);
   const missingMedia = graphProtocol
-    ? latest.graph.nodes.some(node => node.component.type === 'display.media' && !node.config?.assetId && !node.config?.sourceUrl)
+    ? latest.graph.nodes.some(node => node.component.type === 'display.media' && !node.config?.assetId && !node.config?.sourceUrl && !node.config?.stimulusPoolId && !node.config?.stimulusPool?.enabled)
     : latest.blocks.some(b => b.trials.some(t => t.steps.some(s => ['video', 'audio', 'image'].includes(s.type) && !s.source_url && !s.asset_id && !(latest.stimuli || []).some(r => r.stimulus_id === s.stimulus_id && (r.source_url || r.asset_id)))));
   const status = protocolStatusOf(latest);
   return <article className="protocol-card project-card">

@@ -8,14 +8,20 @@ Download the desktop app — no browser, no terminal, just double-click:
 
 | Platform | Download | Version |
 |----------|----------|---------|
-| **Windows** | [PhysioFlow-Setup.exe](https://github.com/kyzzz22/physioflow-app/releases/latest/download/PhysioFlow_0.4.0_x64-setup.exe) | v0.4.0 |
+| **Windows** | [PhysioFlow-Setup.exe](https://github.com/kyzzz22/physioflow-app/releases/latest/download/PhysioFlow_0.6.0-beta.1_x64-setup.exe) | v0.6.0-beta.1 |
 | **macOS** | [PhysioFlow.dmg](https://github.com/kyzzz22/physioflow-app/releases/latest) | v0.4.0 |
 
 The desktop app stores data directly in `~/Documents/PhysioFlow Data` (macOS) or `Documents\PhysioFlow Data` (Windows). Click **Open folder** on the dashboard to reveal it in Finder/File Explorer.
 
 > **Why the desktop app?** It handles file storage natively — no browser permissions needed. Data stays in a folder you control, ready to back up or move.
 
-## What's new in v0.4.0
+## What's new in v0.6.0-beta.1
+
+- **Shared stimulus pools**: preserve protocol flow while assigning media in a reproducible random order without replacement
+- **Participant UI editing**: dedicated full-screen editor with synchronized node/runtime configuration
+- **Researcher-ready questionnaires**: graphical SAM choices and a live participant preview
+- **Safer protocol editing**: improved full JSON editor, complete pre-run validation, and clearer validation messages
+- **Local media workflow**: upload, preview, validate, and run image/audio/video assets without hosting them first
 
 - **Questionnaire overhaul**: drag-and-drop reorder, conditional skip logic, 11 presets (SAM, Likert, NPS, VAS...), auto-scoring, VAS slider, random order, progress bar, CSV batch import
 - **Full-screen preview + inline editing**: double-click any node to preview as participant sees it; toggle ✎ Edit to modify content, questionnaire, media, timing directly

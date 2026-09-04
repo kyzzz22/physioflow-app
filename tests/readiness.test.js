@@ -44,6 +44,24 @@ test('missing media makes a protocol blocked for lab readiness', () => {
   assert.equal(result.facts.missing_media, 1);
 });
 
+test('a valid stimulus pool counts as configured graph media', () => {
+  const blank = createProtocolGraph();
+  const media = createCoreComponentRegistry().get('display.media');
+  const configured = insertNodeOnControlEdge(blank, blank.graph.edges[0].id, media.type, {
+    label: 'Random image',
+    config: { ...media.defaultConfig, stimulusPoolId: 'pool-images' },
+    layout: { x: 300, y: 180 },
+  }).protocol;
+  configured.assets = [{ id: 'image-a', name: 'Image A', mediaType: 'image', sourceUrl: 'https://example.test/a.png' }];
+  configured.stimulusPools = [{ id: 'pool-images', name: 'Images', mediaType: 'image', assetIds: ['image-a'] }];
+
+  const result = assessProtocolReadiness(configured, { storageInfo: { selected: true } });
+
+  assert.equal(result.items.find(item => item.id === 'validation').passed, true);
+  assert.equal(result.items.find(item => item.id === 'media').passed, true);
+  assert.equal(result.facts.missing_media, 0);
+});
+
 test('frozen protocol with source, analysis window, pilot session, and local storage is ready', () => {
   const p = protocol({
     status: 'frozen',

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { buildExternalFormUrl } from './externalForms.js';
+import SamFigure from './SamFigure.jsx';
 
 const MSG = { zh: '回答已记录', ja: '回答が記録されました', en: 'Responses recorded' };
 const BACK_LABEL = { zh: '← 上一题', ja: '← 前の問題', en: '← Previous' };
@@ -294,43 +295,6 @@ function LikertScale({ q, language, value, onChange, inputRef }) {
         <span>{q.max_label_i18n?.[language] || ''}</span>
       </div>
     </div>
-  );
-}
-
-// ── SAM Manikin SVG Figures ──
-function SamFigure({ type, value, min, max }) {
-  const t = (value - min) / Math.max(1, max - min); // 0..1
-  const size = 32;
-
-  if (type === 'sam_valence') {
-    // Face: frown → neutral → smile
-    const mouthCurve = -12 + t * 24; // -12 (sad) → +12 (happy)
-    const eyeSize = 2.5 + t * 0.5;
-    const eyeY = 11;
-    return (
-      <svg width={size} height={size} viewBox="0 0 32 32" className="sam-figure-svg">
-        <circle cx={16} cy={16} r={14} fill="none" stroke="currentColor" strokeWidth="1.5" />
-        {/* Eyes */}
-        <circle cx={10} cy={eyeY} r={eyeSize} fill="currentColor" />
-        <circle cx={22} cy={eyeY} r={eyeSize} fill="currentColor" />
-        {/* Mouth */}
-        <path d={`M ${8} ${18} Q ${16} ${18 + mouthCurve} ${24} ${18}`} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  // sam_arousal: body shape — calm (small circle) → excited (expanding starburst)
-  const bodyR = 4 + t * 8; // 4 → 12
-  const limbSpread = 3 + t * 9; // 3 → 12
-  return (
-    <svg width={size} height={size} viewBox="0 0 32 32" className="sam-figure-svg">
-      {/* Body */}
-      <ellipse cx={16} cy={16} rx={bodyR} ry={bodyR * 1.3} fill="currentColor" />
-      {/* Limbs — spread more as arousal increases */}
-      <line x1={16} y1={8} x2={16 - limbSpread} y2={16 - bodyR} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      <line x1={16} y1={8} x2={16 + limbSpread} y2={16 - bodyR} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      <line x1={16} y1={24} x2={16 - limbSpread} y2={16 + bodyR} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      <line x1={16} y1={24} x2={16 + limbSpread} y2={16 + bodyR} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
   );
 }
 

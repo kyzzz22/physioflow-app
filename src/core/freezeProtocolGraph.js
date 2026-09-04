@@ -46,6 +46,21 @@ export function validateProtocolGraphConfiguration(protocol, registry) {
   const base = validateProtocolGraph(protocol, registry);
   const errors = [...base.errors];
   const warnings = [...base.warnings];
+  const assetsById = new Map((protocol.assets || []).map(asset => [asset.id || asset.assetId, asset]));
+  const stimulusGroups = new Map();
+  const poolIds = new Set();
+  for (const [index, pool] of (protocol.stimulusPools || []).entries()) {
+    const poolPath = `stimulusPools.${index}`;
+    if (!pool.id || poolIds.has(pool.id)) errors.push({ code: 'config.stimulus_pool_id_invalid', message: 'Every stimulus pool needs a unique ID', path: `${poolPath}.id` });
+    else poolIds.add(pool.id);
+    if (!pool.name?.trim()) errors.push({ code: 'config.stimulus_pool_name_missing', message: 'Every stimulus pool needs a name', path: `${poolPath}.name` });
+    if (!['image', 'audio', 'video'].includes(pool.mediaType || 'image')) errors.push({ code: 'config.stimulus_pool_type_invalid', message: `${pool.name || 'Stimulus pool'} has an invalid media type`, path: `${poolPath}.mediaType` });
+    for (const assetId of [...new Set((pool.assetIds || []).filter(Boolean))]) {
+      const asset = assetsById.get(assetId);
+      if (!asset) errors.push({ code: 'config.stimulus_pool_asset_missing', message: `${pool.name || 'Stimulus pool'} references unavailable asset ${assetId}`, path: `${poolPath}.assetIds` });
+      else if ((asset.mediaType || asset.type || 'image') !== (pool.mediaType || 'image')) errors.push({ code: 'config.stimulus_pool_type_mismatch', message: `${asset.name || assetId} does not match the ${pool.mediaType || 'image'} pool type`, path: `${poolPath}.assetIds` });
+    }
+  }
   for (const node of protocol.graph?.nodes || []) {
     const path = `graph.nodes.${node.id}.config`;
     const definition = registry?.get(node.component?.type, node.component?.version);
@@ -102,10 +117,26 @@ export function validateProtocolGraphConfiguration(protocol, registry) {
         errors.push({ code: 'config.completion_action_missing', message: `${node.label} needs a submit or next button`, path: `${path}.ui`, nodeId: node.id });
       }
     }
-    if (node.component?.type === 'display.media' && !node.config?.sourceUrl && !node.config?.assetId) {
+    const sharedStimulusPool = node.config?.stimulusPoolId ? (protocol.stimulusPools || []).find(pool => pool.id === node.config.stimulusPoolId) : null;
+    const stimulusPool = sharedStimulusPool || node.config?.stimulusPool;
+    const usesStimulusPool = node.component?.type === 'display.media' && Boolean(sharedStimulusPool || stimulusPool?.enabled);
+    if (node.component?.type === 'display.media' && node.config?.stimulusPoolId && !sharedStimulusPool) errors.push({ code: 'config.stimulus_pool_missing', message: `${node.label} references an unavailable stimulus pool`, path: `${path}.stimulusPoolId`, nodeId: node.id });
+    if (usesStimulusPool) {
+      const assetIds = [...new Set((stimulusPool.assetIds || []).filter(Boolean))];
+      const group = String(sharedStimulusPool?.id || stimulusPool.group || node.id);
+      if (!assetIds.length) errors.push({ code: 'config.stimulus_pool_empty', message: `${node.label} needs at least one stimulus in its random pool`, path: `${path}.stimulusPool.assetIds`, nodeId: node.id });
+      for (const assetId of assetIds) {
+        const asset = assetsById.get(assetId);
+        if (!asset) errors.push({ code: 'config.stimulus_pool_asset_missing', message: `${node.label} references unavailable pool asset ${assetId}`, path: `${path}.stimulusPool.assetIds`, nodeId: node.id });
+        else if ((asset.mediaType || asset.type) && node.config?.mediaType && (asset.mediaType || asset.type) !== node.config.mediaType) errors.push({ code: 'config.stimulus_pool_type_mismatch', message: `${node.label} pool asset ${asset.name || assetId} is not ${node.config.mediaType}`, path: `${path}.stimulusPool.assetIds`, nodeId: node.id });
+      }
+      if (!stimulusGroups.has(group)) stimulusGroups.set(group, []);
+      stimulusGroups.get(group).push({ node, assetIds, path });
+    }
+    if (node.component?.type === 'display.media' && !node.config?.sourceUrl && !node.config?.assetId && !usesStimulusPool) {
       errors.push({ code: 'config.media_source_missing', message: `${node.label} needs a media URL or asset`, path, nodeId: node.id });
     }
-    if (node.component?.type === 'display.media' && node.config?.sourceUrl && !isPlausibleMediaUrl(node.config.sourceUrl)) {
+    if (node.component?.type === 'display.media' && !usesStimulusPool && node.config?.sourceUrl && !isPlausibleMediaUrl(node.config.sourceUrl)) {
       errors.push({ code: 'config.media_url_invalid', message: `${node.label} has an invalid media URL`, path: `${path}.sourceUrl`, nodeId: node.id });
     }
     const mediaMode = node.config?.completion?.mode;
@@ -142,6 +173,11 @@ export function validateProtocolGraphConfiguration(protocol, registry) {
     if (node.component?.type === 'logic.loop' && node.config?.untilRule?.operator && !['equals', 'not_equals', 'contains', 'greater_than', 'greater_than_or_equal', 'less_than', 'less_than_or_equal', 'is_truthy', 'is_falsy'].includes(node.config.untilRule.operator)) {
       errors.push({ code: 'config.loop_until_operator_invalid', message: `${node.label} has an unsupported until-rule operator`, path: `${path}.untilRule.operator`, nodeId: node.id });
     }
+  }
+  for (const [group, entries] of stimulusGroups) {
+    const expected = [...entries[0].assetIds].sort().join('\u0000');
+    if (entries.some(entry => [...entry.assetIds].sort().join('\u0000') !== expected)) errors.push({ code: 'config.stimulus_pool_inconsistent', message: `Stimulus pool group ${group} must use the same asset selection on every media node`, path: entries[0].path, nodeId: entries[0].node.id });
+    if (entries[0].assetIds.length < entries.length) errors.push({ code: 'config.stimulus_pool_too_small', message: `Stimulus pool group ${group} needs at least ${entries.length} assets for no-replacement assignment`, path: entries[0].path, nodeId: entries[0].node.id });
   }
   return { valid: errors.length === 0, errors, warnings };
 }

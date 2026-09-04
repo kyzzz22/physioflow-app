@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  appendUiElement,
   createUiElement,
   insertUiElement,
   mapUiElement,
@@ -75,11 +74,14 @@ export function useParticipantUiState({ schema, onChange, defaultTemplate = 'ins
   const bindingTarget = { Text: 'text', Media: 'sourceUrl', Progress: 'value' }[selected.type];
 
   const addToRoot = type => {
-    const freeRoot = normalized.root.props?.free;
-    const index = normalized.root.children?.length || 0;
-    const props = freeRoot ? { ...defaults[type], x: 32 + (index % 2) * 140, y: 36 + index * 72 } : defaults[type];
+    const selectedParent = CONTAINERS.has(selected.type) ? selected : null;
+    const selectedLocation = selectedParent ? null : findParentAndIndex(normalized.root, selected.id);
+    const parentId = selectedParent?.id || selectedLocation?.parentId || normalized.root.id;
+    const parent = elements.find(item => item.element.id === parentId)?.element || normalized.root;
+    const index = selectedParent ? (selectedParent.children || []).length : selectedLocation ? selectedLocation.index + 1 : (parent.children || []).length;
+    const props = parent.props?.free ? { ...defaults[type], x: 32 + (index % 2) * 140, y: 36 + index * 72 } : defaults[type];
     const element = createUiElement(type, { props, actions: type === 'Button' ? [{ event: 'click', action: 'submit' }] : [] });
-    commit(appendUiElement(normalized, normalized.root.id, element));
+    commit(insertUiElement(normalized, parentId, index, element));
     selectElement(element.id);
   };
 

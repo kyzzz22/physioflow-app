@@ -11,6 +11,7 @@ import Canvas from './composer/Canvas.jsx';
 import Inspector from './composer/Inspector.jsx';
 import ProtocolBioDBConfig from './ProtocolBioDBConfig.jsx';
 import { loadSettings } from './fsStorage.js';
+import { loadAsset } from './assetStore.js';
 
 export default function ComposerV2({ protocol, onChange, onSave, onBack, onExport, onPreview, onFreeze, onCreateDraft, onHostedRun, onUndo, onRedo, canUndo, canRedo, hasUnsaved, saveAnim }) {
   const s = useComposerState({ protocol, onChange });
@@ -18,13 +19,28 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
     locked, codeView, codeText, codeError,
     deletePending, confirmDelete, cancelDelete,
     previewNode, previewDefinition, previewEdit, setPreviewEdit, setPreviewNodeId,
-    actions, setCodeText, applyCode,
+    actions, setCodeText, applyCode, closeCodeView, formatCode, codeDirty,
   } = s;
   const [bioDBOpen, setBioDBOpen] = useState(false);
   const [settings, setSettings] = useState(null);
+  const [previewResources, setPreviewResources] = useState(() => localResourceManifest(protocol.assets || []));
   useEffect(() => {
     if (bioDBOpen) loadSettings().then(setSettings).catch(() => setSettings({}));
   }, [bioDBOpen]);
+  useEffect(() => {
+    let active = true;
+    const objectUrls = [];
+    Promise.all((protocol.assets || []).map(async asset => {
+      if (asset.sourceUrl || asset.url) return null;
+      const assetId = asset.id || asset.assetId;
+      const stored = await loadAsset(assetId);
+      if (!stored?.file) return null;
+      const url = URL.createObjectURL(stored.file);
+      objectUrls.push(url);
+      return { assetId, name: asset.name || stored.name || assetId, mediaType: asset.mediaType || stored.type?.split('/')[0] || null, status: 'ready', delivery: { url } };
+    })).then(resources => { if (active) setPreviewResources([...localResourceManifest(protocol.assets || []), ...resources.filter(Boolean)]); }).catch(() => {});
+    return () => { active = false; objectUrls.forEach(url => URL.revokeObjectURL(url)); };
+  }, [protocol.assets]);
   return <main className={`composer-v2 ${locked ? 'locked' : ''}`}>
     <Header s={s} onSave={onSave} onBack={onBack} onExport={onExport} onPreview={onPreview} onFreeze={onFreeze} onCreateDraft={onCreateDraft} onUndo={onUndo} onRedo={onRedo} canUndo={canUndo} canRedo={canRedo} hasUnsaved={hasUnsaved} saveAnim={saveAnim} onBioDB={() => setBioDBOpen(true)} />
     {bioDBOpen && <ProtocolBioDBConfig protocol={protocol} settings={settings || {}} onChange={onChange} onClose={() => setBioDBOpen(false)} />}
@@ -32,10 +48,10 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
       <button className="danger" onClick={confirmDelete}>Delete</button>
       <button onClick={cancelDelete}>Cancel</button>
     </div>}
-    {codeView ? <CodeView text={codeText} error={codeError} locked={locked} onChange={setCodeText} onApply={applyCode} /> : <div className="composer-layout">
+    {codeView ? <CodeView text={codeText} error={codeError} locked={locked} dirty={codeDirty} onChange={setCodeText} onApply={applyCode} onFormat={formatCode} onClose={closeCodeView} /> : <div className="composer-layout">
       <Palette s={s} onHostedRun={onHostedRun} />
       <Canvas s={s} />
-      <Inspector s={s} />
+      <Inspector s={s} resources={previewResources} />
     </div>}
     {previewNode && <div className="node-editor-fullscreen">
       <div className="node-editor-header">
@@ -44,8 +60,8 @@ export default function ComposerV2({ protocol, onChange, onSave, onBack, onExpor
         <button className="node-editor-close" onClick={() => setPreviewNodeId(null)}>✕ Done</button>
       </div>
       {previewEdit && previewNode.config?.ui
-        ? <ParticipantUiBuilder schema={schemaForNode(previewNode, previewDefinition, localResourceManifest(protocol.assets || []))} defaultTemplate={UI_TEMPLATE_KIND[previewNode.component.type] || 'instruction'} onChange={actions.updatePreviewUi} />
-        : <div className="node-editor-preview"><ParticipantRenderer schema={schemaForNode(previewNode, previewDefinition, localResourceManifest(protocol.assets || []))} preview /></div>}
+        ? <ParticipantUiBuilder schema={schemaForNode(previewNode, previewDefinition, previewResources)} defaultTemplate={UI_TEMPLATE_KIND[previewNode.component.type] || 'instruction'} onChange={actions.updatePreviewUi} />
+        : <div className="node-editor-preview"><ParticipantRenderer schema={schemaForNode(previewNode, previewDefinition, previewResources)} preview /></div>}
     </div>}
   </main>;
 }

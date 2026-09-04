@@ -41,7 +41,7 @@ export function assessProtocolReadiness(protocol, { sessions = [], storageInfo =
   const { blocks, trials, steps } = hierarchy;
   const mediaSteps = graphProtocol ? steps.filter(node => node.component.type === 'display.media') : steps.filter(step => MEDIA_TYPES.has(step.type));
   const missingMedia = graphProtocol
-    ? mediaSteps.filter(node => !node.config?.sourceUrl && !node.config?.assetId)
+    ? mediaSteps.filter(node => !node.config?.sourceUrl && !node.config?.assetId && !node.config?.stimulusPoolId && !node.config?.stimulusPool?.enabled)
     : mediaSteps.filter(step => !mediaHasSource(step, stimuli));
   const analysisWindows = graphProtocol ? steps.filter(node => node.config?.isAnalysisWindow) : steps.filter(step => step.is_analysis_window);
   const contentIssues = graphProtocol ? [] : steps.flatMap(step => stepContentIssues(step, stimuli, questionnaires).map(issue => ({ ...issue, step })));

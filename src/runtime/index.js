@@ -16,5 +16,5 @@ export {
   startRuntime,
 } from './runtimeMachine.js';
 
-export { findUiElement, localResourceManifest, schemaForNode } from './nodeSchema.js';
+export { configFromParticipantUi, findUiElement, localResourceManifest, schemaForNode } from './nodeSchema.js';
 export { createDeviceSampler, maxInputSampleRateHz, resolveDeviceConnector } from './deviceRuntime.js';

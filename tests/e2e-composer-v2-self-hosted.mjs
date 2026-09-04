@@ -140,7 +140,7 @@ try {
   await field('New variable type', 'number', 'change');
   await clickText('Add variable');
   await clickText('input.rating');
-  await waitFor(`document.body.textContent.includes('Participant interface')`, 'Rating inspector');
+  await waitFor(`[...document.querySelectorAll('button')].some(button => button.textContent.includes('Edit participant screen'))`, 'Rating inspector');
   await clickText('Create group from node');
   await field('Rating group group kind', 'subflow', 'change');
   await clickText('Add parameter');

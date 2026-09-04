@@ -1,13 +1,22 @@
 // Interaction acceptance driver for the ComposerV2 canvas:
 // drag-to-connect, Ctrl+A select-all, zoom shortcuts, Esc-stays-in-editor.
 const { spawn, execSync } = require('node:child_process');
+const { existsSync, mkdtempSync, rmSync } = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 
-const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+const CHROME = [
+  process.env.CHROME_BIN,
+  'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/usr/bin/google-chrome',
+  '/usr/bin/chromium',
+].filter(Boolean).find(existsSync);
+if (!CHROME) throw new Error('Chrome/Chromium is required; set CHROME_BIN to its executable path');
 const PORT = 9334;
 const URL = 'http://127.0.0.1:5175/';
-const USER_DIR = path.join(os.tmpdir(), 'physioflow-interact-chrome');
+const USER_DIR = mkdtempSync(path.join(os.tmpdir(), 'physioflow-interact-chrome-'));
 const VITE = path.join(process.cwd(), 'node_modules', 'vite', 'bin', 'vite.js');
 
 let chrome = null;
@@ -32,7 +41,7 @@ function cleanup(code) {
   try { chrome?.kill(); } catch { }
   try { viteProc?.kill(); } catch { }
   killPort(PORT);
-  try { execSync(`rmdir /S /Q "${USER_DIR}" 2>nul`); } catch { }
+  try { rmSync(USER_DIR, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { }
   process.exit(code || 0);
 }
 
@@ -49,7 +58,7 @@ async function launch() {
   chrome = spawn(CHROME, [
     `--remote-debugging-port=${PORT}`,
     `--user-data-dir=${USER_DIR}`,
-    '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+    '--headless=new', '--no-sandbox', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
     '--window-size=1280,900',
     'about:blank',
   ], { stdio: 'ignore' });

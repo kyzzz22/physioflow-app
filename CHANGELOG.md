@@ -2,6 +2,29 @@
 
 All notable changes to PhysioFlow are documented in this file.
 
+## [0.6.0-beta.1] — 2026-09-04
+
+### Added
+
+- 集中式 Stimulus Pool，可在不改变实验流程的情况下按 session 对媒体进行可复现、无放回随机分配。
+- 实验开始前的随机刺激分配预览与重新生成顺序功能。
+- 本地媒体上传，以及编辑器预览和 Runtime V2 中的本地资源加载。
+- V2 问卷中的图形化 SAM 选择和实时参与者预览。
+
+### Changed
+
+- Participant UI 改为独立全屏编辑，媒体、评分、文本和 Custom HTML 配置与节点运行配置保持同步。
+- Protocol JSON 编辑器增加行号、格式化、错误位置、未应用修改状态及关闭保护。
+- 增强节点插入逻辑、编辑模式说明、日语验证信息和正式运行前配置校验。
+- Windows Release 改为 current-user、多语言 NSIS 安装包，无需管理员权限。
+
+### Fixed
+
+- 修复 Stimulus Pool 媒体被 Readiness/Dashboard 误判为缺少媒体的问题。
+- 修复本地上传资源只能保存、无法在 Composer V2 预览的问题。
+
+---
+
 ## [0.5.4] — 2026-08-26
 
 ### Added

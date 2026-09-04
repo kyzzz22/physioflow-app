@@ -7,6 +7,7 @@ import { calibrationReport } from '../visualAngle.js';
 import { translate, useLanguage } from '../i18n.jsx';
 import { endpointValue, groupDataPorts, parseEndpoint } from './NodeInspector.jsx';
 import { downloadJson } from './toolbox.js';
+import { saveAsset } from '../assetStore.js';
 
 export function GroupCatalog({ registry: componentRegistry, groups, nodes, locked, onUpdate, onRemove, onPublish }) {
   const { language } = useLanguage();
@@ -414,19 +415,29 @@ export function VisualAngleCalculator() {
   </details>;
 }
 
-export function AssetLibrary({ assets, locked, onUpdate }) {
+export function AssetLibrary({ assets, stimulusPools = [], locked, onUpdate }) {
   const [draft, setDraft] = useState({ name: '', mediaType: 'image', url: '' });
+  const [uploadError, setUploadError] = useState('');
   const add = () => {
     if (!draft.name.trim() && !draft.url.trim()) return;
     onUpdate([...(assets || []), { id: createId('asset'), name: draft.name || draft.url, mediaType: draft.mediaType, sourceUrl: draft.url, checksum: null }]);
     setDraft({ name: '', mediaType: 'image', url: '' });
   };
   const remove = id => onUpdate((assets || []).filter(asset => (asset.id || asset.assetId) !== id));
+  const upload = async file => {
+    if (!file) return;
+    try {
+      const saved = await saveAsset(file);
+      const mediaType = file.type.startsWith('audio/') ? 'audio' : file.type.startsWith('video/') ? 'video' : 'image';
+      onUpdate([...(assets || []), { id: saved.asset_id, name: file.name, mediaType, fileName: saved.file_name, mimeType: saved.mime_type, size: saved.file_size, checksum: saved.checksum, sourceMode: 'upload' }]);
+      setUploadError('');
+    } catch (error) { setUploadError(error.message || String(error)); }
+  };
   return <details className="asset-library"><summary>Media library ({assets.length})</summary>
     {(assets || []).map(asset => <div key={asset.id || asset.assetId} className="asset-row">
       <span>{asset.name || asset.fileName || asset.id}</span>
       <small>{asset.mediaType || asset.type || ''}</small>
-      <button disabled={locked} onClick={() => remove(asset.id || asset.assetId)}>×</button>
+      <button disabled={locked || stimulusPools.some(pool => pool.assetIds?.includes(asset.id || asset.assetId))} title={stimulusPools.some(pool => pool.assetIds?.includes(asset.id || asset.assetId)) ? 'Remove this asset from its stimulus pool first' : 'Delete asset'} onClick={() => remove(asset.id || asset.assetId)}>×</button>
     </div>)}
     <div className="asset-add">
       <input aria-label="Asset name" placeholder="Name" value={draft.name} onChange={event => setDraft(s => ({ ...s, name: event.target.value }))} />
@@ -434,5 +445,28 @@ export function AssetLibrary({ assets, locked, onUpdate }) {
       <input aria-label="Asset URL" placeholder="URL" value={draft.url} onChange={event => setDraft(s => ({ ...s, url: event.target.value }))} />
       <button disabled={locked} onClick={add}>Add</button>
     </div>
+    <label className="asset-upload">Upload local media<input type="file" disabled={locked} accept="image/*,audio/*,video/*" onChange={event => { upload(event.target.files?.[0]); event.target.value = ''; }} /></label>
+    {uploadError && <small className="package-error">{uploadError}</small>}
   </details>;
+}
+
+export function StimulusPoolCatalog({ pools = [], assets = [], nodes = [], locked, onUpdate }) {
+  const [draft, setDraft] = useState({ name: '', mediaType: 'image' });
+  const create = () => {
+    if (!draft.name.trim()) return;
+    onUpdate([...pools, { id: createId('stimulus_pool'), name: draft.name.trim(), mediaType: draft.mediaType, assetIds: [] }]);
+    setDraft({ name: '', mediaType: 'image' });
+  };
+  const update = (id, patch) => onUpdate(pools.map(pool => pool.id === id ? { ...pool, ...patch } : pool));
+  const used = id => nodes.some(node => node.config?.stimulusPoolId === id);
+  return <section className="stimulus-pool-catalog">
+    <h3>Stimulus pools</h3>
+    <p>Create a pool once, then select it from any Media node. Assets are assigned without replacement for each session.</p>
+    {pools.map(pool => <article key={pool.id}>
+      <div className="stimulus-pool-head"><input disabled={locked} aria-label="Stimulus pool name" value={pool.name || ''} onChange={event => update(pool.id, { name: event.target.value })} /><select disabled={locked || used(pool.id)} aria-label={`${pool.name} media type`} value={pool.mediaType || 'image'} onChange={event => update(pool.id, { mediaType: event.target.value, assetIds: [] })}><option>image</option><option>audio</option><option>video</option></select><button className="danger" disabled={locked || used(pool.id)} title={used(pool.id) ? 'This pool is assigned to a Media node' : 'Delete pool'} onClick={() => onUpdate(pools.filter(item => item.id !== pool.id))}>×</button></div>
+      <div className="stimulus-pool-assets">{assets.filter(asset => (asset.mediaType || asset.type || 'image') === (pool.mediaType || 'image')).map(asset => { const assetId = asset.id || asset.assetId; return <label key={assetId}><input type="checkbox" disabled={locked} checked={Boolean(pool.assetIds?.includes(assetId))} onChange={event => update(pool.id, { assetIds: event.target.checked ? [...(pool.assetIds || []), assetId] : (pool.assetIds || []).filter(id => id !== assetId) })} />{asset.name || assetId}</label>; })}</div>
+      {!assets.some(asset => (asset.mediaType || asset.type || 'image') === (pool.mediaType || 'image')) && <small>Add {pool.mediaType || 'image'} assets to the Media library first.</small>}
+    </article>)}
+    {!locked && <div className="stimulus-pool-create"><input placeholder="Pool name" value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} /><select value={draft.mediaType} onChange={event => setDraft({ ...draft, mediaType: event.target.value })}><option>image</option><option>audio</option><option>video</option></select><button disabled={!draft.name.trim()} onClick={create}>Create pool</button></div>}
+  </section>;
 }

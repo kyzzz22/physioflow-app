@@ -118,13 +118,13 @@ export function createCoreComponentRegistry() {
     type: 'display.media', version: '1.0.0', label: 'Media', category: 'presentation',
     ports: [controlInput, controlOutput],
     runtime: { kind: 'participant', uiAdapter: 'media', completion: 'config' },
-    defaultConfig: { mediaType: 'image', assetId: null, ui: participantUiTemplate('media'), completion: { mode: 'fixed', durationMs: 3000 } },
+    defaultConfig: { mediaType: 'image', assetId: null, stimulusPoolId: null, ui: participantUiTemplate('media'), completion: { mode: 'fixed', durationMs: 3000 } },
     editorFields: [
       { path: 'completion.mode', label: 'Completion', type: 'select', options: ['manual', 'fixed', 'media-ended'], group: 'Timing', help: 'How this stimulus advances: a click, a fixed duration, or when playback ends.' },
       { path: 'completion.durationMs', label: 'Duration (ms)', type: 'number', min: 0, group: 'Timing', showWhen: { path: 'completion.mode', equals: 'fixed' } },
     ],
-    events: ['component_entered', 'media_loaded', 'media_started', 'media_ended', 'media_error', 'component_completed'],
-    dataFields: ['asset_id', 'media_type', 'actual_duration_ms'],
+    events: ['component_entered', 'stimulus_assigned', 'media_loaded', 'media_started', 'media_ended', 'media_error', 'component_completed'],
+    dataFields: ['asset_id', 'stimulus_pool_group', 'media_type', 'actual_duration_ms'],
   });
   registry.register({
     type: 'input.rating', version: '1.0.0', label: 'Rating', category: 'interaction',

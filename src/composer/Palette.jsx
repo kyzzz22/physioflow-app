@@ -6,6 +6,7 @@ import {
   DeviceConnectorCatalog,
   GroupCatalog,
   SubflowTemplateCatalog,
+  StimulusPoolCatalog,
   VariableCatalog,
   VisualAngleCalculator,
 } from './Catalogs.jsx';
@@ -15,14 +16,21 @@ export default function Palette({ s, onHostedRun }) {
     t, locked, editorMode, paletteGroups, addComponent, actions,
     protocol, registry, collaborationBaseline, setMessage,
   } = s;
+  const modeDescription = editorMode === 'quick'
+    ? 'Quick mode: build the execution flow and set essential properties.'
+    : editorMode === 'design'
+      ? 'Design mode: manage media, random stimulus pools, variables, and participant screens.'
+      : 'Advanced mode: SDK packages, devices, collaboration, deployment, and raw configuration.';
   return <aside className="composer-palette">
     <h2>{t('Components')}</h2>
-    <p>{t('Click to insert into the selected flow.')}</p>
+    <p className="composer-mode-description">{modeDescription}</p>
+    <p>{t('Select a connection or node, then click a component to insert it after that point.')}</p>
     {paletteGroups.map(([category, definitions]) => <section key={category}>
       <h3>{category}</h3>
       {definitions.map(definition => <button key={definition.type} draggable={!locked} title="Drag onto the canvas" onClick={() => addComponent(definition)} onDragStart={event => { event.dataTransfer.setData('application/x-physioflow-node', definition.type); event.dataTransfer.effectAllowed = 'copy'; }}><b>{definition.label}</b><small>{definition.type}</small></button>)}
     </section>)}
-    {editorMode !== 'quick' && <AssetLibrary assets={protocol.assets || []} locked={locked} onUpdate={actions.updateAssets} />}
+    {editorMode !== 'quick' && <AssetLibrary assets={protocol.assets || []} stimulusPools={protocol.stimulusPools || []} locked={locked} onUpdate={actions.updateAssets} />}
+    {editorMode !== 'quick' && <StimulusPoolCatalog pools={protocol.stimulusPools || []} assets={protocol.assets || []} nodes={protocol.graph.nodes || []} locked={locked} onUpdate={actions.updateStimulusPools} />}
     {editorMode !== 'quick' && <VisualAngleCalculator />}
     {editorMode !== 'quick' && <VariableCatalog mode={editorMode} variables={protocol.variables || []} locked={locked} onError={error => setMessage(error.message || String(error))} onAdd={actions.addVariable} onUpdate={actions.updateVariable} onRemove={actions.removeVariable} />}
     {editorMode !== 'quick' && <GroupCatalog registry={registry} groups={protocol.graph.groups || []} nodes={protocol.graph.nodes} locked={locked} onUpdate={actions.updateGroup} onRemove={actions.removeGroup} onPublish={actions.publishGroup} />}

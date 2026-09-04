@@ -77,6 +77,7 @@ export function createProtocolGraph(options = {}) {
     },
     variables: [],
     assets: [],
+    stimulusPools: [],
     templates: [],
     subflowTemplates: [],
     componentPackages: [],

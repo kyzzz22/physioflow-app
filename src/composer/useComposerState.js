@@ -20,6 +20,13 @@ import { NODE_HEIGHT, NODE_WIDTH, computeGuides } from './toolbox.js';
 import { useCatalogActions } from './useCatalogActions.js';
 import { translate, useLanguage } from '../i18n.jsx';
 
+function jsonErrorMessage(error, source) {
+  const position = Number(error?.message?.match(/position\s+(\d+)/i)?.[1]);
+  if (!Number.isFinite(position)) return `JSON syntax error: ${error.message}`;
+  const before = source.slice(0, position).split('\n');
+  return `JSON syntax error at line ${before.length}, column ${before.at(-1).length + 1}: ${error.message}`;
+}
+
 export function useComposerState({ protocol, onChange }) {
   const { language } = useLanguage();
   const t = key => translate(key, language);
@@ -31,6 +38,7 @@ export function useComposerState({ protocol, onChange }) {
   const [editorMode, setEditorMode] = useState('quick');
   const [codeView, setCodeView] = useState(false);
   const [codeText, setCodeText] = useState('');
+  const [codeOriginal, setCodeOriginal] = useState('');
   const [codeError, setCodeError] = useState('');
   const [previewNodeId, setPreviewNodeId] = useState(null);
   const [previewEdit, setPreviewEdit] = useState(false);
@@ -124,21 +132,33 @@ export function useComposerState({ protocol, onChange }) {
   const locked = protocol.version?.status === 'frozen';
   const migrationReviewRequired = protocol.legacy?.migrationReport?.formalRunAllowed === false;
   const commit = next => { if (!locked) onChange(next, true); };
-  const openCodeView = () => { setCodeText(serializeProtocolGraph(protocol, 2)); setCodeError(''); setCodeView(true); };
+  const openCodeView = () => { const serialized = serializeProtocolGraph(protocol, 2); setCodeText(serialized); setCodeOriginal(serialized); setCodeError(''); setCodeView(true); };
+  const closeCodeView = () => {
+    if (codeText !== codeOriginal && !window.confirm('Discard unapplied JSON changes?')) return false;
+    setCodeView(false);
+    setCodeError('');
+    return true;
+  };
+  const formatCode = () => {
+    try { setCodeText(serializeProtocolGraph(JSON.parse(codeText), 2)); setCodeError(''); }
+    catch (error) { setCodeError(jsonErrorMessage(error, codeText)); }
+  };
   const applyCode = () => {
     try {
       const parsed = JSON.parse(codeText);
       const check = validateProtocolGraphConfiguration(parsed, registry);
-      if (!check.valid) { setCodeError(check.errors.map(error => error.message).join(' · ')); return; }
+      if (!check.valid) { setCodeError(check.errors.map(error => `${error.path || 'protocol'}: ${error.message}`).join('\n')); return; }
       commit(parsed);
+      setCodeOriginal(serializeProtocolGraph(parsed, 2));
       setCodeView(false);
       setCodeError('');
-    } catch (error) { setCodeError(error.message); }
+    } catch (error) { setCodeError(jsonErrorMessage(error, codeText)); }
   };
   const addComponent = definition => {
     const controlIn = definition.ports.find(port => port.kind === 'control' && port.direction === 'input');
     const controlOut = definition.ports.find(port => port.kind === 'control' && port.direction === 'output');
-    const edge = selectedEdge?.kind === 'control' ? selectedEdge : protocol.graph.edges.find(item => item.kind === 'control' && item.source.nodeId === protocol.graph.entryNodeId);
+    const selectedNodeEdge = selectedNode && protocol.graph.edges.find(item => item.kind === 'control' && item.source.nodeId === selectedNode.id && item.source.portId === 'next');
+    const edge = selectedEdge?.kind === 'control' ? selectedEdge : selectedNodeEdge || protocol.graph.edges.find(item => item.kind === 'control' && item.source.nodeId === protocol.graph.entryNodeId);
     try {
       if (edge && controlIn && controlOut) {
         const sourceNode = protocol.graph.nodes.find(node => node.id === edge.source.nodeId);
@@ -155,6 +175,7 @@ export function useComposerState({ protocol, onChange }) {
         });
         commit(result.protocol);
         setSelectedNodeId(result.node.id);
+        setMessage(`Inserted ${definition.label} after ${sourceNode.label}`);
       } else {
         const result = addNode(protocol, definition.type, {
           config: definition.defaultConfig,
@@ -588,7 +609,7 @@ export function useComposerState({ protocol, onChange }) {
     registry, paletteGroups, validation, nodeLabelById, dataOutputOptions,
     selectedNode, selectedEdge, previewNode, previewDefinition,
     actions,
-    openCodeView, applyCode, addComponent, addNodeAt, selectPort,
+    openCodeView, closeCodeView, formatCode, codeDirty: codeText !== codeOriginal, applyCode, addComponent, addNodeAt, selectPort,
     selectedSet, selectNode, startDrag, dragNode, endDrag,
     updateSelected, performDelete, deleteSelection, confirmDelete, cancelDelete,
     copySelection, pasteClipboard, viewportPoint, startWire,

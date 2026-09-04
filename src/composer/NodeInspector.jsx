@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react';
 import {
   generateGonogoTrials,
   generateStroopTrials,
@@ -7,23 +8,34 @@ import { parseResponseOptions, serializeResponseOptions } from '../core/response
 import { findUiElement, localResourceManifest, schemaForNode } from '../runtime/index.js';
 import { translate, useLanguage } from '../i18n.jsx';
 import ParticipantRenderer from '../ParticipantRenderer.jsx';
-import ParticipantUiBuilder from '../ParticipantUiBuilder.jsx';
 import QuestionnaireEditor from '../QuestionnaireEditorV2.jsx';
-import { UI_TEMPLATE_KIND, bindingValue, getPath, isValidMediaUrl, parseBindingValue, setPath } from './toolbox.js';
+import QuestionnaireForm from '../QuestionnaireFormV2.jsx';
+import { bindingValue, getPath, isValidMediaUrl, parseBindingValue, setPath } from './toolbox.js';
 
-export function CodeView({ text, error, locked, onChange, onApply }) {
+export function CodeView({ text, error, locked, dirty, onChange, onApply, onFormat, onClose }) {
+  const lineNumbers = Array.from({ length: Math.max(1, text.split('\n').length) }, (_, index) => index + 1).join('\n');
+  const gutterRef = useRef(null);
+  const [cursor, setCursor] = useState({ line: 1, column: 1 });
+  const updateCursor = event => {
+    const before = text.slice(0, event.currentTarget.selectionStart);
+    const lines = before.split('\n');
+    setCursor({ line: lines.length, column: lines.at(-1).length + 1 });
+  };
   return <div className="composer-code-view">
     <div className="composer-code-toolbar">
       <b>Protocol JSON</b>
-      <span>Edit the full protocol graph as JSON. Changes apply only when validation passes.</span>
+      <span>{dirty ? '● Unapplied changes' : 'Edit the full protocol graph. Changes apply only after validation.'}</span>
+      <button type="button" disabled={locked} onClick={onFormat}>Format JSON</button>
       <button disabled={locked} onClick={onApply}>Apply changes</button>
+      <button type="button" onClick={onClose}>Close</button>
     </div>
     {error && <div className="composer-code-error">{error}</div>}
-    <textarea disabled={locked} value={text} onChange={event => onChange(event.target.value)} spellCheck={false} aria-label="Protocol JSON" />
+    <div className="composer-code-editor"><pre ref={gutterRef} aria-hidden="true">{lineNumbers}</pre><textarea disabled={locked} value={text} onChange={event => onChange(event.target.value)} onClick={updateCursor} onKeyUp={updateCursor} onScroll={event => { if (gutterRef.current) gutterRef.current.scrollTop = event.currentTarget.scrollTop; }} onKeyDown={event => { if (event.key !== 'Tab') return; event.preventDefault(); const start = event.currentTarget.selectionStart, end = event.currentTarget.selectionEnd; onChange(`${text.slice(0, start)}  ${text.slice(end)}`); requestAnimationFrame(() => { event.target.selectionStart = event.target.selectionEnd = start + 2; }); }} spellCheck={false} aria-label="Protocol JSON" /></div>
+    <small className="composer-code-status">Ln {cursor.line}, Col {cursor.column} · {text.length.toLocaleString()} characters</small>
   </div>;
 }
 
-export function NodeInspector({ node, definition, variables, groups, mode, onUpdate, onAssignGroup, onCreateGroup, questionnaireLibrary, onLibraryChange, assets, dataOutputOptions }) {
+export function NodeInspector({ node, definition, variables, groups, mode, onUpdate, onAssignGroup, onCreateGroup, onEditParticipantUi, questionnaireLibrary, onLibraryChange, assets, resources, stimulusPools = [], dataOutputOptions }) {
   const { language } = useLanguage();
   const t = key => translate(key, language);
   const currentGroup = groups.find(group => group.nodeIds.includes(node.id));
@@ -50,6 +62,10 @@ export function NodeInspector({ node, definition, variables, groups, mode, onUpd
     'input.text': { elementType: 'Input', fields: [{ key: 'placeholder', label: 'Placeholder', type: 'text' }, { key: 'required', label: 'Required', type: 'boolean' }, { key: 'multiline', label: 'Multiline', type: 'boolean' }] },
   }[node.component.type] || null;
   const contentKeys = contentSpec ? new Set(contentSpec.fields.map(field => field.key)) : null;
+  const usesStimulusPool = node.component.type === 'display.media' && Boolean(node.config?.stimulusPoolId);
+  const visibleContentFields = usesStimulusPool
+    ? contentSpec?.fields.filter(field => !['mediaType', 'sourceUrl', 'assetId'].includes(field.key))
+    : contentSpec?.fields;
 
   const updateContentField = (key, value) => {
     if (!node.config?.ui || !contentSpec) return;
@@ -114,8 +130,8 @@ export function NodeInspector({ node, definition, variables, groups, mode, onUpd
     return <label key={field.path}>{field.label}{control}{field.help && <small className="field-help">{field.help}</small>}</label>;
   };
 
-  const emptyHint = node.component.type === 'display.media' && !node.config?.sourceUrl && !node.config?.assetId
-    ? 'Add a source URL or pick an asset below to show media.'
+  const emptyHint = node.component.type === 'display.media' && !node.config?.sourceUrl && !node.config?.assetId && !node.config?.stimulusPoolId && !node.config?.stimulusPool?.enabled
+    ? 'Add a source URL, pick an asset, or enable a stimulus pool below.'
     : node.component.type === 'input.questionnaire' && !node.config?.questionnaire?.questions?.length
       ? 'Open the Questionnaire editor to add questions.'
       : node.component.type === 'stimulus.custom-html' && !node.config?.html
@@ -126,8 +142,12 @@ export function NodeInspector({ node, definition, variables, groups, mode, onUpd
     <label>{t('Label')}<input value={node.label} onChange={event => onUpdate({ label: event.target.value })} /></label>
     <small>{node.component.type}@{node.component.version}</small>
     {emptyHint && <div className="node-empty-hint">▶ {emptyHint}</div>}
-    {node.config?.ui && !['core.start', 'core.end'].includes(node.component.type) && <div className="node-inline-preview"><ParticipantRenderer key={node.id} schema={schemaForNode(node, definition, localResourceManifest(assets || []))} preview /></div>}
-    {contentSpec && <div className="content-fields"><b>Content</b>{contentSpec.fields.map(field => <ContentField key={field.key} field={field} value={node.config?.[field.key]} assets={assets} onChange={value => updateContentField(field.key, value)} invalid={field.key === 'sourceUrl' && Boolean(node.config?.sourceUrl) && !isValidMediaUrl(node.config.sourceUrl)} hint={field.key === 'sourceUrl' && Boolean(node.config?.sourceUrl) && !isValidMediaUrl(node.config.sourceUrl) ? 'Invalid URL — fix it or pick an asset instead.' : undefined} />)}</div>}
+    {node.config?.ui && !['core.start', 'core.end', 'input.questionnaire'].includes(node.component.type) && <><div className="node-inline-preview"><ParticipantRenderer key={node.id} schema={schemaForNode(node, definition, resources || localResourceManifest(assets || []))} preview /></div><button type="button" className="edit-participant-ui" onClick={onEditParticipantUi}>Edit participant screen</button></>}
+    {contentSpec && <div className="content-fields"><b>Content</b>{usesStimulusPool && <small className="field-help">The selected pool supplies the media type and source at session start. Choose “fixed stimulus” below to edit one media item.</small>}{visibleContentFields.map(field => <ContentField key={field.key} field={field} value={node.config?.[field.key]} assets={assets} onChange={value => updateContentField(field.key, value)} invalid={field.key === 'sourceUrl' && Boolean(node.config?.sourceUrl) && !isValidMediaUrl(node.config.sourceUrl)} hint={field.key === 'sourceUrl' && Boolean(node.config?.sourceUrl) && !isValidMediaUrl(node.config.sourceUrl) ? 'Invalid URL — fix it or pick an asset instead.' : undefined} />)}</div>}
+    {node.component.type === 'display.media' && <div className="content-fields stimulus-pool-fields">
+      <b>Stimulus randomization</b>
+      <label>Stimulus pool<select value={node.config?.stimulusPoolId || ''} onChange={event => { const pool = stimulusPools.find(item => item.id === event.target.value); onUpdate({ config: { ...node.config, stimulusPoolId: pool?.id || null, ...(pool?.mediaType ? { mediaType: pool.mediaType } : {}) } }); }}><option value="">— fixed stimulus —</option>{stimulusPools.map(pool => <option key={pool.id} value={pool.id}>{pool.name} ({pool.assetIds?.length || 0})</option>)}</select><small className="field-help">Choose a shared pool created in Design mode. Every session reshuffles its assets without changing the flow.</small></label>
+    </div>}
     {fieldGroups.map(([group, fields]) => <details key={group} className="field-group" open={group === 'General' || fieldGroups.length === 1}><summary>{group}</summary>{fields.map(renderField)}</details>)}
     {node.component.type === 'logic.condition' && <label>Input variable<select aria-label="Condition input variable" value={bindingValue(node.bindings?.value)} onChange={event => { const binding = parseBindingValue(event.target.value); onUpdate({ bindings: binding ? { ...node.bindings, value: binding } : Object.fromEntries(Object.entries(node.bindings || {}).filter(([key]) => key !== 'value')) }); }}>
       <option value="">Choose a variable…</option>
@@ -144,7 +164,7 @@ export function NodeInspector({ node, definition, variables, groups, mode, onUpd
       <optgroup label="Protocol variables">{renderVariableOptions(true)}</optgroup>
       {(dataOutputOptions || []).length > 0 && <optgroup label="Node outputs (upstream)">{renderOutputOptions()}</optgroup>}
     </select></label>}
-    {node.component.type === 'input.questionnaire' && <QuestionnaireEditor value={node.config.questionnaire} onChange={questionnaire => onUpdate({ config: { ...node.config, questionnaire } })} library={questionnaireLibrary} onLibraryChange={onLibraryChange} />}
+    {node.component.type === 'input.questionnaire' && <><QuestionnaireEditor value={node.config.questionnaire} onChange={questionnaire => onUpdate({ config: { ...node.config, questionnaire } })} library={questionnaireLibrary} onLibraryChange={onLibraryChange} /><details className="questionnaire-live-preview"><summary>Live participant preview · {language.toUpperCase()}</summary><QuestionnaireForm key={`${node.id}:${language}:${JSON.stringify(node.config.questionnaire)}`} questionnaire={node.config.questionnaire} language={language} randomSeed="editor-preview" onSubmit={() => {}} /></details></>}
     {node.component.type === 'experiment.cognitive-task' && <div className="cognitive-generate">
       <button type="button" onClick={() => {
         const kind = node.config?.taskKind === 'gonogo' ? 'gonogo' : 'stroop';
@@ -161,7 +181,6 @@ export function NodeInspector({ node, definition, variables, groups, mode, onUpd
     </details>}
     {mode !== 'quick' && !['core.start', 'core.end'].includes(node.component.type) && <label>{t('Node group')}<select aria-label={t('Node group')} value={currentGroup?.id || ''} onChange={event => onAssignGroup(event.target.value || null)}><option value="">{t('No group')}</option>{groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>}
     {mode !== 'quick' && !currentGroup && !['core.start', 'core.end'].includes(node.component.type) && <button onClick={onCreateGroup}>{t('Create group from node')}</button>}
-    {mode !== 'quick' && node.component.type !== 'input.questionnaire' && node.config?.ui && <ParticipantUiBuilder schema={schemaForNode(node, definition, localResourceManifest(assets || []))} defaultTemplate={UI_TEMPLATE_KIND[node.component.type] || 'instruction'} onChange={ui => onUpdate({ config: { ...node.config, ui } })} />}
     {definition?.events?.length > 0 && <details className="node-data-note"><summary>Records</summary>
       <small>Events: {definition.events.join(', ')}</small>
       {definition.dataFields?.length > 0 && <small>Data columns: {definition.dataFields.join(', ')}</small>}

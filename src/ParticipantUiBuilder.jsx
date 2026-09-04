@@ -25,13 +25,20 @@ export default function ParticipantUiBuilder({ schema, onChange, defaultTemplate
     zOrderSelected, focusStyle, selected, crumbs, updateProps, toggleFree,
     showPosition, setStyle, styleForceOpen, bindingTarget, validation,
   } = s;
+  const replaceTemplate = kind => {
+    if (!window.confirm('Replace the current participant screen with this template? You can still undo this change.')) return;
+    const next = participantUiTemplate(kind);
+    setTemplateKind(kind);
+    commit(next);
+    selectElement(next.root.id);
+  };
   return <section className="participant-ui-builder">
     <div className="ui-builder-toolbar">
       <b className="ui-builder-title">Participant interface</b>
-      <select aria-label="Template" value={templateKind} onChange={event => { const next = participantUiTemplate(event.target.value); setTemplateKind(event.target.value); commit(next); selectElement(next.root.id); }}>
+      <select aria-label="Template" value={templateKind} onChange={event => replaceTemplate(event.target.value)}>
         {TEMPLATE_KINDS.map(kind => <option key={kind} value={kind}>{kind}</option>)}
       </select>
-      <button onClick={() => { const next = participantUiTemplate(templateKind); commit(next); selectElement(next.root.id); }}>Reset template</button>
+      <button onClick={() => replaceTemplate(templateKind)}>Reset template</button>
       <span className="ui-toolbar-sep" />
       <button className="ui-history-btn" disabled={!canUndo} onClick={undo} title="Undo (Ctrl+Z)">↶</button>
       <button className="ui-history-btn" disabled={!canRedo} onClick={redo} title="Redo (Ctrl+Shift+Z)">↷</button>
@@ -73,7 +80,7 @@ export default function ParticipantUiBuilder({ schema, onChange, defaultTemplate
               </div>
             ))}
           </div>)}
-          <small className="ui-library-tip">Click to append · drag onto canvas · Del to remove</small>
+          <small className="ui-library-tip">Click to insert after the selection (or inside a selected container) · drag for precise placement · Del to remove</small>
         </div>
         <div className="ui-canvas-wrap" ref={viewportRef} onPointerDown={handleViewportPointerDown} onContextMenu={event => { if (event.target === event.currentTarget || !event.target.closest('[data-ui-id]')) closeContextMenu(); }}>
           <div className="ui-canvas-pan" ref={panRef} style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}>

@@ -31,7 +31,7 @@ import {
   youtubeEmbedUrl,
   isYoutubeSource,
 } from '../src/core/index.js';
-import { localResourceManifest, schemaForNode } from '../src/runtime/nodeSchema.js';
+import { configFromParticipantUi, localResourceManifest, schemaForNode } from '../src/runtime/nodeSchema.js';
 
 test('instruction, media, and form participant UI templates are valid', () => {
   for (const kind of ['instruction', 'media', 'form']) {
@@ -321,6 +321,21 @@ test('media schemaForNode removes the advance button in media-ended mode', () =>
   assert.equal(collectElements(ended, 'Button').length, 0);
   const manual = schemaForNode({ ...base, config: { mediaType: 'video', sourceUrl: 'https://example.com/v.mp4', completion: { mode: 'manual' } } }, definition, null);
   assert.ok(collectElements(manual, 'Button').length > 0);
+});
+
+test('participant UI edits synchronize specialized runtime configuration', () => {
+  const mediaUi = participantUiTemplate('media');
+  const mediaElement = mediaUi.root.children.find(element => element.type === 'Media');
+  mediaElement.props = { ...mediaElement.props, mediaType: 'video', sourceUrl: 'https://example.com/new.mp4' };
+  const mediaConfig = configFromParticipantUi({ component: { type: 'display.media' }, config: { sourceUrl: 'old', assetId: null } }, mediaUi);
+  assert.equal(mediaConfig.mediaType, 'video');
+  assert.equal(mediaConfig.sourceUrl, 'https://example.com/new.mp4');
+
+  const ratingUi = participantUiTemplate('form');
+  const ratingInput = ratingUi.root.children.find(element => element.type === 'Input');
+  ratingInput.props = { ...ratingInput.props, min: 2, max: 9, required: false };
+  const ratingConfig = configFromParticipantUi({ component: { type: 'input.rating' }, config: {} }, ratingUi);
+  assert.deepEqual({ min: ratingConfig.min, max: ratingConfig.max, required: ratingConfig.required }, { min: 2, max: 9, required: false });
 });
 
 test('fixation inspector exposes manual/fixed completion modes', () => {

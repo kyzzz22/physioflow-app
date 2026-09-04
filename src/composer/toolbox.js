@@ -93,6 +93,15 @@ export const VALIDATION_MESSAGES_ZH = {
   'config.media_source_missing': '媒体节点缺少 URL 或资产',
   'config.media_url_invalid': '媒体 URL 无效，请检查地址或改用资产',
   'config.media_mode_invalid': '媒体完成模式无效',
+  'config.stimulus_pool_id_invalid': '刺激池 ID 缺失或重复',
+  'config.stimulus_pool_name_missing': '刺激池缺少名称',
+  'config.stimulus_pool_type_invalid': '刺激池媒体类型无效',
+  'config.stimulus_pool_missing': '节点引用的刺激池不存在',
+  'config.stimulus_pool_empty': '刺激池中还没有可用刺激',
+  'config.stimulus_pool_asset_missing': '刺激池引用的媒体资源不存在',
+  'config.stimulus_pool_type_mismatch': '刺激池与媒体节点的类型不一致',
+  'config.stimulus_pool_inconsistent': '旧版内嵌刺激池配置不一致',
+  'config.stimulus_pool_too_small': '刺激数量不足以进行无放回分配',
   'config.participant_ui_missing': '界面模板为空',
   'config.ui_variable_missing': '界面绑定引用了不存在的变量',
   'config.input_missing': '界面缺少输入控件',
@@ -112,6 +121,49 @@ export const VALIDATION_MESSAGES_ZH = {
   'config.migration.review_required': '迁移后需要人工复核配置',
 };
 
+export const VALIDATION_MESSAGES_JA = {
+  'protocol.invalid': 'プロトコルのデータ構造が無効です',
+  'protocol.id_missing': 'プロトコルIDがありません',
+  'protocol.name_missing': 'プロトコル名を入力してください',
+  'graph.empty': 'フローが空です。ノードを追加してください',
+  'graph.entry_missing': '開始ノードがありません',
+  'graph.entry_not_start': '入口はStartノードである必要があります',
+  'graph.start_count': 'Startノードは1つだけ必要です',
+  'graph.end_missing': 'Endノードがありません',
+  'graph.end_unreachable': 'Endノードに到達できません',
+  'node.unreachable': 'このノードはフローから到達できません',
+  'node.component_unknown': '未登録のコンポーネントです',
+  'edge.source_missing': '接続元ノードがありません',
+  'edge.target_missing': '接続先ノードがありません',
+  'edge.source_port_missing': '接続元ポートがありません',
+  'edge.target_port_missing': '接続先ポートがありません',
+  'edge.kind_mismatch': '接続タイプとポートタイプが一致しません',
+  'edge.target_multiple': 'この入力ポートには複数接続できません',
+  'port.required_unbound': '必須ポートに変数が割り当てられていません',
+  'port.required_unconnected': '必須ポートが接続されていません',
+  'binding.variable_missing': '参照している変数がありません',
+  'binding.variable_type_mismatch': '変数とポートの型が一致しません',
+  'config.media_source_missing': 'メディアURL、アセット、または刺激プールを設定してください',
+  'config.media_url_invalid': 'メディアURLが無効です',
+  'config.media_mode_invalid': 'メディアの完了方法が無効です',
+  'config.participant_ui_missing': '参加者画面がありません',
+  'config.input_missing': '参加者画面に入力項目がありません',
+  'config.completion_action_missing': '手動完了には送信または次へボタンが必要です',
+  'config.duration_invalid': '表示時間は0以上で指定してください',
+  'config.wait_duration_invalid': '待機時間は0以上で指定してください',
+  'config.rating_range_invalid': '評価の最大値は最小値より大きくしてください',
+  'config.loop_limit_invalid': 'ループ回数は1以上の整数で指定してください',
+  'config.random_probability_invalid': 'ランダム分岐の確率が無効です',
+  'config.stimulus_pool_id_invalid': '刺激プールIDがないか重複しています',
+  'config.stimulus_pool_name_missing': '刺激プール名を入力してください',
+  'config.stimulus_pool_type_invalid': '刺激プールのメディア種別が無効です',
+  'config.stimulus_pool_missing': '選択した刺激プールがありません',
+  'config.stimulus_pool_empty': '刺激プールに刺激を追加してください',
+  'config.stimulus_pool_asset_missing': '刺激プールのメディアが見つかりません',
+  'config.stimulus_pool_type_mismatch': '刺激プールとMediaノードの種別が一致しません',
+  'config.stimulus_pool_too_small': '重複なしで割り当てるための刺激数が不足しています',
+};
+
 export function isValidMediaUrl(value) {
   if (typeof value !== 'string' || !value.trim()) return false;
   const trimmed = value.trim();
@@ -126,11 +178,12 @@ export function isValidMediaUrl(value) {
 }
 
 export function validationIssueMessage(issue, language, protocol) {
-  if (language !== 'zh') return issue.message;
-  const template = VALIDATION_MESSAGES_ZH[issue.code];
+  const messages = language === 'zh' ? VALIDATION_MESSAGES_ZH : language === 'ja' ? VALIDATION_MESSAGES_JA : null;
+  if (!messages) return issue.message;
+  const template = messages[issue.code];
   if (!template) return issue.message;
   const node = protocol?.graph?.nodes?.find(item => item.id === issue.nodeId);
-  return node?.label ? `「${node.label}」${template}` : template;
+  return node?.label ? `「${node.label}」${language === 'ja' ? ': ' : ''}${template}` : template;
 }
 
 export function bindingValue(binding) {
