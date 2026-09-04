@@ -17,6 +17,8 @@ The desktop app stores data directly in `~/Documents/PhysioFlow Data` (macOS) or
 
 ## What's new in v0.6.0-beta.2
 
+- **Drag that stays tidy**: in the participant-screen editor, dragging an element auto-switches its container to a free layout and aligns the other elements to the 8px grid — no more elements jumping to (0,0) or scattering. An **Auto arrange** button re-tidies any screen in one click.
+- **Cleaner node inspector**: primary settings are open by default, dev telemetry stays out of Quick mode, and Questionnaire/Wait nodes open preview-only (their screens are generated at run time).
 - **Shared stimulus pools**: preserve protocol flow while assigning media in a reproducible random order without replacement
 - **Participant UI editing**: dedicated full-screen editor with synchronized node/runtime configuration
 - **Researcher-ready questionnaires**: graphical SAM choices and a live participant preview
@@ -35,6 +37,8 @@ The desktop app stores data directly in `~/Documents/PhysioFlow Data` (macOS) or
 - **Flow snapshots** + **300+ zh/ja i18n entries**
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full history.
+
+Roadmap & remaining work (incl. the human usability study gate): [docs/refactor/OPTIMIZATION_PLAN.md](./docs/refactor/OPTIMIZATION_PLAN.md) — §0 status snapshot + §9 follow-up list.
 
 ## Operator workflow
 

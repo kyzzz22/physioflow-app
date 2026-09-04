@@ -1,11 +1,20 @@
-# PhysioFlow 后续优化计划书（2026-08）
+# PhysioFlow 后续优化计划书（2026-09 更新）
 
 > 适用范围：排除「正式可用性研究（真人被试）」之外的工程化与产品化优化。
-> 状态：计划阶段 · 目标分支：`demo` · 关联文档：`IMPLEMENTATION_STATUS.md`、`COMPOSER_V2_GAP_ANALYSIS.md`、`RELEASE_CHECKLIST.md`
+> 目标分支：`demo` · 关联文档：`IMPLEMENTATION_STATUS.md`、`COMPOSER_V2_GAP_ANALYSIS.md`、`RELEASE_CHECKLIST.md`
+
+## 0. 状态快照（2026-09-04 · v0.6.0-beta.2 已发布）
+
+- 已发布 research-test 构建 `v0.6.0-beta.1` / `v0.6.0-beta.2`（current-user、EN/JA/zh-Hans 多语言 NSIS）。`v0.6.0-beta.2` tag 与 GitHub Release 已同步，附安装包 + `SHA256SUMS.txt` + `RELEASE_NOTES_ja.md`。
+- `npm test`：**330 通过 / 1 跳过（win32 symlink 助手）**；`npm run lint` 0 警告；`npm run build` 通过。
+- 浏览器门：`.playwright-cli/verify-interactions.cjs` 与 `tests/e2e-composer-v2-self-hosted.mjs` 本地全绿（Windows 需设置 `CHROME_BIN`）。
+- 工作包状态：**W1 ✓ · W2 ✓ · W3 ⏳（拆分仍遗留，见 §9-P1）· W4 ✓ · W5 ✓**；各小节 `[x]` 均已合并到 `demo`。
+- 0.6.0-beta.2 关键体验修复（已合入）：Participant UI 拖动“自动整齐转自由”+ Auto arrange；缩放坐标换算统一；Inspector 去杂（首组默认展开、Records/刺激池仅非 Quick、Wait/Questionnaire 全屏仅预览）。
+- 真正的发布阻断项仍是**正式可用性研究（真人被试）**：见 `USABILITY_STUDY_PROTOCOL.md` / `OPERATOR_PILOT_GUIDE.md` / `RELEASE_CHECKLIST.md`；`npm run verify:usability-study -- <results.json>` 需 `passed:true`。跑通之前本仓库定位为「研究人员可用的实验原型」，不宣称正式 1.0。
 
 ## 1. 背景与总体目标
 
-重构阶段 0–6 已全部落地，CI 质量门（ubuntu + Node 22 + Chrome）保持绿色，222+ 自动化测试通过，本地性能目标达标（500 节点校验/编辑 ~36ms、1 万事件导出 ~39ms）。本计划聚焦于剩余工程化短板与产品化差距，共 5 个工作包：
+重构阶段 0–6 已全部落地，CI 质量门保持绿色，330 项自动化测试通过，本地性能目标达标（500 节点校验/编辑 ~36ms、1 万事件导出 ~39ms）。本计划聚焦于剩余工程化短板与产品化差距；原始 5 个工作包（W1–W5）见下，2026-09 之后的后续优化见「§9」。下述各小节保留原始勾选状态作为历史，当前以 §0 / §9 为准。
 
 | 编号 | 工作包 | 类型 | 优先级 |
 |------|--------|------|--------|
@@ -28,7 +37,7 @@
 - 内容涉及：ComposerV2 拖拽连线、Escape 键语义修复、交互验证脚本与 `test:interactions` 脚本入口
 
 ### 任务
-- [x] 本地执行 `npm run quality:release`（单元测试 + 构建 + 零警告 lint + 3 条浏览器 E2E）——win32 全绿（238 pass / build / lint 0 / 3×E2E，需先设置 `CHROME_BIN`）
+- [x] 本地执行 `npm run quality:release`（单元测试 + 构建 + 零警告 lint + 3 条浏览器 E2E）——win32 全绿（330 pass + 1 symlink 跳过 / build / lint 0 / 3×E2E，需先设置 `CHROME_BIN`）
 - [x] 运行 `npm run test:interactions` 验证交互回归脚本，确认结果与预期一致
 - [x] 复核拖拽连线的操作语义（悬停吸附端口、Esc 取消、连线成功/失败反馈）——由 verifier 断言覆盖
 - [x] 按功能点拆分提交（先逻辑后文档），提交信息遵循现有惯例
@@ -59,7 +68,7 @@
   - POSIX：断言 `mode & 0o777 === expectedMode`（保持 CI 严格性）
   - win32：显式跳过该断言并输出原因（`t.skip` 或打印已知限制），其余断言继续执行，不整例跳过
 - [x] 将 `hosted-node-server.test.js:98` 与 `hosted-backup.test.js:28-29` 替换为助手调用
-- [x] 在 Windows 与 POSIX 各跑一次 `npm test`，确认无新增红（win32 238 pass；POSIX 由 CI 侧保持）
+- [x] 在 Windows 与 POSIX 各跑一次 `npm test`，确认无新增红（win32 330 pass，1 项 symlink 跳过；POSIX 由 CI 侧保持）
 - [ ] （可选）CI 增加 `windows-latest` 矩阵作业（仅单元测试）——暂不实施，平台差异已由助手在本地显式暴露
 
 ### 验收标准
@@ -170,6 +179,8 @@
 | M3 | W4 性能优化 + 门禁扩充 | 1 周（与 M2 部分并行） |
 | M4 | W5 差距补齐 + Stage 7 项 | 2–3 周 |
 
+> 2026-09-04 状态：**M1 ✓（W1+W2）· M3 ✓（W4+性能门禁）· M4 ✓（W5+Stage7 单机项）· M2 ⏳**（W3 大文件拆分仍为遗留，转 §9-P1）。
+
 每里程碑结束执行一次 `npm run quality:release`；M2 每步提交均须单独绿。
 
 ## 8. 全局质量门与工具
@@ -178,3 +189,43 @@
 - 交互相关改动：额外运行 `.playwright-cli/verify-interactions.cjs`
 - 性能相关改动：`tests/performance-gates.test.js` 全绿且新增用例
 - 文档同步：CHANGELOG.md、`IMPLEMENTATION_STATUS.md` 随工作包更新
+
+## 9. 后续优化清单（2026-09 · v0.6.0-beta.2 之后）
+
+> 依据：本轮三次多代理审计（编辑器/运行时/文档-测试-发布）与两次用户实测反馈已并表；括号为关键证据位置。
+
+### P0 — 发布与真人验证（阻塞正式版，需人/外部资源）
+| 项 | 说明 | 依据 |
+|---|---|---|
+| 正式可用性研究 | ≥5 新手 + ≥5 有经验，5 任务 ×（≤600s / ≤8 操作 / ≥80% 免帮助），designer/operator/data-analyst 会签；`npm run verify:usability-study -- <results.json>` 返回 `passed:true` | `RELEASE_CHECKLIST.md`、`REFACTOR_COMPLETION_AUDIT.md` |
+| Windows / macOS 代码签名 | 组织证书或 Azure Artifact Signing，消除 SmartScreen/「不受信任」 | README「Download」说明 |
+| 正式版发布 | 研究通过后 tag `v0.6.0`、设 Latest、更新 macOS/README 下载表 | — |
+
+### P1 — 高价值代码/体验（均有证据）
+| 项 | 说明 | 依据 |
+|---|---|---|
+| W3 大文件拆分（遗留） | `useGlobalShortcuts.js` / `useUndoRedo.js` / `flowCanvas/` / `composer/` 模块边界 / `ParticipantUiBuilder` 拆分 / `theme/tokens.css`；纯移动、逐项独立提交 | §4 §95–101 |
+| 刺激随机化“兄弟不均”定位限制 | 已完成 Retry=同刺激；同组多节点访问次数不均时按 stride 跳图是已知限制。若需要更一般语义→改“全局消费指针”，同步预览与事件 `attempt`；是否做需实验设计确认 | `src/core/stimulusRandomization.js:35-67` |
+| 接受度测试补齐 | JSON/Code 编辑器、SAM 图形选择、SessionSetup 刺激池预览=首轮一致性、pool picker ——目前无自动用例 | `tests/*`（见文档审计 §B） |
+| 研究者端到端 authoring 自动化 | 空白仪表盘→palette 建图→Inspector 填参→真实媒体/问卷→冻结→预览→导出；现有 e2e 用预置协议注入，未覆盖 palette-drag + Inspector 配置 | `tests/e2e-composer-v2-self-hosted.mjs` |
+| Inspector 双 schema 收敛 | `contentSpec`（NodeInspector）与 registry `editorFields` 由 `contentKeys` 临时对齐；统一为单一属性 schema + 单一渲染 | `src/composer/NodeInspector.jsx:59-92` |
+| ComposerV2 与全屏节点编辑器宽窄一致 | 290px 侧栏 vs 全屏编辑各自的控件/术语一致；i18n/主题核对 | `COMPOSER_V2_GAP_ANALYSIS.md` |
+
+### P2 — 发布工程/可选
+| 项 | 说明 |
+|---|---|
+| GitHub Actions 自动发版 | tag push → `windows-latest` 上 `desktop:build` → 上传 Release（可选签名）；macOS dmg 需 `macos-latest` + 公证 |
+| 离线安装包 | 内嵌 WebView2 的 NSIS 变体（约 +127MB），供无网实验室 |
+| macOS / Linux 构建 | darwin-x64/arm64 dmg（补 README 下载列）；Linux AppImage/deb 可选 |
+| 自动更新（Tauri updater） | 真人测试稳定后再接入；需独立 updater 签名密钥（私钥丢失即停更） |
+| CI `windows-latest` 单元矩阵 | W2 可选遗留；助手已暴露平台差异 |
+| Web 自助托管发布指南 | `/participant` public 应用 + 单机 self-host 的部署说明 |
+
+### P3 — 需设计 / 明确不做（记录）
+- 通用 graph 级 trial 语义（当前仅 `experiment.cognitive-task` 携带可执行 trial/practice/ITI 语义）。
+- 任意 JS 注入主运行时；问卷/外部表单/生理设备全协议接入——按 `SYSTEM_REFACTOR_PLAN.md` §7.3 在单机闭环稳定后逐步接入。
+- 远程多租户、在线协作、云执行——Stage 7 之外。
+
+### 维护约定
+- 每次变更合并前跑 `npm run quality:release`（或至少 `npm test && npm run lint && npm run build`）；交互改动加跑 `verify-interactions.cjs`。
+- 测试数/版本号变化时同步更新 README「Developer setup」「Download」与本文 §0；发版同步更新 CHANGELOG、`RELEASE_NOTES_*.md`、`SHA256SUMS`。
